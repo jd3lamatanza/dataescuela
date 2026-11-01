@@ -4,6 +4,9 @@ import { BRAND, ROLE_LABELS, modulesFor } from '../modules'
 import type { Profile } from '../lib/auth'
 import { Icon } from './Icon'
 import { href } from '../lib/router'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../lib/auth'
+import { Bandeja } from './Bandeja'
 
 export const Logo = ({ class: cls = 'size-10' }: { class?: string }) => (
   <img src="./icon-192.png" alt="DataEscuela v2" width="64" height="64" class={`shrink-0 rounded-xl ${cls}`} />
@@ -37,6 +40,7 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
 
 /** Shell estilo GitHub claro: topbar, sidebar (riel colapsable en escritorio, drawer en móvil). */
 export function AppShell({ user, path, onLogout, children }: { user: Profile; path: string; onLogout(): void; children?: ComponentChildren }) {
+  const { refresh } = useAuth()
   const [drawer, setDrawer] = useState(false)
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('dw-sb') === '1')
   const mods = modulesFor(user.role)
@@ -46,12 +50,19 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
 
   return (
     <div class="min-h-full bg-white">
+      {user.simulador && (
+        <div class="fixed inset-x-3 bottom-4 z-[60] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-lg bg-amber-400 px-3 py-2 text-center text-sm font-medium text-amber-950 shadow-lg ring-1 ring-amber-600/40 lg:inset-x-auto lg:right-4 lg:max-w-md">
+          <span>Ingreso simulado como <strong>{user.name}</strong> (sesión de {user.simulador})</span>
+          <button class="rounded bg-amber-950 px-2.5 py-1 text-xs font-semibold text-white hover:bg-amber-900" onClick={async () => { await supabase.rpc('simular_salir'); await refresh(); location.hash = '#/simulado' }}>Volver a mi cuenta</button>
+        </div>
+      )}
       {drawer && <div class="fixed inset-0 z-30 bg-slate-900/40 lg:hidden" onClick={() => setDrawer(false)} />}
       <header class="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-slate-200 bg-slate-50 px-2 sm:px-4">
         <button type="button" class="flex size-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-100 lg:hidden" aria-label="Menú" onClick={() => setDrawer(true)}><Icon name="menu" /></button>
         <button type="button" class="hidden size-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-100 lg:flex" aria-label="Colapsar menú" onClick={toggle}><Icon name="sidebar" /></button>
         <a href={href('/')} class="flex items-center gap-2 font-semibold text-slate-900"><Logo class="size-8" /><span class="hidden sm:inline">{BRAND.name}</span></a>
         <div class="ml-auto flex items-center gap-2">
+          <Bandeja />
           <div class="hidden text-right leading-tight sm:block"><p class="max-w-56 truncate text-sm font-medium text-slate-900">{user.name}</p><p class="text-xs text-slate-500">{ROLE_LABELS[user.role]}</p></div>
           <span class="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 text-xs font-semibold text-white">{initials}</span>
           <button type="button" onClick={onLogout} aria-label="Salir" title="Salir" class="flex size-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-100"><Icon name="logout" /></button>

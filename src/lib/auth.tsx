@@ -12,6 +12,8 @@ export interface Profile {
   active: boolean
   cue: string | null
   must_change: boolean
+  /** Nombre de quien inició el ingreso simulado (si corresponde) */
+  simulador: string | null
 }
 
 interface AuthState {
@@ -20,6 +22,7 @@ interface AuthState {
   signIn(ident: string, password: string): Promise<string | null>
   signOut(): Promise<void>
   changePassword(next: string): Promise<string | null>
+  refresh(): Promise<void>
 }
 
 const Ctx = createContext<AuthState>(null as unknown as AuthState)
@@ -28,7 +31,7 @@ export const useAuth = () => useContext(Ctx)
 async function loadProfile(): Promise<Profile | null> {
   const { data: s } = await supabase.auth.getSession()
   if (!s.session) return null
-  const { data } = await supabase.from('profiles').select('*').eq('id', s.session.user.id).maybeSingle()
+  const { data } = await supabase.rpc('mi_perfil')
   return data && data.active ? (data as Profile) : null
 }
 
@@ -56,9 +59,11 @@ export function AuthProvider({ children }: { children: ComponentChildren }) {
       return null
     },
     async signOut() {
+      await supabase.rpc('simular_salir')
       await supabase.auth.signOut()
       setUser(null)
     },
+    async refresh() { setUser(await loadProfile()) },
     async changePassword(next) {
       const { error } = await supabase.auth.updateUser({ password: next })
       if (error) return error.message

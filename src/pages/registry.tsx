@@ -1,6 +1,8 @@
 import type { ComponentType } from 'preact'
 import { EmptyState, PageHeader } from '../ui/kit'
 import { Inicio } from './Inicio'
+import { Usuarios } from './Usuarios'
+import { Simulado } from './Simulado'
 
 const Pendiente = (titulo: string) => () => (
   <>
@@ -12,6 +14,9 @@ const Pendiente = (titulo: string) => () => (
 /** id de módulo (src/modules.ts) → página. Los módulos sin página muestran "en construcción". */
 export const PAGES: Record<string, ComponentType> = {
   inicio: Inicio,
+  usuarios: Usuarios,
+  'usuarios-distrito': Usuarios,
+  simulado: Simulado,
 }
 
 export const pageFor = (id: string, label: string): ComponentType => PAGES[id] ?? Pendiente(label)

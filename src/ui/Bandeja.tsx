@@ -1,0 +1,107 @@
+import { useEffect, useState } from 'preact/hooks'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../lib/auth'
+import { ROLE_LABELS, type Role } from '../modules'
+import { Icon } from './Icon'
+import { BTN_PRIMARY, BTN_SECONDARY, FIELD, Modal, toast } from './kit'
+
+interface Notif { id: number; type: string; title: string; body: string | null; url: string | null; read_at: string | null; created_at: string }
+interface Msg { id: number; from_name: string; subject: string; body: string; read_at: string | null; created_at: string }
+
+const btn = 'relative flex size-10 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
+const panel = 'fixed inset-x-2 top-14 z-50 mt-1 flex max-h-[75dvh] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl sm:inset-x-auto sm:right-3 sm:w-96'
+const fecha = (s: string) => new Date(s).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
+
+/** Botones de notificaciones y mensajes con paneles desplegables. */
+export function Bandeja() {
+  const { user } = useAuth()
+  const [open, setOpen] = useState<'notif' | 'msg' | null>(null)
+  const [notifs, setNotifs] = useState<Notif[]>([])
+  const [msgs, setMsgs] = useState<Msg[]>([])
+  const [compose, setCompose] = useState(false)
+
+  const load = async () => {
+    const [n, m] = await Promise.all([
+      supabase.from('notifications').select('*').order('id', { ascending: false }).limit(30),
+      supabase.rpc('mensajes_bandeja'),
+    ])
+    setNotifs((n.data as Notif[]) ?? [])
+    setMsgs((m.data as Msg[]) ?? [])
+  }
+  useEffect(() => { load(); const t = setInterval(load, 60000); return () => clearInterval(t) }, [user?.id])
+
+  const nUnread = notifs.filter((n) => !n.read_at).length
+  const mUnread = msgs.filter((m) => !m.read_at).length
+  const markNotifs = async () => { await supabase.from('notifications').update({ read_at: new Date().toISOString() }).is('read_at', null); load() }
+  const readMsg = async (m: Msg) => {
+    if (!m.read_at) { await supabase.from('messages').update({ read_at: new Date().toISOString() }).eq('id', m.id); load() }
+    toast.info(`${m.subject}: ${m.body}`)
+  }
+  const badge = (n: number) => n > 0 && <span class="absolute -right-1.5 -top-1.5 min-w-5 rounded-full bg-blue-600 px-1 text-center text-[11px] font-semibold leading-5 text-white ring-2 ring-slate-50">{n}</span>
+  const toggle = (k: 'notif' | 'msg') => setOpen(open === k ? null : k)
+
+  return (
+    <>
+      <button type="button" class={btn} aria-label="Notificaciones" onClick={() => toggle('notif')}><Icon name="bell" class="size-5" />{badge(nUnread)}</button>
+      <button type="button" class={btn} aria-label="Mensajes" onClick={() => toggle('msg')}><Icon name="mail" class="size-5" />{badge(mUnread)}</button>
+      {open && <div class="fixed inset-0 z-40" onClick={() => setOpen(null)} />}
+      {open === 'notif' && (
+        <div class={panel}>
+          <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3"><h2 class="text-sm font-semibold">Notificaciones</h2>{nUnread > 0 && <button class="text-xs text-sky-700 hover:underline" onClick={markNotifs}>Marcar todas como leídas</button>}</div>
+          <ul class="divide-y divide-slate-100 overflow-y-auto">
+            {notifs.length === 0 && <li class="px-4 py-8 text-center text-sm text-slate-500">Sin notificaciones</li>}
+            {notifs.map((n) => (
+              <li key={n.id} class={`px-4 py-3 ${n.read_at ? '' : 'bg-sky-50/60'}`}>
+                <p class="text-sm font-medium text-slate-900">{n.title}</p>
+                {n.body && <p class="text-sm text-slate-600">{n.body}</p>}
+                <p class="mt-0.5 text-xs text-slate-400">{fecha(n.created_at)}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {open === 'msg' && (
+        <div class={panel}>
+          <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3"><h2 class="text-sm font-semibold">Mensajes</h2><button class="text-xs text-sky-700 hover:underline" onClick={() => { setOpen(null); setCompose(true) }}>Nuevo mensaje</button></div>
+          <ul class="divide-y divide-slate-100 overflow-y-auto">
+            {msgs.length === 0 && <li class="px-4 py-8 text-center text-sm text-slate-500">Sin mensajes</li>}
+            {msgs.map((m) => (
+              <li key={m.id}><button class={`block w-full px-4 py-3 text-left ${m.read_at ? '' : 'bg-sky-50/60'}`} onClick={() => readMsg(m)}>
+                <p class="text-sm font-medium text-slate-900">{m.subject}</p>
+                <p class="truncate text-sm text-slate-600">{m.from_name}: {m.body}</p>
+                <p class="mt-0.5 text-xs text-slate-400">{fecha(m.created_at)}</p>
+              </button></li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {compose && <Redactar onClose={() => setCompose(false)} />}
+    </>
+  )
+}
+
+function Redactar({ onClose }: { onClose(): void }) {
+  const { user } = useAuth()
+  const [dest, setDest] = useState<{ id: string; name: string; role: Role }[]>([])
+  const [f, setF] = useState({ to: '', subject: '', body: '' })
+  useEffect(() => { supabase.rpc('destinatarios').then((r) => setDest((r.data as typeof dest) ?? [])) }, [])
+  const send = async (e: Event) => {
+    e.preventDefault()
+    const { error } = await supabase.from('messages').insert({ from_user_id: user!.id, to_user_id: f.to, subject: f.subject.trim(), body: f.body.trim() })
+    if (error) toast.error(error.message)
+    else { toast.ok('Mensaje enviado'); onClose() }
+  }
+  return (
+    <Modal title="Nuevo mensaje" onClose={onClose}>
+      <form onSubmit={send} class="space-y-4">
+        <select class={FIELD} required value={f.to} onChange={(e) => setF({ ...f, to: e.currentTarget.value })} aria-label="Destinatario">
+          <option value="">Destinatario…</option>
+          {dest.map((d) => <option value={d.id}>{d.name} · {ROLE_LABELS[d.role]}</option>)}
+        </select>
+        <input class={FIELD} placeholder="Asunto" required maxLength={150} value={f.subject} onInput={(e) => setF({ ...f, subject: e.currentTarget.value })} />
+        <textarea class={`${FIELD} py-2`} rows={5} placeholder="Mensaje" required maxLength={4000} value={f.body} onInput={(e) => setF({ ...f, body: e.currentTarget.value })} />
+        <div class="flex justify-end gap-2"><button type="button" class={BTN_SECONDARY} onClick={onClose}>Cancelar</button><button class={BTN_PRIMARY}>Enviar</button></div>
+      </form>
+    </Modal>
+  )
+}
