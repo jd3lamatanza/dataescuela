@@ -3,6 +3,9 @@ import { EmptyState, PageHeader } from '../ui/kit'
 import { Inicio } from './Inicio'
 import { Usuarios } from './Usuarios'
 import { Simulado } from './Simulado'
+import { Turnos } from './Turnos'
+import { Planes } from './Planes'
+import { Agrupamientos } from './Agrupamientos'
 
 const Pendiente = (titulo: string) => () => (
   <>
@@ -17,6 +20,9 @@ export const PAGES: Record<string, ComponentType> = {
   usuarios: Usuarios,
   'usuarios-distrito': Usuarios,
   simulado: Simulado,
+  turnos: Turnos,
+  planes: Planes,
+  agrupamientos: Agrupamientos,
 }
 
 export const pageFor = (id: string, label: string): ComponentType => PAGES[id] ?? Pendiente(label)
