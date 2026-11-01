@@ -75,13 +75,21 @@ function Listado({ d, per, reload }: { d: Datos; per?: Periodo; reload(): void }
   const lim = TAMANOS.includes(Number(params.get('n'))) ? Number(params.get('n')) : 0
   const page = Math.max(1, Number(params.get('page')) || 1)
 
+  const tab = params.get('tab') === 'reportes' ? 'reportes' : 'carga'
   const head = (body: any) => (
     <>
-      <PageHeader title="Matrícula" subtitle="Estado de carga por agrupamiento" actions={<button class={BTN_PRIMARY} onClick={() => setNuevo(true)}><Icon name="plus" class="size-5" />Nuevo período</button>} />
+      <PageHeader title="Matrícula" subtitle={tab === 'carga' ? 'Estado de carga por agrupamiento' : 'Reportes de la matrícula cargada'} actions={tab === 'carga' ? <button class={BTN_PRIMARY} onClick={() => setNuevo(true)}><Icon name="plus" class="size-5" />Nuevo período</button> : undefined} />
+      <nav class="mb-4 flex overflow-x-auto border-b border-slate-200 text-sm" aria-label="Matrícula">
+        {[['carga', 'Carga'], ['reportes', 'Reportes']].map(([id, label]) => (
+          <button key={id} aria-current={tab === id ? 'page' : undefined} onClick={() => setParams({ tab: id === 'carga' ? null : id })}
+            class={`min-h-11 shrink-0 border-b-2 px-3 ${tab === id ? 'border-cyan-500 font-semibold text-slate-900' : 'border-transparent text-slate-600 hover:border-slate-300'}`}>{label}</button>
+        ))}
+      </nav>
       {body}
       {nuevo && <NuevoPeriodo existentes={periodos} onClose={() => setNuevo(false)} onDone={() => { setNuevo(false); reload() }} />}
     </>
   )
+  if (tab === 'reportes') return head(<Reportes d={d} />)
   if (!per) return head(<Card><EmptyState title="Sin períodos de carga" text="Creá un período para comenzar." /></Card>)
   if (!grupo) return head(<Card><EmptyState title="Sin agrupamientos" text="El administrador debe crear agrupamientos de matrícula." /></Card>)
 
@@ -259,5 +267,36 @@ function Trasladar({ modo, carga, esc, periodos, cargas, onClose, onDone }: { mo
         <div class="flex justify-end gap-2"><button type="button" class={BTN_SECONDARY} onClick={onClose}>Cancelar</button><button class={BTN_PRIMARY} disabled={busy || !libres.length}>Aceptar</button></div>
       </form>
     </Modal>
+  )
+}
+
+function Reportes({ d }: { d: Datos }) {
+  const { params } = useRoute()
+  const { periodos, grupos, cargas, escuelas } = d
+  if (!periodos.length || !grupos.length) return <Card><EmptyState title="Sin datos para reportar" text="Se necesita al menos un período y un agrupamiento." /></Card>
+  const per = periodos.find((p) => String(p.id) === params.get('rp'))
+  const grupo = grupos.find((g) => String(g.id) === params.get('rg'))
+  const es = grupo ? escuelas.filter((e) => e.codigo && grupo.codigos.includes(e.codigo)) : []
+  const confirmadas = per ? es.filter((e) => cargas.some((k) => k.escuela_id === e.id && k.ciclo === per.ciclo && k.mes === per.mes && k.confirmada_at)) : []
+  return (
+    <>
+      <Card>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <Lbl label="Período">
+            <select class={FIELD} aria-label="Período" value={per?.id ?? ''} onChange={(e) => setParams({ rp: e.currentTarget.value || null })}>
+              <option value="">Elegí un período</option>{periodos.map((p) => <option key={p.id} value={p.id}>{nombrePeriodo(p)}</option>)}
+            </select></Lbl>
+          <Lbl label="Agrupamiento">
+            <select class={FIELD} aria-label="Agrupamiento" value={grupo?.id ?? ''} onChange={(e) => setParams({ rg: e.currentTarget.value || null })}>
+              <option value="">Elegí un agrupamiento</option>{grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+            </select></Lbl>
+        </div>
+      </Card>
+      <Card class="mt-3">
+        {!per || !grupo ? <EmptyState title="Elegí período y agrupamiento" text="Se mostrará el reporte total de la matrícula cargada." /> : (
+          <EmptyState title={`${grupo.nombre} · ${nombrePeriodo(per)}`} text={`${confirmadas.length} de ${es.length} escuelas con matrícula confirmada. El reporte de este agrupamiento se construirá próximamente.`} />
+        )}
+      </Card>
+    </>
   )
 }
