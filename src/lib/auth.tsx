@@ -53,6 +53,7 @@ export function AuthProvider({ children }: { children: ComponentChildren }) {
     async signIn(ident, password) {
       const { error } = await supabase.auth.signInWithPassword({ email: authEmail(ident), password })
       if (error) return 'Usuario o contraseña incorrectos'
+      await supabase.rpc('simular_salir') // un ingreso nuevo nunca arranca dentro de una simulación previa
       const p = await loadProfile()
       if (!p) { await supabase.auth.signOut(); return 'Usuario desactivado' }
       setUser(p)
