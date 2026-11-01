@@ -40,14 +40,15 @@ async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[]): Promise<RepTa
 
   return planes.map((p) => {
     const cur = cursos.filter((c) => c.plan_id === p.id)
-    const grupos = [...cur.map((c) => ({ label: c.nombre, subs: siglas })), { label: 'Total', subs: [...siglas, 'Total'] }]
+    const grupos = [...cur.map((c) => ({ label: c.nombre, subs: siglas })), { label: 'Total', subs: [...cur.map((c) => c.nombre), 'Total'] }]
     const calc = (e: Esc) => {
       const dd = (datos.get(e.id) ?? []).filter((d) => d.plan_id === p.id)
       const trio = (f: (d: Dato) => boolean) => dd.filter(f).reduce((a, d) => [a[0] + d.secciones, a[1] + d.matricula, a[2] + d.asistencia], [0, 0, 0])
       const out: number[] = []
       for (const c of cur) for (const t of turnos) out.push(...trio((d) => d.curso_id === c.id && d.turno_id === t.id))
-      for (const t of turnos) out.push(...trio((d) => d.turno_id === t.id))
-      out.push(...trio(() => true))
+      const visibles = (d: Dato) => turnos.some((t) => t.id === d.turno_id)
+      for (const c of cur) out.push(...trio((d) => d.curso_id === c.id && visibles(d)))
+      out.push(...trio(visibles))
       return out
     }
     const filas = es.map((e) => ({ label: e.clave, vals: calc(e) }))
