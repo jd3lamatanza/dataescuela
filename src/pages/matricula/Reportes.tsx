@@ -13,7 +13,7 @@ interface Dato { plan_id: number; curso_id: number; turno_id: number; secciones:
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 /** Turnos de cada agrupamiento con reporte definido (por sigla, en este orden) */
-const TURNOS: Record<string, string[]> = { inicial: ['TM', 'TT', 'JC'] }
+const TURNOS: Record<string, string[]> = { inicial: ['TM', 'TT', 'JC'], primaria: ['TM', 'TT', 'JC'] }
 
 async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[]): Promise<RepTabla[]> {
   const siglas = TURNOS[norm(grupo.nombre)]
