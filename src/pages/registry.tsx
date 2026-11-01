@@ -8,6 +8,8 @@ import { Planes } from './Planes'
 import { Agrupamientos } from './Agrupamientos'
 import { Escuelas } from './Escuelas'
 import { Fichas } from './Fichas'
+import { ArticulacionEscolar } from './articulacion/Escolar'
+import { ArticulacionSupervision } from './articulacion/Supervision'
 
 const Pendiente = (titulo: string) => () => (
   <>
@@ -27,6 +29,10 @@ export const PAGES: Record<string, ComponentType> = {
   agrupamientos: Agrupamientos,
   escuelas: Escuelas,
   fichas: Fichas,
+  articulacion: ArticulacionEscolar,
+  areal: ArticulacionSupervision,
+  distrito: ArticulacionSupervision,
+  region: ArticulacionSupervision,
 }
 
 export const pageFor = (id: string, label: string): ComponentType => PAGES[id] ?? Pendiente(label)
