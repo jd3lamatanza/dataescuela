@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks'
 import type { ComponentChildren } from 'preact'
 import { BRAND, ROLE_LABELS, modulesFor } from '../modules'
 import type { Profile } from '../lib/auth'
+import { BarraServidor } from './BarraServidor'
 import { Icon } from './Icon'
 import { href } from '../lib/router'
 import { supabase } from '../lib/supabase'
@@ -85,7 +86,9 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
 
       <main class={`px-3 py-5 sm:px-6 ${collapsed ? 'lg:pl-24' : 'lg:pl-72'}`}>
         <div class="mx-auto max-w-6xl">{children}</div>
+        {user.role === 'distrital' && <div class="h-24 sm:h-14" />}
       </main>
+      {user.role === 'distrital' && <BarraServidor collapsed={collapsed} />}
     </div>
   )
 }
