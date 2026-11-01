@@ -3,7 +3,7 @@ import { useAsync } from '../../lib/hooks'
 import { setParams, useRoute } from '../../lib/router'
 import { descargarReporte } from '../../lib/download'
 import type { RepGrupo, RepTabla } from '../../lib/export'
-import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Spinner, toast } from '../../ui/kit'
+import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Spinner, TabBar, toast } from '../../ui/kit'
 import { Icon } from '../../ui/Icon'
 import { nombrePeriodo, type Periodo } from './common'
 
@@ -175,12 +175,7 @@ export function Reportes({ periodos, grupos, escuelas }: { periodos: Periodo[]; 
         </div>
       </Card>
       {cfg?.tabs && per && (
-        <nav class="mt-3 flex overflow-x-auto border-b border-slate-200 text-sm" aria-label="Tipo de reporte">
-          {cfg.tabs.map(([id, label]) => (
-            <button key={id} aria-current={tab === id ? 'page' : undefined} onClick={() => setParams({ rt: id === cfg.tabs![0][0] ? null : id })}
-              class={`min-h-11 shrink-0 border-b-2 px-3 ${tab === id ? 'border-cyan-500 font-semibold text-slate-900' : 'border-transparent text-slate-600 hover:border-slate-300'}`}>{label}</button>
-          ))}
-        </nav>
+        <TabBar label="Tipo de reporte" class="mt-3" items={cfg.tabs.map(([id, label]) => ({ id, label, icon: id === 'general' ? 'layers' as const : 'search' as const, color: id === 'general' ? 'sky' as const : 'violet' as const }))} active={tab ?? ''} onChange={(id) => setParams({ rt: id === cfg.tabs![0][0] ? null : id })} />
       )}
       {!per || !grupo ? <Card class="mt-3"><EmptyState title="Elegí período y agrupamiento" text="Se mostrará el reporte total de la matrícula cargada." /></Card>
         : !definido ? <Card class="mt-3"><EmptyState title={`${grupo.nombre} · ${nombrePeriodo(per)}`} text="El reporte de este agrupamiento se construirá próximamente." /></Card>

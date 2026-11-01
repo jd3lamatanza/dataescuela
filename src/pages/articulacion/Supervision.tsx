@@ -3,10 +3,10 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { useAsync, useDebounced } from '../../lib/hooks'
 import type { Table } from '../../lib/export'
-import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, confirmar, EmptyState, FIELD, Modal, PageHeader, Pager, PAGE_SIZE, RowMenu, Spinner, toast } from '../../ui/kit'
+import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, confirmar, EmptyState, FIELD, Modal, PageHeader, Pager, PAGE_SIZE, RowMenu, Spinner, toast, TabBar } from '../../ui/kit'
 import {
   ARTICULACION_CODIGOS, ciclos, cicloActual, confirmada, destinoTxt, DestinoFields, EstadoBadge, estadoTxt, Exportar, ExternaModal, limpiarBusqueda,
-  NuevaIntervencion, puedeEgresar, puedeIngresar, Tabs, VerIntervenciones, type Egresante,
+  NuevaIntervencion, puedeEgresar, puedeIngresar, VerIntervenciones, type Egresante,
 } from './common'
 
 interface Resumen { clave: string; nombre: string; cue: string; codigo: string; eg_total: number; eg_conf: number; ing_total: number; ing_conf: number }
@@ -19,7 +19,7 @@ export function ArticulacionSupervision() {
   return (
     <>
       <PageHeader title="Articulación" subtitle={rol === 'areal' ? 'Escuelas asignadas a tu área' : rol === 'regional' ? 'Vista regional' : 'Vista distrital'} />
-      <Tabs items={[{ id: 'trayectorias', label: 'Trayectorias' }, { id: 'escuelas', label: 'Escuelas' }]} active={tab} onChange={setTab} />
+      <TabBar items={[{ id: 'trayectorias', label: 'Trayectorias', icon: 'route', color: 'violet' }, { id: 'escuelas', label: 'Escuelas', icon: 'school', color: 'sky' }]} active={tab} onChange={setTab} />
       {tab === 'trayectorias' ? <ListaTrayectorias rol={rol} /> : <EscuelasResumen />}
     </>
   )

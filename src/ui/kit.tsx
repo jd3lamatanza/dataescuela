@@ -182,3 +182,22 @@ export function Pager({ page, total, size = PAGE_SIZE, onPage }: { page: number;
     </div>
   )
 }
+
+const TAB_COLOR = {
+  sky: 'text-sky-600', cyan: 'text-cyan-600', emerald: 'text-emerald-600', amber: 'text-amber-600',
+  violet: 'text-violet-600', rose: 'text-rose-600', indigo: 'text-indigo-600',
+} as const
+export type TabColor = keyof typeof TAB_COLOR
+export type TabItem = { id: string; label: string; icon: IconName; color: TabColor; disabled?: boolean; why?: string; badge?: number }
+
+export const TabBar = ({ items, active, onChange, label = 'Secciones', class: cls = 'mb-4' }: { items: TabItem[]; active: string; onChange(id: string): void; label?: string; class?: string }) => (
+  <nav class={`${cls} flex overflow-x-auto border-b border-slate-200 text-sm`} aria-label={label}>
+    {items.map((t) => (
+      <button key={t.id} disabled={t.disabled} title={t.disabled ? t.why : undefined} onClick={() => onChange(t.id)} aria-current={active === t.id ? 'page' : undefined}
+        class={`flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-3 disabled:cursor-not-allowed disabled:opacity-50 ${active === t.id ? 'border-cyan-500 font-semibold text-slate-900' : 'border-transparent text-slate-600 hover:border-slate-300'}`}>
+        <Icon name={t.icon} class={`size-5 ${TAB_COLOR[t.color]}`} />{t.label}
+        {!!t.badge && <span class="rounded-full bg-amber-100 px-2 text-xs font-semibold text-amber-800">{t.badge}</span>}
+      </button>
+    ))}
+  </nav>
+)

@@ -2,7 +2,7 @@ import { useState } from 'preact/hooks'
 import { supabase, check } from '../../lib/supabase'
 import { useAsync } from '../../lib/hooks'
 import { setParams, useRoute } from '../../lib/router'
-import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, RowMenu, Spinner, confirmar, toast } from '../../ui/kit'
+import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, RowMenu, Spinner, confirmar, toast, TabBar } from '../../ui/kit'
 import { Icon } from '../../ui/Icon'
 import { Reportes } from './Reportes'
 import { FormCarga, MESES, VistaCarga, bajarCarga, cargaFilas, fdia, hoyAR, nombrePeriodo, type Periodo } from './common'
@@ -80,12 +80,7 @@ function Listado({ d, per, reload }: { d: Datos; per?: Periodo; reload(): void }
   const head = (body: any) => (
     <>
       <PageHeader title="Matrícula" subtitle={tab === 'carga' ? 'Estado de carga por agrupamiento' : 'Reportes de la matrícula cargada'} actions={tab === 'carga' ? <button class={BTN_PRIMARY} onClick={() => setNuevo(true)}><Icon name="plus" class="size-5" />Nuevo período</button> : undefined} />
-      <nav class="mb-4 flex overflow-x-auto border-b border-slate-200 text-sm" aria-label="Matrícula">
-        {[['carga', 'Carga'], ['reportes', 'Reportes']].map(([id, label]) => (
-          <button key={id} aria-current={tab === id ? 'page' : undefined} onClick={() => setParams({ tab: id === 'carga' ? null : id })}
-            class={`min-h-11 shrink-0 border-b-2 px-3 ${tab === id ? 'border-cyan-500 font-semibold text-slate-900' : 'border-transparent text-slate-600 hover:border-slate-300'}`}>{label}</button>
-        ))}
-      </nav>
+      <TabBar label="Matrícula" items={[{ id: 'carga', label: 'Carga', icon: 'edit', color: 'cyan' }, { id: 'reportes', label: 'Reportes', icon: 'chart', color: 'indigo' }]} active={tab} onChange={(id) => setParams({ tab: id === 'carga' ? null : id })} />
       {body}
       {nuevo && <NuevoPeriodo existentes={periodos} onClose={() => setNuevo(false)} onDone={() => { setNuevo(false); reload() }} />}
     </>

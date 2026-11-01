@@ -56,17 +56,6 @@ export function Exportar({ build, name }: { build: () => Promise<Table>; name: s
   )
 }
 
-export const Tabs = ({ items, active, onChange }: { items: { id: string; label: string; disabled?: boolean; why?: string; badge?: number }[]; active: string; onChange(id: string): void }) => (
-  <nav class="mb-4 flex overflow-x-auto border-b border-slate-200 text-sm" aria-label="Secciones">
-    {items.map((t) => (
-      <button key={t.id} disabled={t.disabled} title={t.disabled ? t.why : undefined} onClick={() => onChange(t.id)} aria-current={active === t.id ? 'page' : undefined}
-        class={`flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-3 disabled:cursor-not-allowed disabled:text-slate-400 ${active === t.id ? 'border-cyan-500 font-semibold text-slate-900' : 'border-transparent text-slate-600 hover:border-slate-300'}`}>
-        {t.label}{!!t.badge && <span class="rounded-full bg-amber-100 px-2 text-xs font-semibold text-amber-800">{t.badge}</span>}
-      </button>
-    ))}
-  </nav>
-)
-
 export function DestinoFields({ codigo, destino, nombre, onDestino, onNombre }: { codigo: string; destino: string; nombre: string; onDestino(v: string): void; onNombre(v: string): void }) {
   const [q, setQ] = useState('')
   const [abierto, setAbierto] = useState(false)

@@ -2,7 +2,7 @@ import { useState } from 'preact/hooks'
 import { supabase, check, checkOpt } from '../../lib/supabase'
 import { useAsync } from '../../lib/hooks'
 import { setParams, useRoute } from '../../lib/router'
-import { Alert, Card, EmptyState, PageHeader, RowMenu, Spinner } from '../../ui/kit'
+import { Alert, Card, EmptyState, PageHeader, RowMenu, Spinner, TabBar } from '../../ui/kit'
 import { useMiEscuela } from '../Planta'
 import { FormCarga, MESES, VistaCarga, cargaFilas, bajarCarga, fdia, hoyAR, nombrePeriodo, type Periodo } from './common'
 
@@ -27,12 +27,7 @@ export function Matricula() {
   return (
     <>
       <PageHeader title="Matrícula" subtitle="Matrícula y asistencia mensual" />
-      <nav class="mb-4 flex overflow-x-auto border-b border-slate-200 text-sm" aria-label="Matrícula">
-        {[['carga', 'Carga del mes'], ['historial', 'Historial']].map(([id, label]) => (
-          <button key={id} aria-current={tab === id ? 'page' : undefined} onClick={() => setParams({ tab: id === 'carga' ? null : id })}
-            class={`min-h-11 shrink-0 border-b-2 px-3 ${tab === id ? 'border-cyan-500 font-semibold text-slate-900' : 'border-transparent text-slate-600 hover:border-slate-300'}`}>{label}</button>
-        ))}
-      </nav>
+      <TabBar label="Matrícula" items={[{ id: 'carga', label: 'Carga del mes', icon: 'edit', color: 'cyan' }, { id: 'historial', label: 'Historial', icon: 'clock', color: 'amber' }]} active={tab} onChange={(id) => setParams({ tab: id === 'carga' ? null : id })} />
       {tab === 'carga' ? <Carga escuelaId={esc.data} /> : <Historial escuelaId={esc.data} />}
     </>
   )

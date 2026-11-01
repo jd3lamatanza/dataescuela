@@ -3,10 +3,10 @@ import { supabase } from '../../lib/supabase'
 import { useAsync } from '../../lib/hooks'
 import { setParams, useRoute } from '../../lib/router'
 import type { Table } from '../../lib/export'
-import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, confirmar, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, PAGE_SIZE, RowMenu, Spinner, toast, Toggle } from '../../ui/kit'
+import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, confirmar, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, PAGE_SIZE, RowMenu, Spinner, toast, Toggle, TabBar } from '../../ui/kit'
 import {
   ciclos, ciclosIngreso, cicloActual, confirmada, destinoTxt, DestinoFields, EstadoBadge, estadoTxt, Exportar, ExternaModal, fmtFecha, NuevaIntervencion,
-  OTRA, puedeEgresar, puedeIngresar, Tabs, VerIntervenciones, type Egresante,
+  OTRA, puedeEgresar, puedeIngresar, VerIntervenciones, type Egresante,
 } from './common'
 import { ImportarNomina } from './Importar'
 
@@ -29,16 +29,16 @@ export function ArticulacionEscolar() {
   if (error || !o) return <Alert tone="error">{error ?? 'Sin escuela'}</Alert>
   const eg = puedeEgresar(o.codigo), ing = puedeIngresar(o.codigo)
   const tabs = [
-    { id: 'egresantes', label: 'Egresantes', disabled: !eg, why: 'Tu escuela no carga egresantes' },
-    { id: 'ingresantes', label: 'Ingresantes', disabled: !ing, why: 'Tu escuela no recibe ingresantes' },
-    { id: 'trayectorias', label: 'Trayectorias', disabled: !eg, why: 'Tu escuela no tiene trayectorias propias' },
+    { id: 'egresantes', label: 'Egresantes', icon: 'logout' as const, color: 'amber' as const, disabled: !eg, why: 'Tu escuela no carga egresantes' },
+    { id: 'ingresantes', label: 'Ingresantes', icon: 'login' as const, color: 'emerald' as const, disabled: !ing, why: 'Tu escuela no recibe ingresantes' },
+    { id: 'trayectorias', label: 'Trayectorias', icon: 'route' as const, color: 'violet' as const, disabled: !eg, why: 'Tu escuela no tiene trayectorias propias' },
   ]
   const wanted = params.get('t') ?? ''
   const tab = tabs.find((t) => t.id === wanted && !t.disabled)?.id ?? tabs.find((t) => !t.disabled)?.id
   return (
     <>
       <PageHeader title="Articulación" subtitle={`${o.nombre ?? ''} · ${o.clave}`} />
-      <Tabs items={tabs} active={tab ?? ''} onChange={(t) => setParams({ t, page: null, q: null })} />
+      <TabBar items={tabs} active={tab ?? ''} onChange={(t) => setParams({ t, page: null, q: null })} />
       {tab === 'egresantes' && <Egresantes o={o} />}
       {tab === 'ingresantes' && <Ingresantes o={o} />}
       {tab === 'trayectorias' && <Trayectorias o={o} />}
