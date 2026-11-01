@@ -74,7 +74,11 @@ function Historial({ escuelaId }: { escuelaId: number }) {
     const especial = ['EE', 'EL', 'ET'].includes(codigo ?? '')
     return {
       especial,
-      registros: registros.map((k) => ({ ...k, sec: k.matricula_datos.reduce((a: number, d: any) => a + d.secciones, 0), mat: k.matricula_datos.reduce((a: number, d: any) => a + d.matricula, 0), inc: k.matricula_datos.reduce((a: number, d: any) => a + d.inclusion, 0), asi: k.matricula_datos.reduce((a: number, d: any) => a + d.asistencia, 0) })),
+      registros: registros.map((k) => {
+        const mat = k.matricula_datos.reduce((a: number, d: any) => a + d.matricula, 0)
+        const inc = k.matricula_datos.reduce((a: number, d: any) => a + d.inclusion, 0)
+        return { ...k, sec: k.matricula_datos.reduce((a: number, d: any) => a + d.secciones, 0), mat, inc, totalMat: mat + inc, asi: k.matricula_datos.reduce((a: number, d: any) => a + d.asistencia, 0) }
+      }),
     }
   }, [escuelaId])
   if (loading && !data) return <Spinner />
@@ -90,15 +94,16 @@ function Historial({ escuelaId }: { escuelaId: number }) {
       {!data.registros.length ? <EmptyState title="Sin cargas" text="Todavía no confirmaste ninguna carga mensual." /> : (
         <div class="-m-4 overflow-x-auto">
           <table class="w-full text-left text-sm">
-            <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="px-3 py-2">Período</th><th class="px-3 py-2 text-right">Secciones</th><th class="px-3 py-2 text-right">Matrícula</th>{data.especial && <th class="px-3 py-2 text-right">Inclusión</th>}<th class="px-3 py-2 text-right">Asistencia</th><th class="px-3 py-2">Confirmada</th><th class="px-3 py-2" /></tr></thead>
+            <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="px-3 py-2">Período</th><th class="px-3 py-2 text-right">Secciones</th><th class="px-3 py-2 text-right">{data.especial ? 'Matrícula sede' : 'Matrícula'}</th>{data.especial && <><th class="px-3 py-2 text-right">Matrícula con inclusión</th><th class="px-3 py-2 text-right">Matrícula total</th></>}<th class="px-3 py-2 text-right">Asistencia</th><th class="px-3 py-2">Confirmada</th><th class="px-3 py-2" /></tr></thead>
             <tbody class="divide-y divide-slate-100">
               {data.registros.map((k) => (
-                <tr key={k.id}><td class="px-3 py-2.5 font-medium">{MESES[k.mes]} {k.ciclo}</td><td class="px-3 py-2.5 text-right">{k.sec}</td><td class="px-3 py-2.5 text-right">{k.mat}</td>{data.especial && <td class="px-3 py-2.5 text-right">{k.inc}</td>}<td class="px-3 py-2.5 text-right">{k.asi}</td><td class="px-3 py-2.5 text-xs text-slate-500">{fdia(k.confirmada_at)}</td><td class="px-3 py-2.5"><Menu k={k} /></td></tr>
+                <tr key={k.id}><td class="px-3 py-2.5 font-medium">{MESES[k.mes]} {k.ciclo}</td><td class="px-3 py-2.5 text-right">{k.sec}</td><td class="px-3 py-2.5 text-right">{k.mat}</td>{data.especial && <><td class="px-3 py-2.5 text-right">{k.inc}</td><td class="px-3 py-2.5 text-right font-semibold">{k.totalMat}</td></>}<td class="px-3 py-2.5 text-right">{k.asi}</td><td class="px-3 py-2.5 text-xs text-slate-500">{fdia(k.confirmada_at)}</td><td class="px-3 py-2.5"><Menu k={k} /></td></tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      {data.especial && <p class="mt-3 text-xs text-slate-600">Matrícula total = matrícula sede + matrícula con inclusión; el total se obtiene sumando ambas.</p>}
     </Card>
   )
 }

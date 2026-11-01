@@ -18,7 +18,7 @@ const CFG: Record<string, { siglas: string[]; tipo: Tipo; inclusion?: boolean; t
   inicial: { siglas: ['TM', 'TT', 'JC'], tipo: 'planes' },
   primaria: { siglas: ['TM', 'TT', 'JC'], tipo: 'planes' },
   'secundaria orientada': { siglas: ['TM', 'TT', 'TV', 'JC', 'JE'], tipo: 'secundaria', tabs: [['general', 'Reporte General'], ['analitico', 'Reporte Analítico']] },
-  'especial': { siglas: ['TM', 'TT', 'TV'], tipo: 'planes', inclusion: true },
+  'especial': { siglas: ['TM', 'TT', 'JC'], tipo: 'planes', inclusion: true },
   'estetica': { siglas: ['TM', 'TT', 'TV'], tipo: 'planes' },
   'educacion fisica': { siglas: ['TM', 'TT', 'TV'], tipo: 'planes' },
   'adultos': { siglas: ['TM', 'TT', 'TV'], tipo: 'planes' },
@@ -58,7 +58,7 @@ async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[], modo: string):
     .filter((p) => usados.has(p.id) || pares.has(`${p.nivel?.nombre}|${p.modalidad?.nombre}`))
 
   const visibles = (d: Dato) => turnos.some((t) => t.id === d.turno_id)
-  const metricas = cfg.inclusion ? ['Sec', 'Mat', 'Inclusión', 'Asist'] : undefined
+  const metricas = cfg.inclusion ? ['Sec.', 'Matr. sede', 'Matr. c/ inclusión', 'Asist.'] : undefined
   const anchoMetrica = metricas?.length ?? 3
   const trio = (dd: Dato[]) => dd.reduce((a, d) => cfg.inclusion
     ? [a[0] + d.secciones, a[1] + d.matricula, a[2] + d.inclusion, a[3] + d.asistencia]
@@ -209,7 +209,10 @@ export function Reportes({ periodos, grupos, escuelas }: { periodos: Periodo[]; 
   if (!periodos.length || !grupos.length) return <Card><EmptyState title="Sin datos para reportar" text="Se necesita al menos un período y un agrupamiento." /></Card>
   const sufijo = cfg?.tabs ? ` · ${cfg.tabs.find(([id]) => id === tab)?.[1]}` : ''
   const nombre = per && grupo ? `Matrícula ${grupo.nombre}${sufijo} · ${nombrePeriodo(per)}` : ''
-  const bajar = (tipo: 'xlsx' | 'pdf') => descargarReporte(tipo, nombre, `Total de matrícula cargada · ${new Date().toLocaleDateString('es-AR')}`, rep.data!, `reporte-${norm(grupo!.nombre).replace(/\W+/g, '_')}-${per!.ciclo}-${String(per!.mes).padStart(2, '0')}`).catch((e) => toast.error(e.message))
+  const notaEspecial = 'Matrícula total = matrícula sede + matrícula con inclusión; el total se obtiene sumando ambas.'
+  const totalMatriculaReporte = rep.data?.reduce((a, t) => a + (t.total.at(-3) ?? 0) + (t.total.at(-2) ?? 0), 0) ?? 0
+  const notaEspecialCompleta = `${notaEspecial} Matrícula total general: ${totalMatriculaReporte}.`
+  const bajar = (tipo: 'xlsx' | 'pdf') => descargarReporte(tipo, nombre, `${cfg?.inclusion ? `${notaEspecialCompleta} · ` : ''}Total de matrícula cargada · ${new Date().toLocaleDateString('es-AR')}`, rep.data!, `reporte-${norm(grupo!.nombre).replace(/\W+/g, '_')}-${per!.ciclo}-${String(per!.mes).padStart(2, '0')}`).catch((e) => toast.error(e.message))
   return (
     <>
       <Card>
@@ -251,6 +254,7 @@ export function Reportes({ periodos, grupos, escuelas }: { periodos: Periodo[]; 
                       <TablaReporte t={t} />
                     </div>
                   ))}
+                  {cfg?.inclusion && <p class="mt-3 rounded-md border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950">{notaEspecialCompleta} En los cuadros, “Matr. sede” corresponde a Matrícula y “Matr. c/ inclusión” a Inclusión.</p>}
                 </div>
               </Card>
             ) : (

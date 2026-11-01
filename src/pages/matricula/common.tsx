@@ -42,7 +42,7 @@ export function CuadroCarga({ filas, especial = false }: { filas: Fila[]; especi
             <td class={'px-2 py-2 text-right ' + cls}>{v ? v.asistencia : '—'}</td>
           </>
         )
-        const medidas = especial ? ['Secc.', 'Matr.', 'Incl.', 'Asist.'] : ['Secc.', 'Matr.', 'Asist.']
+        const medidas = especial ? ['Secc.', 'Matr. sede', 'Matr. c/ inclusión', 'Asist.'] : ['Secc.', 'Matr.', 'Asist.']
         const ancho = medidas.length
         return (
           <Card key={pl} title={pl}>
@@ -75,13 +75,16 @@ export function CuadroCarga({ filas, especial = false }: { filas: Fila[]; especi
           </Card>
         )
       })}
-      <p class="rounded-md bg-sky-50 p-3 text-sm text-sky-900">Total general: <strong>{sum(filas, 'secciones')}</strong> secciones · <strong>{sum(filas, 'matricula')}</strong> de matrícula{especial && <> · <strong>{sum(filas, 'inclusion')}</strong> de inclusión</>} · <strong>{sum(filas, 'asistencia')}</strong> de asistencia.</p>
+      <p class="rounded-md bg-sky-50 p-3 text-sm text-sky-900">
+        Total general: <strong>{sum(filas, 'secciones')}</strong> secciones · <strong>{sum(filas, 'matricula')}</strong> de matrícula{especial && <> · <strong>{sum(filas, 'inclusion')}</strong> de inclusión · <strong>{sum(filas, 'matricula') + sum(filas, 'inclusion')}</strong> de matrícula total</>} · <strong>{sum(filas, 'asistencia')}</strong> de asistencia.
+        {especial && <span class="mt-1 block">Matrícula total = matrícula sede + matrícula con inclusión; el total se obtiene sumando ambas.</span>}
+      </p>
     </div>
   )
 }
 
 export const bajarCarga = (tipo: 'xlsx' | 'pdf', filas: Fila[], periodo: { mes: number; ciclo: number }, clave: string, confirmada?: string | null, especial = false) =>
-  descargarMatriz(tipo, `Matrícula ${nombrePeriodo(periodo)}`, `Escuela ${clave} · Confirmada el ${fdia(confirmada)}`, filas, `matricula-${clave}-${periodo.ciclo}-${String(periodo.mes).padStart(2, '0')}`.replace(/[^\w-]/g, '_'), especial).catch((e) => toast.error(e.message))
+  descargarMatriz(tipo, `Matrícula ${nombrePeriodo(periodo)}`, `Escuela ${clave} · Confirmada el ${fdia(confirmada)}${especial ? ' · Matrícula total = matrícula sede + matrícula con inclusión; el total se obtiene sumando ambas.' : ''}`, filas, `matricula-${clave}-${periodo.ciclo}-${String(periodo.mes).padStart(2, '0')}`.replace(/[^\w-]/g, '_'), especial).catch((e) => toast.error(e.message))
 
 export function DescargasCarga({ filas, periodo, clave, confirmada, especial = false }: { filas: Fila[]; periodo: { mes: number; ciclo: number }; clave: string; confirmada?: string | null; especial?: boolean }) {
   return (
@@ -176,7 +179,7 @@ function Form({ escuelaId, ciclo, mes, editable, clave, onSaved, celdas, inicial
         const cursos = [...new Map(cs.map((c) => [c.curso_id, c.curso])).entries()]
         return (
           <Card key={pl} title={`${pl} · ${MESES[mes]} ${ciclo}`}>
-            <p class="-mt-1 mb-3 text-sm text-slate-600">Por cada curso y turno se indica la cantidad de secciones. Cargá la matrícula{especial && ' y la inclusión'} y la asistencia de ese grupo.</p>
+            <p class="-mt-1 mb-3 text-sm text-slate-600">Por cada curso y turno se indica la cantidad de secciones. Cargá la matrícula{especial && ' sede y la matrícula con inclusión'} y la asistencia de ese grupo.</p>
             <div class="-mx-4 overflow-x-auto px-4">
               <table class="w-full text-left text-sm">
                 <thead class="border-b border-slate-200 text-xs uppercase text-slate-500"><tr><th class="px-2 py-2">Curso</th>{turnos.map(([id, n]) => <th key={id} class="px-2 py-2 text-center">{n}</th>)}</tr></thead>
@@ -192,7 +195,7 @@ function Form({ escuelaId, ciclo, mes, editable, clave, onSaved, celdas, inicial
                           <td key={tid} class="min-w-40 px-2 py-2 align-top">
                             <p class="mb-1 text-center text-xs font-semibold text-sky-700">{c.secciones} {c.secciones === 1 ? 'sección' : 'secciones'}</p>
                             <div class={`grid ${especial ? 'grid-cols-3' : 'grid-cols-2'} gap-1.5`}>
-                              {(especial ? [['m', 'Matrícula'], ['i', 'Inclusión'], ['a', 'Asistencia']] as const : [['m', 'Matrícula'], ['a', 'Asistencia']] as const).map(([f, lab]) => (
+                              {(especial ? [['m', 'Matrícula sede'], ['i', 'Matrícula con inclusión'], ['a', 'Asistencia']] as const : [['m', 'Matrícula'], ['a', 'Asistencia']] as const).map(([f, lab]) => (
                                 <label key={f} class="block">
                                   <span class="block text-center text-[10px] uppercase text-slate-500">{lab}</span>
                                   <input type="number" min={0} max={MAXV} inputMode="numeric" disabled={!editable} aria-label={`${lab} ${cn} ${tn}`} value={vals[key(c)]?.[f] ?? ''}
@@ -214,7 +217,7 @@ function Form({ escuelaId, ciclo, mes, editable, clave, onSaved, celdas, inicial
         )
       })}
       <Card class="flex flex-wrap items-center justify-between gap-3">
-        <p class="text-sm text-slate-600">Secciones: <strong class="text-slate-900">{sum(filas, 'secciones')}</strong> · Matrícula: <strong class="text-slate-900">{sum(filas, 'matricula')}</strong>{especial && <> · Inclusión: <strong class="text-slate-900">{sum(filas, 'inclusion')}</strong></>} · Asistencia: <strong class="text-slate-900">{sum(filas, 'asistencia')}</strong></p>
+        <p class="text-sm text-slate-600">Secciones: <strong class="text-slate-900">{sum(filas, 'secciones')}</strong> · Matrícula{especial ? ' sede' : ''}: <strong class="text-slate-900">{sum(filas, 'matricula')}</strong>{especial && <> · Matrícula con inclusión: <strong class="text-slate-900">{sum(filas, 'inclusion')}</strong> · Matrícula total: <strong class="text-slate-900">{sum(filas, 'matricula') + sum(filas, 'inclusion')}</strong></>} · Asistencia: <strong class="text-slate-900">{sum(filas, 'asistencia')}</strong></p>
         {editable ? <button class={BTN_PRIMARY} onClick={revisar}>Revisar y confirmar</button> : <p class="text-sm font-medium text-amber-700">Carga deshabilitada</p>}
       </Card>
       {prev && (
