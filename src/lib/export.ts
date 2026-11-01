@@ -315,8 +315,9 @@ export async function buildMatrizPdf(title: string, subtitle: string, grids: Gri
   return doc.save()
 }
 
-// ---- Reportes jerárquicos: filas = escuelas, columnas = grupo > subgrupo > Sec/Mat/Asist ----
-export interface RepGrupo { label: string; subs: string[] }
+// ---- Reportes jerárquicos: filas = escuelas, columnas = [ciclo >] grupo > subgrupo > Sec/Mat/Asist ----
+/** `sup` es un nivel opcional de encabezado por encima del grupo (p. ej. el ciclo) */
+export interface RepGrupo { label: string; subs: string[]; sup?: string }
 export interface RepTabla {
   titulo: string
   primera: string
@@ -326,8 +327,19 @@ export interface RepTabla {
   total: number[]
 }
 const REP_SUB = ['Sec', 'Mat', 'Asist']
+const repAnchos = (t: RepTabla) => t.grupos.map((g) => g.subs.length * 3)
+/** Agrupa grupos consecutivos con el mismo `sup`: [etiqueta, columnas] */
+const repSups = (t: RepTabla) => {
+  const out: [string, number][] = []
+  t.grupos.forEach((g, i) => {
+    const w = g.subs.length * 3
+    if (i && g.sup === t.grupos[i - 1].sup) out[out.length - 1][1] += w
+    else out.push([g.sup ?? '', w])
+  })
+  return out
+}
 
-/** .xlsx con una hoja por reporte: encabezado de 3 niveles con celdas combinadas */
+/** .xlsx con una hoja por reporte: encabezado jerárquico con celdas combinadas */
 export function buildReporteXlsx(title: string, subtitle: string, tablas: RepTabla[], sheet: string): Uint8Array {
   const rows: string[] = []
   const merges: string[] = []
@@ -335,33 +347,34 @@ export function buildReporteXlsx(title: string, subtitle: string, tablas: RepTab
   const str = (ci: number, v: string, st: number) => `<c r="${colL(ci)}${r}" s="${st}" t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`
   const num = (ci: number, v: number, st: number) => `<c r="${colL(ci)}${r}" s="${st}"><v>${v}</v></c>`
   const push = (cells: string[]) => rows.push(`<row r="${r}">${cells.join('')}</row>`)
+  const fill = (c: number, w: number, label: string) => [str(c, label, 2), ...Array.from({ length: w - 1 }, (_, i) => str(c + 1 + i, '', 2))]
   r++; push([str(0, title, 7)])
   r++; push([str(0, subtitle, 0)])
   r++
   let ncols = 1
   for (const t of tablas) {
     ncols = Math.max(ncols, 1 + t.total.length)
+    const conSup = t.grupos.some((g) => g.sup !== undefined)
     r++; push([str(0, t.titulo, 1)])
-    const h1 = ++r
-    const c1 = [str(0, t.primera, 2)]
-    const c2 = [str(0, '', 2)]
-    const c3 = [str(0, '', 2)]
-    let c = 1
-    for (const g of t.grupos) {
-      const w = g.subs.length * 3
-      c1.push(str(c, g.label, 2))
-      for (let i = 1; i < w; i++) c1.push(str(c + i, '', 2))
-      merges.push(`${colL(c)}${h1}:${colL(c + w - 1)}${h1}`)
-      g.subs.forEach((s, i) => {
-        const s0 = c + i * 3
-        c2.push(str(s0, s, 2), str(s0 + 1, '', 2), str(s0 + 2, '', 2))
-        merges.push(`${colL(s0)}${h1 + 1}:${colL(s0 + 2)}${h1 + 1}`)
-        REP_SUB.forEach((x, j) => c3.push(str(s0 + j, x, 2)))
-      })
-      c += w
+    const h0 = ++r
+    let first = true
+    const lead = () => { const v = first ? str(0, t.primera, 2) : str(0, '', 2); first = false; return v }
+    if (conSup) {
+      const cells = [lead()]
+      let c = 1
+      for (const [label, w] of repSups(t)) { cells.push(...fill(c, w, label)); merges.push(`${colL(c)}${r}:${colL(c + w - 1)}${r}`); c += w }
+      push(cells); r++
     }
-    push(c1); r++; push(c2); r++; push(c3)
-    merges.push(`A${h1}:A${h1 + 2}`)
+    const cells = [lead()]
+    let c = 1
+    for (const [g, w] of t.grupos.map((g, i) => [g, repAnchos(t)[i]] as const)) { cells.push(...fill(c, w, g.label)); merges.push(`${colL(c)}${r}:${colL(c + w - 1)}${r}`); c += w }
+    push(cells); r++
+    const subs = [lead()]
+    c = 1
+    for (const g of t.grupos) for (const sb of g.subs) { subs.push(...fill(c, 3, sb)); merges.push(`${colL(c)}${r}:${colL(c + 2)}${r}`); c += 3 }
+    push(subs); r++
+    push([lead(), ...t.total.flatMap((_, i) => [str(1 + i, REP_SUB[i % 3], 2)])])
+    merges.push(`A${h0}:A${r}`)
     for (const f of t.filas) { r++; push([str(0, f.label, 3), ...f.vals.map((v, i) => num(1 + i, v, 4))]) }
     r++; push([str(0, 'Subtotales', 5), ...t.total.map((v, i) => num(1 + i, v, 6))])
     r++
@@ -371,12 +384,14 @@ export function buildReporteXlsx(title: string, subtitle: string, tablas: RepTab
   return pack(sheet, MATRIZ_STYLES, sheetXml)
 }
 
-/** PDF A3 horizontal; el encabezado se repite en cada página */
+/** PDF horizontal (A3 o más ancho si hay muchas columnas); el encabezado se repite en cada página */
 export async function buildReportePdf(title: string, subtitle: string, tablas: RepTabla[]): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
   const font = await doc.embedFont(StandardFonts.Helvetica)
   const bold = await doc.embedFont(StandardFonts.HelveticaBold)
-  const W = 1190.55, H = 841.89, M = 28, LW = 64, RH = 13, FS = 6.2
+  const maxCols = Math.max(...tablas.map((t) => t.total.length), 1)
+  const M = 28, LW = 64, RH = 13, FS = 6.2, MIN_CW = 15
+  const W = Math.max(1190.55, M * 2 + LW + maxCols * MIN_CW), H = 841.89
   const ink = rgb(0.1, 0.12, 0.18)
   const blue = rgb(0.86, 0.92, 0.98), gray = rgb(0.93, 0.94, 0.96)
   const pages: ReturnType<typeof doc.addPage>[] = []
@@ -403,21 +418,28 @@ export async function buildReportePdf(title: string, subtitle: string, tablas: R
   for (const t of tablas) {
     const ncols = t.total.length
     const cw = (W - M * 2 - LW) / ncols
-    if (y - RH * 5 < M + 14) nueva()
+    const conSup = t.grupos.some((g) => g.sup !== undefined)
+    const niveles = conSup ? 4 : 3
+    if (y - RH * (niveles + 2) < M + 14) nueva()
     page.drawText(latin(t.titulo), { x: M, y: y - 12, size: 11, font: bold, color: rgb(0.06, 0.15, 0.35) })
     y -= 20
 
     const header = () => {
-      box(M, LW, t.primera, { b: true, fill: blue, h: RH * 3 })
+      box(M, LW, t.primera, { b: true, fill: blue, h: RH * niveles })
+      if (conSup) {
+        let c = 0
+        for (const [label, w] of repSups(t)) { box(M + LW + c * cw, w * cw, label, { b: true, fill: blue, align: 'c' }); c += w }
+        y -= RH
+      }
       let c = 0
-      for (const g of t.grupos) {
-        const w = g.subs.length * 3
+      t.grupos.forEach((g, i) => {
+        const w = repAnchos(t)[i]
         box(M + LW + c * cw, w * cw, wrap(g.label, bold, FS, w * cw - 6, 1)[0], { b: true, fill: blue, align: 'c' })
         c += w
-      }
+      })
       y -= RH
       c = 0
-      for (const g of t.grupos) for (const s of g.subs) { box(M + LW + c * cw, cw * 3, s, { b: true, fill: blue, align: 'c' }); c += 3 }
+      for (const g of t.grupos) for (const sb of g.subs) { box(M + LW + c * cw, cw * 3, wrap(sb, bold, FS, cw * 3 - 4, 1)[0], { b: true, fill: blue, align: 'c' }); c += 3 }
       y -= RH
       for (let i = 0; i < ncols; i++) box(M + LW + i * cw, cw, REP_SUB[i % 3], { b: true, fill: blue, align: 'c' })
       y -= RH

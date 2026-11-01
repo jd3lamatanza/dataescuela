@@ -2,7 +2,7 @@ import { supabase, check } from '../../lib/supabase'
 import { useAsync } from '../../lib/hooks'
 import { setParams, useRoute } from '../../lib/router'
 import { descargarReporte } from '../../lib/download'
-import type { RepTabla } from '../../lib/export'
+import type { RepGrupo, RepTabla } from '../../lib/export'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Spinner, toast } from '../../ui/kit'
 import { Icon } from '../../ui/Icon'
 import { nombrePeriodo, type Periodo } from './common'
@@ -12,11 +12,19 @@ interface Esc { id: number; clave: string; codigo: string | null }
 interface Dato { plan_id: number; curso_id: number; turno_id: number; secciones: number; matricula: number; asistencia: number }
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
-/** Turnos de cada agrupamiento con reporte definido (por sigla, en este orden) */
-const TURNOS: Record<string, string[]> = { inicial: ['TM', 'TT', 'JC'], primaria: ['TM', 'TT', 'JC'] }
+type Tipo = 'planes' | 'secundaria'
+/** Reportes definidos por agrupamiento: turnos (por sigla, en orden) y forma del cuadro */
+const CFG: Record<string, { siglas: string[]; tipo: Tipo; tabs?: [string, string][] }> = {
+  inicial: { siglas: ['TM', 'TT', 'JC'], tipo: 'planes' },
+  primaria: { siglas: ['TM', 'TT', 'JC'], tipo: 'planes' },
+  'secundaria orientada': { siglas: ['TM', 'TT', 'TV', 'JC', 'JE'], tipo: 'secundaria', tabs: [['general', 'Reporte General'], ['analitico', 'Reporte Analítico']] },
+}
+const CICLOS = ['Ciclo Básico', 'Ciclo Superior', 'Programas']
+const cicloDe = (nombre: string) => { const n = norm(nombre); return n.includes('ciclo basico') ? 0 : n.includes('ciclo superior') ? 1 : n.includes('programas') ? 2 : -1 }
 
 async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[]): Promise<RepTabla[]> {
-  const siglas = TURNOS[norm(grupo.nombre)]
+  const cfg = CFG[norm(grupo.nombre)]
+  const siglas = cfg.siglas
   const es = escuelas.filter((e) => e.codigo && grupo.codigos.includes(e.codigo)).sort((a, b) => a.clave.localeCompare(b.clave, 'es'))
   const ids = es.map((e) => e.id)
   const [ts, ep, ps, cs, ks] = await Promise.all([
@@ -34,40 +42,75 @@ async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[]): Promise<RepTa
     datos.set(k.escuela_id, k.matricula_datos)
     k.matricula_datos.forEach((d) => usados.add(d.plan_id))
   }
-  const cursos = check(cs) as { id: number; plan_id: number; nombre: string }[]
+  const cursos = check(cs) as { id: number; plan_id: number; orden: number; nombre: string }[]
   const planes = (check(ps) as unknown as { id: number; nombre: string; nivel: { nombre: string } | null; modalidad: { nombre: string } | null }[])
     .filter((p) => usados.has(p.id) || pares.has(`${p.nivel?.nombre}|${p.modalidad?.nombre}`))
 
-  return planes.map((p) => {
-    const cur = cursos.filter((c) => c.plan_id === p.id)
-    const grupos = [...cur.map((c) => ({ label: c.nombre, subs: siglas })), { label: 'Total', subs: [...cur.map((c) => c.nombre), 'Total'] }]
-    const calc = (e: Esc) => {
-      const dd = (datos.get(e.id) ?? []).filter((d) => d.plan_id === p.id)
-      const trio = (f: (d: Dato) => boolean) => dd.filter(f).reduce((a, d) => [a[0] + d.secciones, a[1] + d.matricula, a[2] + d.asistencia], [0, 0, 0])
-      const out: number[] = []
-      for (const c of cur) for (const t of turnos) out.push(...trio((d) => d.curso_id === c.id && d.turno_id === t.id))
-      const visibles = (d: Dato) => turnos.some((t) => t.id === d.turno_id)
-      for (const c of cur) out.push(...trio((d) => d.curso_id === c.id && visibles(d)))
-      out.push(...trio(visibles))
-      return out
+  const visibles = (d: Dato) => turnos.some((t) => t.id === d.turno_id)
+  const trio = (dd: Dato[]) => dd.reduce((a, d) => [a[0] + d.secciones, a[1] + d.matricula, a[2] + d.asistencia], [0, 0, 0])
+  const sumas = (cols: { ids: Set<number> }[], e: Esc) => {
+    const dd = datos.get(e.id) ?? []
+    const out: number[] = []
+    for (const c of cols) for (const t of turnos) out.push(...trio(dd.filter((d) => c.ids.has(d.curso_id) && d.turno_id === t.id)))
+    for (const c of cols) out.push(...trio(dd.filter((d) => c.ids.has(d.curso_id) && visibles(d))))
+    out.push(...trio(dd.filter((d) => cols.some((c) => c.ids.has(d.curso_id)) && visibles(d))))
+    return out
+  }
+  const tabla = (titulo: string, grupos: RepGrupo[], cols: { ids: Set<number> }[]): RepTabla => {
+    const filas = es.map((e) => ({ label: e.clave, vals: sumas(cols, e) }))
+    const n = grupos.reduce((a, g) => a + g.subs.length, 0) * 3
+    return { titulo, primera: 'Escuela', grupos, filas, total: Array.from({ length: n }, (_, i) => filas.reduce((a, f) => a + f.vals[i], 0)) }
+  }
+
+  if (cfg.tipo === 'planes') {
+    return planes.map((p) => {
+      const cur = cursos.filter((c) => c.plan_id === p.id)
+      const grupos: RepGrupo[] = [...cur.map((c) => ({ label: c.nombre, subs: siglas })), { label: 'Total', subs: [...cur.map((c) => c.nombre), 'Total'] }]
+      return tabla(p.nombre, grupos, cur.map((c) => ({ ids: new Set([c.id]) })))
+    })
+  }
+
+  // Secundaria: un solo cuadro; los planes de un mismo ciclo se suman por número de curso
+  const cols: { ciclo: number; orden: number; nombre: string; ids: Set<number> }[] = []
+  for (const p of planes) {
+    const ciclo = cicloDe(p.nombre)
+    if (ciclo < 0) continue
+    for (const c of cursos.filter((x) => x.plan_id === p.id)) {
+      const ex = cols.find((x) => x.ciclo === ciclo && x.orden === c.orden)
+      if (ex) ex.ids.add(c.id)
+      else cols.push({ ciclo, orden: c.orden, nombre: c.nombre, ids: new Set([c.id]) })
     }
-    const filas = es.map((e) => ({ label: e.clave, vals: calc(e) }))
-    const n = (grupos.reduce((a, g) => a + g.subs.length, 0)) * 3
-    const total = Array.from({ length: n }, (_, i) => filas.reduce((a, f) => a + f.vals[i], 0))
-    return { titulo: p.nombre, primera: 'Escuela', grupos, filas, total }
-  })
+  }
+  cols.sort((a, b) => a.ciclo - b.ciclo || a.orden - b.orden)
+  const grupos: RepGrupo[] = [
+    ...cols.map((c) => ({ sup: CICLOS[c.ciclo], label: c.nombre, subs: siglas })),
+    { sup: 'Totales', label: 'Total por curso', subs: [...cols.map((c) => c.nombre), 'Total'] },
+  ]
+  return [tabla(grupo.nombre, grupos, cols)]
 }
 
 export function TablaReporte({ t }: { t: RepTabla }) {
   const th = 'border border-slate-300 bg-sky-100 px-1.5 py-1 text-center text-xs font-semibold'
   const td = 'border border-slate-200 px-1.5 py-1 text-right tabular-nums'
   const sub = ['Sec', 'Mat', 'Asist']
+  const conSup = t.grupos.some((g) => g.sup !== undefined)
+  const sups: [string, number][] = []
+  t.grupos.forEach((g, i) => {
+    if (i && g.sup === t.grupos[i - 1].sup) sups[sups.length - 1][1] += g.subs.length * 3
+    else sups.push([g.sup ?? '', g.subs.length * 3])
+  })
   return (
     <div class="overflow-x-auto">
       <table class="border-collapse text-xs">
         <thead>
+          {conSup && (
+            <tr>
+              <th rowSpan={4} class={th + ' sticky left-0 z-10 min-w-24 text-left'}>{t.primera}</th>
+              {sups.map(([label, w], i) => <th key={i} colSpan={w} class={th}>{label}</th>)}
+            </tr>
+          )}
           <tr>
-            <th rowSpan={3} class={th + ' sticky left-0 z-10 min-w-24 text-left'}>{t.primera}</th>
+            {!conSup && <th rowSpan={3} class={th + ' sticky left-0 z-10 min-w-24 text-left'}>{t.primera}</th>}
             {t.grupos.map((g) => <th key={g.label} colSpan={g.subs.length * 3} class={th}>{g.label}</th>)}
           </tr>
           <tr>{t.grupos.flatMap((g) => g.subs.map((s) => <th key={g.label + s} colSpan={3} class={th}>{s}</th>))}</tr>
@@ -94,11 +137,14 @@ export function Reportes({ periodos, grupos, escuelas }: { periodos: Periodo[]; 
   const { params } = useRoute()
   const per = periodos.find((p) => String(p.id) === params.get('rp'))
   const grupo = grupos.find((g) => String(g.id) === params.get('rg'))
-  const definido = !!grupo && !!TURNOS[norm(grupo.nombre)]
-  const rep = useAsync(async () => (per && grupo && definido ? armar(per, grupo, escuelas) : null), [per?.id, grupo?.id])
+  const cfg = grupo ? CFG[norm(grupo.nombre)] : undefined
+  const tab = cfg?.tabs?.find(([id]) => id === params.get('rt'))?.[0] ?? cfg?.tabs?.[0][0]
+  const definido = !!cfg && (!cfg.tabs || tab === 'general')
+  const rep = useAsync(async () => (per && grupo && definido ? armar(per, grupo, escuelas) : null), [per?.id, grupo?.id, definido])
 
   if (!periodos.length || !grupos.length) return <Card><EmptyState title="Sin datos para reportar" text="Se necesita al menos un período y un agrupamiento." /></Card>
-  const nombre = per && grupo ? `Matrícula ${grupo.nombre} · ${nombrePeriodo(per)}` : ''
+  const sufijo = cfg?.tabs ? ` · ${cfg.tabs.find(([id]) => id === tab)?.[1]}` : ''
+  const nombre = per && grupo ? `Matrícula ${grupo.nombre}${sufijo} · ${nombrePeriodo(per)}` : ''
   const bajar = (tipo: 'xlsx' | 'pdf') => descargarReporte(tipo, nombre, `Total de matrícula cargada · ${new Date().toLocaleDateString('es-AR')}`, rep.data!, `reporte-${norm(grupo!.nombre).replace(/\W+/g, '_')}-${per!.ciclo}-${String(per!.mes).padStart(2, '0')}`).catch((e) => toast.error(e.message))
   return (
     <>
@@ -116,6 +162,14 @@ export function Reportes({ periodos, grupos, escuelas }: { periodos: Periodo[]; 
           </Lbl>
         </div>
       </Card>
+      {cfg?.tabs && per && (
+        <nav class="mt-3 flex overflow-x-auto border-b border-slate-200 text-sm" aria-label="Tipo de reporte">
+          {cfg.tabs.map(([id, label]) => (
+            <button key={id} aria-current={tab === id ? 'page' : undefined} onClick={() => setParams({ rt: id === cfg.tabs![0][0] ? null : id })}
+              class={`min-h-11 shrink-0 border-b-2 px-3 ${tab === id ? 'border-cyan-500 font-semibold text-slate-900' : 'border-transparent text-slate-600 hover:border-slate-300'}`}>{label}</button>
+          ))}
+        </nav>
+      )}
       {!per || !grupo ? <Card class="mt-3"><EmptyState title="Elegí período y agrupamiento" text="Se mostrará el reporte total de la matrícula cargada." /></Card>
         : !definido ? <Card class="mt-3"><EmptyState title={`${grupo.nombre} · ${nombrePeriodo(per)}`} text="El reporte de este agrupamiento se construirá próximamente." /></Card>
         : rep.loading && !rep.data ? <Spinner />
