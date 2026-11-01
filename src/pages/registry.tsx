@@ -13,6 +13,7 @@ import { Matricula } from './matricula/Escolar'
 import { Matriculas } from './matricula/Distrital'
 import { ArticulacionEscolar } from './articulacion/Escolar'
 import { ArticulacionSupervision } from './articulacion/Supervision'
+import { MatriculasAreal } from './matricula/Areal'
 
 const Pendiente = (titulo: string) => () => (
   <>
@@ -36,6 +37,7 @@ export const PAGES: Record<string, ComponentType> = {
   plantas: Plantas,
   matricula: Matricula,
   matriculas: Matriculas,
+  'matricula-areal': MatriculasAreal,
   articulacion: ArticulacionEscolar,
   areal: ArticulacionSupervision,
   distrito: ArticulacionSupervision,
