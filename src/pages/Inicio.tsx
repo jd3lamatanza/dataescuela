@@ -7,6 +7,7 @@ import { useAsync } from '../lib/hooks'
 import { supabase, check } from '../lib/supabase'
 
 // Plan gratuito de Supabase: 500 MB de base de datos
+const REF = new URL(import.meta.env.VITE_SUPABASE_URL).hostname.split('.')[0]
 const LIMITE_DB = 500 * 1024 * 1024
 
 interface Estado { db_bytes: number; conexiones: number; max_conexiones: number; usuarios: number }
@@ -36,6 +37,7 @@ function BarraServidor() {
         <span class={`text-xs font-semibold ${critico ? 'text-rose-700' : 'text-emerald-700'}`}>{critico ? 'Servidor: atención' : 'Servidor: normal'}</span>
         <Medidor label="Base de datos" texto={`${mb.toFixed(1)} de 500 MB`} pct={pDb} />
         <Medidor label="Conexiones" texto={`${data.conexiones} de ${data.max_conexiones}`} pct={pCon} />
+        <a class="shrink-0 text-xs font-medium text-blue-700 hover:underline" href={`https://supabase.com/dashboard/project/${REF}/settings/billing/usage`} target="_blank" rel="noopener noreferrer">Ver uso y transferencia ↗</a>
       </div>
     </div>
   )
