@@ -1,4 +1,4 @@
-import { buildPdf, buildXlsx, type Table } from './export'
+import { buildGrids, buildMatrizPdf, buildMatrizXlsx, buildPdf, buildXlsx, type Table } from './export'
 
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
@@ -15,3 +15,10 @@ export function descargar(data: Uint8Array, name: string, mime: string) {
 
 export const descargarXlsx = (t: Table, name: string, sheet = 'Datos') => descargar(buildXlsx(t, sheet), `${name}.xlsx`, XLSX_MIME)
 export const descargarPdf = async (t: Table, name: string) => descargar(await buildPdf(t), `${name}.pdf`, 'application/pdf')
+
+export type FilaMatriz = Parameters<typeof buildGrids>[0][number]
+export async function descargarMatriz(tipo: 'xlsx' | 'pdf', title: string, subtitle: string, filas: FilaMatriz[], name: string) {
+  const g = buildGrids(filas)
+  if (tipo === 'xlsx') descargar(buildMatrizXlsx(title, subtitle, g, title.slice(0, 31).replace(/[\\/?*[\]:]/g, ' ')), `${name}.xlsx`, XLSX_MIME)
+  else descargar(await buildMatrizPdf(title, subtitle, g), `${name}.pdf`, 'application/pdf')
+}

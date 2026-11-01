@@ -17,3 +17,9 @@ export function check<T>(r: { data: T | null; error: { message: string } | null 
   if (r.error) throw new Error(r.error.message)
   return r.data as T
 }
+
+/** Igual que check para consultas maybeSingle: el resultado puede ser null. */
+export function checkOpt<T>(r: { data: T | null; error: { message: string } | null }): T | null {
+  if (r.error) throw new Error(r.error.message)
+  return r.data
+}

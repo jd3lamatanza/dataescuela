@@ -8,6 +8,9 @@ import { Planes } from './Planes'
 import { Agrupamientos } from './Agrupamientos'
 import { Escuelas } from './Escuelas'
 import { Fichas } from './Fichas'
+import { Planta, Plantas } from './Planta'
+import { Matricula } from './matricula/Escolar'
+import { Matriculas } from './matricula/Distrital'
 import { ArticulacionEscolar } from './articulacion/Escolar'
 import { ArticulacionSupervision } from './articulacion/Supervision'
 
@@ -29,6 +32,10 @@ export const PAGES: Record<string, ComponentType> = {
   agrupamientos: Agrupamientos,
   escuelas: Escuelas,
   fichas: Fichas,
+  planta: Planta,
+  plantas: Plantas,
+  matricula: Matricula,
+  matriculas: Matriculas,
   articulacion: ArticulacionEscolar,
   areal: ArticulacionSupervision,
   distrito: ArticulacionSupervision,

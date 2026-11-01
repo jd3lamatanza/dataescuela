@@ -6,6 +6,7 @@ import { Alert, Card, EmptyState, FIELD, PageHeader, Pager, PAGE_SIZE, RowMenu, 
 import { Equipo, TIPOS, type TipoEquipo } from '../ui/Equipo'
 import { FichaEscuela, nombreEscuela } from '../ui/FichaEscuela'
 import { useState } from 'preact/hooks'
+import { periodoActual } from './matricula/Escolar'
 
 const ORDEN: Record<string, [string, string[]]> = {
   clave: ['Clave', ['clave', 'numero']], cue: ['CUE', ['cue']], codigo: ['Código', ['codigo', 'numero']], numero: ['Número', ['numero', 'clave']],
@@ -52,13 +53,20 @@ function Listado() {
     if (error) return toast.error(error.message)
     toast.ok('Contraseña restablecida')
   }
+  const habilitarMatricula = async (e: { id: number; clave: string }) => {
+    const per = await periodoActual()
+    const { data: on, error } = await supabase.rpc('matricula_habilitar', { p_escuela: e.id, p_ciclo: per.ciclo, p_mes: per.mes })
+    if (error) return toast.error(error.message)
+    toast.ok(on ? `Carga de matrícula habilitada para ${e.clave}` : `Carga de matrícula deshabilitada para ${e.clave}`)
+  }
   const Menu = ({ e }: { e: any }) => (
     <RowMenu items={[
       { label: 'Ficha de Escuela', onClick: () => ver(e.id) },
       { label: 'Equipo Directivo', onClick: () => ver(e.id, 'directivo') },
       { label: 'Equipo de Orientación', onClick: () => ver(e.id, 'orientacion') },
       { label: 'Referentes ESI', onClick: () => ver(e.id, 'esi') },
-      { label: 'Restablecer contraseña', danger: true, sep: true, hidden: !jefatura, onClick: () => reset(e) },
+      { label: 'Habilitar/Deshabilitar carga de matrícula', icon: 'unlock', sep: true, hidden: !jefatura, onClick: () => habilitarMatricula(e) },
+      { label: 'Restablecer contraseña', danger: true, hidden: !jefatura, onClick: () => reset(e) },
     ]} />
   )
 
