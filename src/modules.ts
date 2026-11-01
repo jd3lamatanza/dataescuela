@@ -11,7 +11,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const BRAND = { name: 'DataEscuela v2', org: 'Jefatura Distrital 3 - La Matanza' } as const
 
-export type IconName = 'home' | 'users' | 'school' | 'map' | 'chart' | 'building' | 'settings' | 'bell' | 'search' | 'check' | 'alert' | 'shield' | 'transfer' | 'login' | 'route' | 'list' | 'clock' | 'book' | 'layers' | 'clipboard'
+export type IconName = 'home' | 'users' | 'school' | 'map' | 'chart' | 'building' | 'settings' | 'bell' | 'search' | 'check' | 'alert' | 'shield' | 'transfer' | 'login' | 'route' | 'list' | 'clock' | 'book' | 'layers' | 'clipboard' | 'org'
 
 export interface AppModule {
   id: string
@@ -38,9 +38,9 @@ export const MODULES: readonly AppModule[] = [
   { id: 'planes', label: 'Planes de Estudio', path: '/planes', icon: 'book', roles: ['admin'], primary: true },
   { id: 'turnos', label: 'Turnos', path: '/turnos', icon: 'clock', roles: ['admin'], primary: true },
   { id: 'agrupamientos', label: 'Agrupamiento de Matrículas', path: '/agrupamientos', icon: 'layers', roles: ['admin'], primary: false },
-  { id: 'planta', label: 'Mi Planta', path: '/planta', icon: 'users', roles: ['escolar'], primary: true },
+  { id: 'planta', label: 'Mi Planta', path: '/planta', icon: 'org', roles: ['escolar'], primary: true },
   { id: 'matricula', label: 'Matrícula', path: '/matricula', icon: 'chart', roles: ['escolar'], primary: true },
-  { id: 'plantas', label: 'Plantas', path: '/plantas', icon: 'users', roles: ['distrital'], primary: true },
+  { id: 'plantas', label: 'Plantas', path: '/plantas', icon: 'org', roles: ['distrital'], primary: true },
   { id: 'matriculas', label: 'Matrícula', path: '/matriculas', icon: 'chart', roles: ['distrital'], primary: true },
   { id: 'usuarios', label: 'Usuarios', path: '/usuarios', icon: 'users', roles: ['admin'], primary: true },
 ]

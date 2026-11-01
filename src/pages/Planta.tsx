@@ -68,6 +68,23 @@ export function PlantaPanel({ escuelaId, volver }: { escuelaId: number; volver?:
   )
 }
 
+function Resumen({ turnos, filas }: { turnos: { id: number; nombre: string }[]; filas: { nombre: string; porTurno: number[] }[] }) {
+  const sum = (a: number[]) => a.reduce((x, y) => x + y, 0)
+  return (
+    <Card title="Resumen de la planta">
+      <div class="-mx-4 overflow-x-auto px-4">
+        <table class="w-full text-left text-sm">
+          <thead class="border-b border-slate-200 text-xs uppercase text-slate-500"><tr><th class="py-2 pr-3">Plan de estudio</th>{turnos.map((t) => <th key={t.id} class="px-3 py-2 text-center">{t.nombre}</th>)}<th class="px-3 py-2 text-center">Total</th></tr></thead>
+          <tbody class="divide-y divide-slate-100">
+            {filas.map((f) => <tr key={f.nombre}><td class="py-2 pr-3 font-medium">{f.nombre}</td>{f.porTurno.map((v, i) => <td key={i} class="px-3 py-2 text-center">{v}</td>)}<td class="px-3 py-2 text-center font-semibold">{sum(f.porTurno)}</td></tr>)}
+          </tbody>
+          <tfoot class="border-t-2 border-slate-200 bg-slate-50 font-semibold"><tr><td class="py-2 pr-3">Total general</td>{turnos.map((_, i) => <td key={i} class="px-3 py-2 text-center">{sum(filas.map((f) => f.porTurno[i]))}</td>)}<td class="px-3 py-2 text-center text-base">{sum(filas.map((f) => sum(f.porTurno)))}</td></tr></tfoot>
+        </table>
+      </div>
+    </Card>
+  )
+}
+
 function Bloqueada({ d, propia }: { d: Datos; propia: boolean }) {
   const n = (c: number, t: number) => d.cells.find((x) => x.curso_id === c && x.turno_id === t)?.secciones ?? 0
   const planes = d.planes.filter((p) => d.cells.some((c) => c.plan_id === p.id))
@@ -89,10 +106,12 @@ function Bloqueada({ d, propia }: { d: Datos; propia: boolean }) {
                     <tr key={c.id}><td class="py-2 pr-3 font-medium">{c.nombre}</td>{turnos.map((t) => <td key={t.id} class="px-3 py-2 text-center">{n(c.id, t.id)}</td>)}<td class="px-3 py-2 text-center font-semibold">{turnos.reduce((a, t) => a + n(c.id, t.id), 0)}</td></tr>
                   ))}
                 </tbody>
+                <tfoot class="border-t-2 border-slate-200 bg-slate-50 font-semibold"><tr><td class="py-2 pr-3">Subtotal</td>{turnos.map((t) => <td key={t.id} class="px-3 py-2 text-center">{p.cursos.reduce((a, c) => a + n(c.id, t.id), 0)}</td>)}<td class="px-3 py-2 text-center">{p.cursos.reduce((a, c) => a + turnos.reduce((b, t) => b + n(c.id, t.id), 0), 0)}</td></tr></tfoot>
               </table>
             </div>
           </Card>
         ))}
+        {planes.length > 0 && <Resumen turnos={turnos} filas={planes.map((p) => ({ nombre: p.nombre, porTurno: turnos.map((t) => p.cursos.reduce((a, c) => a + n(c.id, t.id), 0)) }))} />}
         {planes.length === 0 && <EmptyState title="Sin secciones" />}
       </div>
     </>
@@ -179,6 +198,7 @@ function Editor({ d, onSaved }: { d: Datos; onSaved(): void }) {
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot class="border-t-2 border-slate-200 bg-slate-50 font-semibold"><tr><td class="px-3 py-2">Subtotal</td>{activos.map((t) => <td key={t.id} class="px-3 py-2 text-center">{p.cursos.reduce((a, c) => a + n(c.id, t.id), 0)}</td>)}<td class="px-3 py-2 text-center">{totalPlan(p)}</td></tr></tfoot>
                   </table>
                 </div>
                 <div class="flex justify-between border-t border-slate-200 bg-slate-50 px-3 py-2 text-sm"><span class="text-slate-600">Total de secciones del plan</span><strong>{totalPlan(p)}</strong></div>
@@ -187,6 +207,7 @@ function Editor({ d, onSaved }: { d: Datos; onSaved(): void }) {
           </>
         )}
       </Card>
+      {planes.length > 0 && activos.length > 0 && <Resumen turnos={activos} filas={planes.map((p) => ({ nombre: p.nombre, porTurno: activos.map((t) => p.cursos.reduce((a, c) => a + n(c.id, t.id), 0)) }))} />}
       <Card class="flex flex-wrap items-center justify-between gap-3">
         <p class="text-sm text-slate-600">Total de secciones: <strong class="text-2xl text-slate-900">{total}</strong></p>
         <button type="button" class={BTN_PRIMARY} disabled={saving} onClick={guardar}>Guardar planta</button>
@@ -277,7 +298,7 @@ export function Plantas() {
       <Card class="mt-3">
         {loading && !data ? <Spinner /> : !lista.length ? <EmptyState title="Sin resultados" text="Probá con otros filtros." /> : (
           <>
-            <div class="-m-4 hidden overflow-x-auto md:block">
+            <div class="-m-4 hidden md:block">
               <table class="w-full text-left text-sm">
                 <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr>{['Clave', 'CUE', 'Nivel', 'Modalidad', 'Planta', ''].map((h) => <th key={h} class="px-3 py-2">{h}</th>)}</tr></thead>
                 <tbody class="divide-y divide-slate-100">

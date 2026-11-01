@@ -167,7 +167,7 @@ function Listado({ d, per, reload }: { d: Datos; per?: Periodo; reload(): void }
       <Card class="mt-2">
         {!rows.length ? <EmptyState title="Sin escuelas" text="Este agrupamiento no tiene escuelas con sus códigos." /> : (
           <>
-            <div class="-m-4 hidden overflow-x-auto md:block">
+            <div class="-m-4 hidden md:block">
               <table class="w-full text-left text-sm">
                 <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr>{['Clave', 'CUE', 'Escuela', 'Nombre', 'Estado de carga', ''].map((h) => <th key={h} class="px-3 py-2">{h}</th>)}</tr></thead>
                 <tbody class="divide-y divide-slate-100">
