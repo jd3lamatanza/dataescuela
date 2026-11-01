@@ -68,23 +68,43 @@ export const Tabs = ({ items, active, onChange }: { items: { id: string; label: 
 )
 
 export function DestinoFields({ codigo, destino, nombre, onDestino, onNombre }: { codigo: string; destino: string; nombre: string; onDestino(v: string): void; onNombre(v: string): void }) {
+  const [q, setQ] = useState('')
+  const [abierto, setAbierto] = useState(false)
   const { data, loading } = useAsync(async () => {
     const r = await supabase.rpc('destinos_posibles', { p_codigo: codigo })
     if (r.error) throw r.error
     return r.data as { clave: string; nombre: string }[]
   }, [codigo])
+  const norm = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const n = norm(q.trim())
+  const lista = (data ?? []).filter((d) => !n || norm(`${d.clave} ${d.nombre}`).includes(n))
+  const actual = destino === OTRA ? 'Otra escuela (carga manual)' : destino ? (data ?? []).find((d) => d.clave === destino) : null
+  const elegir = (v: string) => { onDestino(v); setAbierto(false); setQ('') }
+  const opt = 'block w-full min-h-11 px-3 py-2 text-left text-sm hover:bg-sky-50'
   return (
     <>
-      <Lbl label="Escuela destino">
-        {loading ? <Spinner /> : (
-          <select class={FIELD} value={destino} onChange={(e) => onDestino(e.currentTarget.value)}>
-            <option value="">Sin completar</option>
-            {(data ?? []).map((d) => <option key={d.clave} value={d.clave}>{d.clave} · {d.nombre}</option>)}
-            <option value={OTRA}>Otra escuela (carga manual)</option>
-          </select>
-        )}
-      </Lbl>
-      {destino === OTRA && <Lbl label="Nombre de la escuela"><input class={FIELD} maxLength={150} value={nombre} onInput={(e) => onNombre(e.currentTarget.value)} /></Lbl>}
+      <div class="sm:col-span-2">
+        <Lbl label="Escuela destino">
+          {loading ? <Spinner /> : (
+            <div class="relative">
+              <input class={FIELD} type="search" autoComplete="off" placeholder="Buscar por clave, número o nombre" value={abierto ? q : typeof actual === 'string' ? actual : actual ? `${actual.clave} · ${actual.nombre}` : ''}
+                onFocus={() => { setAbierto(true); setQ('') }} onInput={(e) => { setAbierto(true); setQ(e.currentTarget.value) }} />
+              {abierto && (
+                <>
+                  <div class="fixed inset-0 z-10" onClick={() => setAbierto(false)} />
+                  <ul class="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg" role="listbox">
+                    <li><button type="button" class={opt + ' text-slate-500'} onClick={() => elegir('')}>Sin completar</button></li>
+                    {lista.map((d) => <li key={d.clave}><button type="button" class={opt + (d.clave === destino ? ' bg-sky-50 font-semibold' : '')} onClick={() => elegir(d.clave)}>{d.clave} · {d.nombre}</button></li>)}
+                    <li><button type="button" class={opt + ' border-t border-slate-100 text-sky-700'} onClick={() => elegir(OTRA)}>Otra escuela (carga manual)</button></li>
+                    {!lista.length && <li class="px-3 py-2 text-xs text-slate-500">Sin coincidencias</li>}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
+        </Lbl>
+      </div>
+      {destino === OTRA && <div class="sm:col-span-2"><Lbl label="Nombre de la escuela"><input class={FIELD} maxLength={150} value={nombre} onInput={(e) => onNombre(e.currentTarget.value)} /></Lbl></div>}
     </>
   )
 }

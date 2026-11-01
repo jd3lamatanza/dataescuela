@@ -11,6 +11,7 @@ export function ImportarNomina({ o, ciclo, onClose, onDone }: { o: { cue: string
   const [cls, setCls] = useState<{ dni: string; nombre: string; curso: string; c: Clase; donde?: string }[]>([])
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [fileName, setFileName] = useState('')
 
   const leer = async (file: File) => {
     setErr(''); setNom(null); setBusy(true)
@@ -51,7 +52,11 @@ export function ImportarNomina({ o, ciclo, onClose, onDone }: { o: { cue: string
   return (
     <Modal title={`Importar nómina · Ciclo ${ciclo}`} onClose={onClose} wide>
       <p class="mb-3 text-sm text-slate-600">Subí el reporte nominal de estudiantes (.xls, hasta 2 MB). Solo se importan los estudiantes nuevos; el destino se completa después.</p>
-      <input type="file" accept=".xls,.xlsx" class="block w-full text-sm" disabled={busy} onChange={(e) => e.currentTarget.files?.[0] && leer(e.currentTarget.files[0])} />
+      <label class={`flex min-h-32 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center transition hover:border-sky-400 hover:bg-sky-50 focus-within:ring-2 focus-within:ring-sky-500 ${busy ? 'pointer-events-none opacity-60' : ''}`}>
+        <span class="text-sm font-semibold text-sky-700">{busy ? 'Leyendo archivo…' : fileName || 'Elegir archivo .xls'}</span>
+        <span class="text-xs text-slate-500">{fileName ? 'Tocá para elegir otro archivo' : 'Reporte nominal de estudiantes, hasta 2 MB'}</span>
+        <input type="file" accept=".xls,.xlsx" class="sr-only" disabled={busy} onChange={(e) => { const f = e.currentTarget.files?.[0]; if (f) { setFileName(f.name); leer(f) } e.currentTarget.value = '' }} />
+      </label>
       {err && <div class="mt-3"><Alert tone="error">{err}</Alert></div>}
       {nom && (
         <div class="mt-4 space-y-3 text-sm">
