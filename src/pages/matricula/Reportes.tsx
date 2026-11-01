@@ -25,7 +25,7 @@ const CICLO_RE = [/ciclo\s+basico/, /ciclo\s+superior/, /programas?/]
 const cicloDe = (nombre: string) => CICLO_RE.findIndex((re) => re.test(norm(nombre)))
 const claveCurso = (nombre: string) => norm(nombre).match(/^(\d+)/)?.[1] ?? norm(nombre)
 
-async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[]): Promise<RepTabla[]> {
+async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[], modo: string): Promise<RepTabla[]> {
   const cfg = CFG[norm(grupo.nombre)]
   const siglas = cfg.siglas
   const es = escuelas.filter((e) => e.codigo && grupo.codigos.includes(e.codigo)).sort((a, b) => a.clave.localeCompare(b.clave, 'es'))
@@ -51,8 +51,8 @@ async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[]): Promise<RepTa
 
   const visibles = (d: Dato) => turnos.some((t) => t.id === d.turno_id)
   const trio = (dd: Dato[]) => dd.reduce((a, d) => [a[0] + d.secciones, a[1] + d.matricula, a[2] + d.asistencia], [0, 0, 0])
-  const sumas = (cols: { ids: Set<number> }[], e: Esc) => {
-    const dd = datos.get(e.id) ?? []
+  const sumas = (cols: { ids: Set<number> }[], e: Esc, plan?: number) => {
+    const dd = (datos.get(e.id) ?? []).filter((d) => plan === undefined || d.plan_id === plan)
     const out: number[] = []
     for (const c of cols) for (const t of turnos) out.push(...trio(dd.filter((d) => c.ids.has(d.curso_id) && d.turno_id === t.id)))
     for (const c of cols) out.push(...trio(dd.filter((d) => c.ids.has(d.curso_id) && visibles(d))))
@@ -88,14 +88,38 @@ async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[]): Promise<RepTa
   }
   const ord = (c: { ciclo: number; clave: string }) => (/^\d+$/.test(c.clave) ? Number(c.clave) : 1000)
   cols.sort((a, b) => a.ciclo - b.ciclo || ord(a) - ord(b))
-  const grupos: RepGrupo[] = [...cols.map((c) => ({ sup: CICLOS[c.ciclo], label: c.nombre, subs: [] })), { sup: 'Totales', label: 'Total', subs: [] }]
-  const filas = es.map((e) => {
-    const dd = (datos.get(e.id) ?? []).filter(visibles)
-    const vals = cols.flatMap((c) => trio(dd.filter((d) => c.ids.has(d.curso_id))))
-    return { label: e.clave, vals: [...vals, ...trio(dd.filter((d) => cols.some((c) => c.ids.has(d.curso_id))))] }
-  })
-  const total = Array.from({ length: (cols.length + 1) * 3 }, (_, i) => filas.reduce((a, f) => a + f.vals[i], 0))
-  return [{ titulo: grupo.nombre, primera: 'Escuela', grupos, filas, total }]
+  const suma3 = (dd: Dato[], c: { ids: Set<number> }[]) => trio(dd.filter((d) => c.some((x) => x.ids.has(d.curso_id))))
+  // Un cuadro por escuela y por curso, sin turnos: solo Sec/Mat/Asist
+  const sinTurnos = (titulo: string, cs: typeof cols, conSup: boolean): RepTabla => {
+    const grupos: RepGrupo[] = [...cs.map((c) => ({ ...(conSup ? { sup: CICLOS[c.ciclo] } : {}), label: c.nombre, subs: [] })), { ...(conSup ? { sup: 'Totales' } : {}), label: 'Total', subs: [] }]
+    const filas = es.map((e) => {
+      const dd = (datos.get(e.id) ?? []).filter(visibles)
+      return { label: e.clave, vals: [...cs.flatMap((c) => suma3(dd, [c])), ...suma3(dd, cs)] }
+    })
+    return { titulo, primera: 'Escuela', grupos, filas, total: Array.from({ length: (cs.length + 1) * 3 }, (_, i) => filas.reduce((a, f) => a + f.vals[i], 0)) }
+  }
+  if (modo === 'general') return [sinTurnos(grupo.nombre, cols, true)]
+
+  // Analítico: Ciclo Básico (curso > turno), Ciclo Superior (un cuadro por escuela, una fila por plan),
+  // Programas (solo cursos) y total de la escuela
+  const out: RepTabla[] = []
+  const porTurno = (cs: typeof cols): RepGrupo[] => [...cs.map((c) => ({ label: c.nombre, subs: siglas })), { label: 'Total', subs: [...cs.map((c) => c.nombre), 'Total'] }]
+  const basico = cols.filter((c) => c.ciclo === 0)
+  if (basico.length) out.push(tabla(CICLOS[0], porTurno(basico), basico))
+  const superior = cols.filter((c) => c.ciclo === 1)
+  const planesSup = planes.filter((p) => cicloDe(p.nombre) === 1)
+  if (superior.length) {
+    for (const e of es) {
+      const filas = planesSup.map((p) => ({ label: p.nombre, vals: sumas(superior, e, p.id) }))
+      const n = (superior.length * siglas.length + superior.length + 1) * 3
+      out.push({ titulo: `${CICLOS[1]} · ${e.clave}`, primera: 'Plan de estudio', grupos: porTurno(superior), filas, total: Array.from({ length: n }, (_, i) => filas.reduce((a, f) => a + f.vals[i], 0)) })
+    }
+  }
+  const prog = cols.filter((c) => c.ciclo === 2)
+  if (prog.length) out.push(sinTurnos(CICLOS[2], prog, false))
+  const filas = es.map((e) => ({ label: e.clave, vals: suma3((datos.get(e.id) ?? []).filter(visibles), cols) }))
+  out.push({ titulo: 'Total de la escuela', primera: 'Escuela', grupos: [{ label: 'Total escuela', subs: [] }], filas, total: [0, 1, 2].map((i) => filas.reduce((a, f) => a + f.vals[i], 0)) })
+  return out
 }
 
 export function TablaReporte({ t }: { t: RepTabla }) {
@@ -151,8 +175,8 @@ export function Reportes({ periodos, grupos, escuelas }: { periodos: Periodo[]; 
   const grupo = grupos.find((g) => String(g.id) === params.get('rg'))
   const cfg = grupo ? CFG[norm(grupo.nombre)] : undefined
   const tab = cfg?.tabs?.find(([id]) => id === params.get('rt'))?.[0] ?? cfg?.tabs?.[0][0]
-  const definido = !!cfg && (!cfg.tabs || tab === 'general')
-  const rep = useAsync(async () => (per && grupo && definido ? armar(per, grupo, escuelas) : null), [per?.id, grupo?.id, definido])
+  const definido = !!cfg
+  const rep = useAsync(async () => (per && grupo && definido ? armar(per, grupo, escuelas, tab ?? 'general') : null), [per?.id, grupo?.id, definido, tab])
 
   if (!periodos.length || !grupos.length) return <Card><EmptyState title="Sin datos para reportar" text="Se necesita al menos un período y un agrupamiento." /></Card>
   const sufijo = cfg?.tabs ? ` · ${cfg.tabs.find(([id]) => id === tab)?.[1]}` : ''
