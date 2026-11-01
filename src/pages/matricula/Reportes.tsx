@@ -18,6 +18,7 @@ const CFG: Record<string, { siglas: string[]; tipo: Tipo; tabs?: [string, string
   inicial: { siglas: ['TM', 'TT', 'JC'], tipo: 'planes' },
   primaria: { siglas: ['TM', 'TT', 'JC'], tipo: 'planes' },
   'secundaria orientada': { siglas: ['TM', 'TT', 'TV', 'JC', 'JE'], tipo: 'secundaria', tabs: [['general', 'Reporte General'], ['analitico', 'Reporte Analítico']] },
+  'secundaria tecnica': { siglas: ['TM', 'TT', 'TV', 'JC', 'JE'], tipo: 'secundaria', tabs: [['general', 'Reporte General'], ['analitico', 'Reporte Analítico']] },
 }
 const CICLOS = ['Ciclo Básico', 'Ciclo Superior', 'Programas']
 /** Cada ciclo se reconoce por una expresión sobre el nombre del plan (sin tildes ni mayúsculas); agregar variantes acá */
