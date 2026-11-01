@@ -5,6 +5,7 @@ import { setParams, useRoute } from '../../lib/router'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, RowMenu, Spinner, confirmar, toast, TabBar } from '../../ui/kit'
 import { Icon } from '../../ui/Icon'
 import { Reportes } from './Reportes'
+import { Consolidacion } from './Consolidacion'
 import { FormCarga, MESES, VistaCarga, bajarCarga, cargaFilas, fdia, hoyAR, nombrePeriodo, type Periodo } from './common'
 
 type Estado = 'activo' | 'programado' | 'vencido' | 'finalizado'
@@ -76,16 +77,18 @@ function Listado({ d, per, reload }: { d: Datos; per?: Periodo; reload(): void }
   const lim = TAMANOS.includes(Number(params.get('n'))) ? Number(params.get('n')) : 0
   const page = Math.max(1, Number(params.get('page')) || 1)
 
-  const tab = params.get('tab') === 'reportes' ? 'reportes' : 'carga'
+  const tab = params.get('tab') === 'reportes' || params.get('tab') === 'consolidacion' ? params.get('tab')! : 'carga'
+  const subtitulo = tab === 'carga' ? 'Estado de carga por agrupamiento' : tab === 'reportes' ? 'Reportes de la matrícula cargada' : 'Consolidación distrital de matrícula'
   const head = (body: any) => (
     <>
-      <PageHeader title="Matrícula" subtitle={tab === 'carga' ? 'Estado de carga por agrupamiento' : 'Reportes de la matrícula cargada'} actions={tab === 'carga' ? <button class={BTN_PRIMARY} onClick={() => setNuevo(true)}><Icon name="plus" class="size-5" />Nuevo período</button> : undefined} />
-      <TabBar label="Matrícula" items={[{ id: 'carga', label: 'Carga', icon: 'edit', color: 'cyan' }, { id: 'reportes', label: 'Reportes', icon: 'chart', color: 'indigo' }]} active={tab} onChange={(id) => setParams({ tab: id === 'carga' ? null : id })} />
+      <PageHeader title="Matrícula" subtitle={subtitulo} actions={tab === 'carga' ? <button class={BTN_PRIMARY} onClick={() => setNuevo(true)}><Icon name="plus" class="size-5" />Nuevo período</button> : undefined} />
+      <TabBar label="Matrícula" items={[{ id: 'carga', label: 'Carga', icon: 'edit', color: 'cyan' }, { id: 'reportes', label: 'Reportes', icon: 'chart', color: 'indigo' }, { id: 'consolidacion', label: 'Consolidación', icon: 'layers', color: 'emerald' }]} active={tab} onChange={(id) => setParams({ tab: id === 'carga' ? null : id })} />
       {body}
       {nuevo && <NuevoPeriodo existentes={periodos} onClose={() => setNuevo(false)} onDone={() => { setNuevo(false); reload() }} />}
     </>
   )
   if (tab === 'reportes') return head(<Reportes periodos={d.periodos} grupos={d.grupos} escuelas={d.escuelas} />)
+  if (tab === 'consolidacion') return head(<Consolidacion periodos={d.periodos} grupos={d.grupos} escuelas={d.escuelas} />)
   if (!per) return head(<Card><EmptyState title="Sin períodos de carga" text="Creá un período para comenzar." /></Card>)
   if (!grupo) return head(<Card><EmptyState title="Sin agrupamientos" text="El administrador debe crear agrupamientos de matrícula." /></Card>)
 

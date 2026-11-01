@@ -15,6 +15,10 @@ export function descargar(data: Uint8Array, name: string, mime: string) {
 
 export const descargarXlsx = (t: Table, name: string, sheet = 'Datos') => descargar(buildXlsx(t, sheet), `${name}.xlsx`, XLSX_MIME)
 export const descargarPdf = async (t: Table, name: string) => descargar(await buildPdf(t), `${name}.pdf`, 'application/pdf')
+export async function descargarTabla(tipo: 'xlsx' | 'pdf', tabla: Table, name: string, sheet = 'Consolidación') {
+  if (tipo === 'xlsx') descargar(buildXlsx(tabla, sheet, [1, 2, 3, 4]), `${name}.xlsx`, XLSX_MIME)
+  else descargar(await buildPdf(tabla), `${name}.pdf`, 'application/pdf')
+}
 
 export type FilaMatriz = Parameters<typeof buildGrids>[0][number]
 export async function descargarMatriz(tipo: 'xlsx' | 'pdf', title: string, subtitle: string, filas: FilaMatriz[], name: string, especial = false) {
