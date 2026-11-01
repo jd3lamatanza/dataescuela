@@ -4,6 +4,7 @@ import { useAsync } from '../../lib/hooks'
 import { setParams, useRoute } from '../../lib/router'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, RowMenu, Spinner, confirmar, toast } from '../../ui/kit'
 import { Icon } from '../../ui/Icon'
+import { Reportes } from './Reportes'
 import { FormCarga, MESES, VistaCarga, bajarCarga, cargaFilas, fdia, hoyAR, nombrePeriodo, type Periodo } from './common'
 
 type Estado = 'activo' | 'programado' | 'vencido' | 'finalizado'
@@ -89,7 +90,7 @@ function Listado({ d, per, reload }: { d: Datos; per?: Periodo; reload(): void }
       {nuevo && <NuevoPeriodo existentes={periodos} onClose={() => setNuevo(false)} onDone={() => { setNuevo(false); reload() }} />}
     </>
   )
-  if (tab === 'reportes') return head(<Reportes d={d} />)
+  if (tab === 'reportes') return head(<Reportes periodos={d.periodos} grupos={d.grupos} escuelas={d.escuelas} />)
   if (!per) return head(<Card><EmptyState title="Sin períodos de carga" text="Creá un período para comenzar." /></Card>)
   if (!grupo) return head(<Card><EmptyState title="Sin agrupamientos" text="El administrador debe crear agrupamientos de matrícula." /></Card>)
 
@@ -267,36 +268,5 @@ function Trasladar({ modo, carga, esc, periodos, cargas, onClose, onDone }: { mo
         <div class="flex justify-end gap-2"><button type="button" class={BTN_SECONDARY} onClick={onClose}>Cancelar</button><button class={BTN_PRIMARY} disabled={busy || !libres.length}>Aceptar</button></div>
       </form>
     </Modal>
-  )
-}
-
-function Reportes({ d }: { d: Datos }) {
-  const { params } = useRoute()
-  const { periodos, grupos, cargas, escuelas } = d
-  if (!periodos.length || !grupos.length) return <Card><EmptyState title="Sin datos para reportar" text="Se necesita al menos un período y un agrupamiento." /></Card>
-  const per = periodos.find((p) => String(p.id) === params.get('rp'))
-  const grupo = grupos.find((g) => String(g.id) === params.get('rg'))
-  const es = grupo ? escuelas.filter((e) => e.codigo && grupo.codigos.includes(e.codigo)) : []
-  const confirmadas = per ? es.filter((e) => cargas.some((k) => k.escuela_id === e.id && k.ciclo === per.ciclo && k.mes === per.mes && k.confirmada_at)) : []
-  return (
-    <>
-      <Card>
-        <div class="grid gap-3 sm:grid-cols-2">
-          <Lbl label="Período">
-            <select class={FIELD} aria-label="Período" value={per?.id ?? ''} onChange={(e) => setParams({ rp: e.currentTarget.value || null })}>
-              <option value="">Elegí un período</option>{periodos.map((p) => <option key={p.id} value={p.id}>{nombrePeriodo(p)}</option>)}
-            </select></Lbl>
-          <Lbl label="Agrupamiento">
-            <select class={FIELD} aria-label="Agrupamiento" value={grupo?.id ?? ''} onChange={(e) => setParams({ rg: e.currentTarget.value || null })}>
-              <option value="">Elegí un agrupamiento</option>{grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
-            </select></Lbl>
-        </div>
-      </Card>
-      <Card class="mt-3">
-        {!per || !grupo ? <EmptyState title="Elegí período y agrupamiento" text="Se mostrará el reporte total de la matrícula cargada." /> : (
-          <EmptyState title={`${grupo.nombre} · ${nombrePeriodo(per)}`} text={`${confirmadas.length} de ${es.length} escuelas con matrícula confirmada. El reporte de este agrupamiento se construirá próximamente.`} />
-        )}
-      </Card>
-    </>
   )
 }

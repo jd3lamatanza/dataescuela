@@ -1,4 +1,4 @@
-import { buildGrids, buildMatrizPdf, buildMatrizXlsx, buildPdf, buildXlsx, type Table } from './export'
+import { buildGrids, buildMatrizPdf, buildMatrizXlsx, buildPdf, buildReportePdf, buildReporteXlsx, buildXlsx, type RepTabla, type Table } from './export'
 
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
@@ -21,4 +21,9 @@ export async function descargarMatriz(tipo: 'xlsx' | 'pdf', title: string, subti
   const g = buildGrids(filas)
   if (tipo === 'xlsx') descargar(buildMatrizXlsx(title, subtitle, g, title.slice(0, 31).replace(/[\\/?*[\]:]/g, ' ')), `${name}.xlsx`, XLSX_MIME)
   else descargar(await buildMatrizPdf(title, subtitle, g), `${name}.pdf`, 'application/pdf')
+}
+
+export async function descargarReporte(tipo: 'xlsx' | 'pdf', title: string, subtitle: string, tablas: RepTabla[], name: string) {
+  if (tipo === 'xlsx') descargar(buildReporteXlsx(title, subtitle, tablas, title.slice(0, 31).replace(/[\\/?*[\]:]/g, ' ')), `${name}.xlsx`, XLSX_MIME)
+  else descargar(await buildReportePdf(title, subtitle, tablas), `${name}.pdf`, 'application/pdf')
 }

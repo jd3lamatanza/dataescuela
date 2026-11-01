@@ -314,3 +314,126 @@ export async function buildMatrizPdf(title: string, subtitle: string, grids: Gri
   pages.forEach((p, i) => p.drawText(`Página ${i + 1} de ${pages.length}`, { x: W - M - 70, y: 14, size: 8, font, color: rgb(0.5, 0.55, 0.6) }))
   return doc.save()
 }
+
+// ---- Reportes jerárquicos: filas = escuelas, columnas = grupo > subgrupo > Sec/Mat/Asist ----
+export interface RepGrupo { label: string; subs: string[] }
+export interface RepTabla {
+  titulo: string
+  primera: string
+  grupos: RepGrupo[]
+  filas: { label: string; vals: number[] }[]
+  /** Fila final de subtotales */
+  total: number[]
+}
+const REP_SUB = ['Sec', 'Mat', 'Asist']
+
+/** .xlsx con una hoja por reporte: encabezado de 3 niveles con celdas combinadas */
+export function buildReporteXlsx(title: string, subtitle: string, tablas: RepTabla[], sheet: string): Uint8Array {
+  const rows: string[] = []
+  const merges: string[] = []
+  let r = 0
+  const str = (ci: number, v: string, st: number) => `<c r="${colL(ci)}${r}" s="${st}" t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`
+  const num = (ci: number, v: number, st: number) => `<c r="${colL(ci)}${r}" s="${st}"><v>${v}</v></c>`
+  const push = (cells: string[]) => rows.push(`<row r="${r}">${cells.join('')}</row>`)
+  r++; push([str(0, title, 7)])
+  r++; push([str(0, subtitle, 0)])
+  r++
+  let ncols = 1
+  for (const t of tablas) {
+    ncols = Math.max(ncols, 1 + t.total.length)
+    r++; push([str(0, t.titulo, 1)])
+    const h1 = ++r
+    const c1 = [str(0, t.primera, 2)]
+    const c2 = [str(0, '', 2)]
+    const c3 = [str(0, '', 2)]
+    let c = 1
+    for (const g of t.grupos) {
+      const w = g.subs.length * 3
+      c1.push(str(c, g.label, 2))
+      for (let i = 1; i < w; i++) c1.push(str(c + i, '', 2))
+      merges.push(`${colL(c)}${h1}:${colL(c + w - 1)}${h1}`)
+      g.subs.forEach((s, i) => {
+        const s0 = c + i * 3
+        c2.push(str(s0, s, 2), str(s0 + 1, '', 2), str(s0 + 2, '', 2))
+        merges.push(`${colL(s0)}${h1 + 1}:${colL(s0 + 2)}${h1 + 1}`)
+        REP_SUB.forEach((x, j) => c3.push(str(s0 + j, x, 2)))
+      })
+      c += w
+    }
+    push(c1); r++; push(c2); r++; push(c3)
+    merges.push(`A${h1}:A${h1 + 2}`)
+    for (const f of t.filas) { r++; push([str(0, f.label, 3), ...f.vals.map((v, i) => num(1 + i, v, 4))]) }
+    r++; push([str(0, 'Subtotales', 5), ...t.total.map((v, i) => num(1 + i, v, 6))])
+    r++
+  }
+  const cols = Array.from({ length: ncols }, (_, i) => `<col min="${i + 1}" max="${i + 1}" width="${i === 0 ? 22 : 7}" customWidth="1"/>`).join('')
+  const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols>${cols}</cols><sheetData>${rows.join('')}</sheetData><mergeCells count="${merges.length}">${merges.map((m) => `<mergeCell ref="${m}"/>`).join('')}</mergeCells></worksheet>`
+  return pack(sheet, MATRIZ_STYLES, sheetXml)
+}
+
+/** PDF A3 horizontal; el encabezado se repite en cada página */
+export async function buildReportePdf(title: string, subtitle: string, tablas: RepTabla[]): Promise<Uint8Array> {
+  const doc = await PDFDocument.create()
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold)
+  const W = 1190.55, H = 841.89, M = 28, LW = 64, RH = 13, FS = 6.2
+  const ink = rgb(0.1, 0.12, 0.18)
+  const blue = rgb(0.86, 0.92, 0.98), gray = rgb(0.93, 0.94, 0.96)
+  const pages: ReturnType<typeof doc.addPage>[] = []
+  let page = doc.addPage([W, H])
+  pages.push(page)
+  let y = H - M
+
+  const box = (x: number, w: number, text: string, o: { b?: boolean; fill?: ReturnType<typeof rgb>; align?: 'l' | 'c' | 'r'; h?: number } = {}) => {
+    const h = o.h ?? RH
+    page.drawRectangle({ x, y: y - h, width: w, height: h, color: o.fill, borderColor: rgb(0.72, 0.75, 0.8), borderWidth: 0.4 })
+    const f = o.b ? bold : font
+    const t = latin(text)
+    const tw = f.widthOfTextAtSize(t, FS)
+    const tx = o.align === 'r' ? x + w - 2.5 - tw : o.align === 'c' ? x + (w - tw) / 2 : x + 3
+    page.drawText(t, { x: tx, y: y - h / 2 - FS / 2.6, size: FS, font: f, color: ink })
+  }
+  const nueva = () => { page = doc.addPage([W, H]); pages.push(page); y = H - M }
+
+  page.drawText(latin(title), { x: M, y: y - 14, size: 15, font: bold, color: rgb(0.06, 0.15, 0.35) })
+  y -= 30
+  page.drawText(latin(subtitle), { x: M, y: y - 2, size: 9, font, color: rgb(0.35, 0.4, 0.5) })
+  y -= 22
+
+  for (const t of tablas) {
+    const ncols = t.total.length
+    const cw = (W - M * 2 - LW) / ncols
+    if (y - RH * 5 < M + 14) nueva()
+    page.drawText(latin(t.titulo), { x: M, y: y - 12, size: 11, font: bold, color: rgb(0.06, 0.15, 0.35) })
+    y -= 20
+
+    const header = () => {
+      box(M, LW, t.primera, { b: true, fill: blue, h: RH * 3 })
+      let c = 0
+      for (const g of t.grupos) {
+        const w = g.subs.length * 3
+        box(M + LW + c * cw, w * cw, wrap(g.label, bold, FS, w * cw - 6, 1)[0], { b: true, fill: blue, align: 'c' })
+        c += w
+      }
+      y -= RH
+      c = 0
+      for (const g of t.grupos) for (const s of g.subs) { box(M + LW + c * cw, cw * 3, s, { b: true, fill: blue, align: 'c' }); c += 3 }
+      y -= RH
+      for (let i = 0; i < ncols; i++) box(M + LW + i * cw, cw, REP_SUB[i % 3], { b: true, fill: blue, align: 'c' })
+      y -= RH
+    }
+    header()
+    const fila = (label: string, vals: number[], strong: boolean) => {
+      if (y - RH < M + 14) { nueva(); header() }
+      box(M, LW, label, { b: strong, fill: strong ? gray : undefined })
+      vals.forEach((v, i) => box(M + LW + i * cw, cw, String(v), { b: strong, fill: strong ? gray : undefined, align: 'r' }))
+      y -= RH
+    }
+    for (const f of t.filas) fila(f.label, f.vals, false)
+    fila('Subtotales', t.total, true)
+    y -= 18
+  }
+
+  pages.forEach((p, i) => p.drawText(`Página ${i + 1} de ${pages.length}`, { x: W - M - 70, y: 14, size: 8, font, color: rgb(0.5, 0.55, 0.6) }))
+  return doc.save()
+}
