@@ -12,13 +12,13 @@ interface Esc { id: number; clave: string; codigo: string | null }
 interface Dato { plan_id: number; curso_id: number; turno_id: number; secciones: number; matricula: number; inclusion: number; asistencia: number }
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
-type Tipo = 'planes' | 'secundaria'
+type Tipo = 'planes' | 'secundaria' | 'especial'
 /** Reportes definidos por agrupamiento: turnos (por sigla, en orden) y forma del cuadro */
 const CFG: Record<string, { siglas: string[]; tipo: Tipo; inclusion?: boolean; tabs?: [string, string][] }> = {
   inicial: { siglas: ['TM', 'TT', 'JC'], tipo: 'planes' },
   primaria: { siglas: ['TM', 'TT', 'JC'], tipo: 'planes' },
   'secundaria orientada': { siglas: ['TM', 'TT', 'TV', 'JC', 'JE'], tipo: 'secundaria', tabs: [['general', 'Reporte General'], ['analitico', 'Reporte Analítico']] },
-  'especial': { siglas: ['TM', 'TT', 'JC'], tipo: 'planes', inclusion: true },
+  'especial': { siglas: ['TM', 'TT', 'JC'], tipo: 'especial', inclusion: true, tabs: [['general', 'Reporte General'], ['analitico', 'Reporte Analítico']] },
   'estetica': { siglas: ['TM', 'TT', 'TV'], tipo: 'planes' },
   'educacion fisica': { siglas: ['TM', 'TT', 'TV'], tipo: 'planes' },
   'adultos': { siglas: ['TM', 'TT', 'TV'], tipo: 'planes' },
@@ -30,6 +30,8 @@ const CFG: Record<string, { siglas: string[]; tipo: Tipo; inclusion?: boolean; t
 const CICLOS = ['Ciclo Básico', 'Ciclo Superior', 'Programas']
 /** Cada ciclo se reconoce por una expresión sobre el nombre del plan (sin tildes ni mayúsculas); agregar variantes acá */
 const CICLO_RE = [/ciclo\s+basico/, /ciclo\s+superior/, /programas?/]
+const ESPECIAL_RE = [/inicial/, /primaria/, /secund(?:i)?ari[oa]/]
+const ESPECIAL_CICLOS = ['Inicial', 'Primaria', 'Secundaria']
 const cicloDe = (nombre: string) => CICLO_RE.findIndex((re) => re.test(norm(nombre)))
 const claveCurso = (nombre: string) => norm(nombre).match(/^(\d+)/)?.[1] ?? norm(nombre)
 
@@ -42,7 +44,7 @@ async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[], modo: string):
     supabase.from('turnos').select('id,sigla').in('sigla', siglas),
     supabase.from('escuelas').select('id,nivel,modalidad').in('id', ids),
     supabase.from('planes_estudio').select('id,nombre,activo,nivel:catalogos!nivel_id(nombre),modalidad:catalogos!modalidad_id(nombre)').order('id'),
-    supabase.from('planes_cursos').select('id,plan_id,orden,nombre').order('orden'),
+    supabase.from('planes_cursos').select('id,plan_id,orden,nombre').order('plan_id').order('orden'),
     supabase.from('matricula_cargas').select('escuela_id,matricula_datos(plan_id,curso_id,turno_id,secciones,matricula,inclusion,asistencia)').eq('ciclo', per.ciclo).eq('mes', per.mes).not('confirmada_at', 'is', null).in('escuela_id', ids),
   ])
   const turnos = siglas.map((s) => ({ sigla: s, id: (check(ts) as { id: number; sigla: string }[]).find((t) => t.sigla === s)?.id ?? -1 }))
@@ -58,7 +60,7 @@ async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[], modo: string):
     .filter((p) => usados.has(p.id) || pares.has(`${p.nivel?.nombre}|${p.modalidad?.nombre}`))
 
   const visibles = (d: Dato) => turnos.some((t) => t.id === d.turno_id)
-  const metricas = cfg.inclusion ? ['Sec.', 'Matr. sede', 'Matr. c/ inclusión', 'Asist.'] : undefined
+  const metricas = cfg.inclusion ? ['Sec.', 'Matr. sede', 'Matr. con inclusión', 'Asist.'] : undefined
   const anchoMetrica = metricas?.length ?? 3
   const trio = (dd: Dato[]) => dd.reduce((a, d) => cfg.inclusion
     ? [a[0] + d.secciones, a[1] + d.matricula, a[2] + d.inclusion, a[3] + d.asistencia]
@@ -75,6 +77,62 @@ async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[], modo: string):
     const filas = es.map((e) => ({ label: e.clave, vals: sumas(cols, e) }))
     const n = grupos.reduce((a, g) => a + g.subs.length, 0) * anchoMetrica
     return { titulo, metricas, primera: 'Escuela', grupos, filas, total: Array.from({ length: n }, (_, i) => filas.reduce((a, f) => a + f.vals[i], 0)) }
+  }
+
+  if (cfg.tipo === 'especial') {
+    const planesPorNivel = ESPECIAL_RE.map((re) => planes.filter((p) => re.test(norm(p.nombre))))
+    const cursosPorPlan = planesPorNivel.map((ps) => ps.flatMap((p) =>
+      cursos.filter((c) => c.plan_id === p.id).map((c) => ({ plan: p, curso: c })),
+    ))
+    const cursoCols = cursosPorPlan.flatMap((cs, nivel) =>
+      cs.map(({ plan, curso }) => ({ nivel, plan, curso, ids: new Set([curso.id]) })),
+    )
+    if (modo === 'general') {
+      const grupos: RepGrupo[] = [
+        ...cursoCols.map((c) => ({ sup: c.plan.nombre, label: c.curso.nombre, subs: [] })),
+        { sup: 'Totales', label: 'Total', subs: [] },
+      ]
+      const filas = es.map((e) => {
+        const dd = (datos.get(e.id) ?? []).filter(visibles)
+        const porCurso = cursoCols.map((c) => trio(dd.filter((d) => d.plan_id === c.plan.id && c.ids.has(d.curso_id))))
+        const total = trio(dd.filter((d) => cursoCols.some((c) => c.plan.id === d.plan_id && c.ids.has(d.curso_id))))
+        return { label: e.clave, vals: [...porCurso.flat(), ...total] }
+      })
+      const n = grupos.length * anchoMetrica
+      return [{
+        titulo: grupo.nombre,
+        metricas,
+        primera: 'Escuela',
+        grupos,
+        filas,
+        total: Array.from({ length: n }, (_, i) => filas.reduce((a, f) => a + f.vals[i], 0)),
+      }]
+    }
+
+    const out: RepTabla[] = []
+    for (const e of es) {
+      for (let nivel = 0; nivel < planesPorNivel.length; nivel++) {
+        for (const p of planesPorNivel[nivel]) {
+          const cols = cursos.filter((c) => c.plan_id === p.id).map((c) => ({ ids: new Set([c.id]) }))
+          const filas = [{ label: e.clave, vals: sumas(cols, e, p.id) }]
+          const grupos: RepGrupo[] = [
+            ...cols.map((c, i) => ({ label: cursos.find((x) => x.id === [...c.ids][0])!.nombre, subs: siglas })),
+            { label: 'Total', subs: [...cols.map((c) => cursos.find((x) => x.id === [...c.ids][0])!.nombre), 'Total'] },
+          ]
+          const cantidad = grupos.reduce((a, g) => a + g.subs.length, 0) * anchoMetrica
+          out.push({
+            grupo: e.clave,
+            titulo: `${e.clave} · ${ESPECIAL_CICLOS[nivel]} · ${p.nombre}`,
+            metricas,
+            primera: 'Escuela',
+            grupos,
+            filas,
+            total: Array.from({ length: cantidad }, (_, i) => filas.reduce((a, f) => a + f.vals[i], 0)),
+          })
+        }
+      }
+    }
+    return out
   }
 
   if (cfg.tipo === 'planes') {
@@ -175,9 +233,9 @@ export function TablaReporte({ t }: { t: RepTabla }) {
           )}
           <tr>
             {!conSup && <th rowSpan={filasTh} class={th + ' sticky left-0 z-10 min-w-24 text-left'}>{t.primera}</th>}
-            {t.grupos.map((g) => <th key={g.label} colSpan={Math.max(g.subs.length, 1) * sub.length} class={th}>{g.label}</th>)}
+            {t.grupos.map((g, i) => <th key={`${i}-${g.label}`} colSpan={Math.max(g.subs.length, 1) * sub.length} class={th}>{g.label}</th>)}
           </tr>
-          {conSubs && <tr>{t.grupos.flatMap((g) => g.subs.map((s) => <th key={g.label + s} colSpan={sub.length} class={th}>{s}</th>))}</tr>}
+            {conSubs && <tr>{t.grupos.flatMap((g, i) => g.subs.map((s) => <th key={`${i}-${s}`} colSpan={sub.length} class={th}>{s}</th>))}</tr>}
           <tr>{t.total.map((_, i) => <th key={i} class={th + ' font-medium'}>{sub[i % sub.length]}</th>)}</tr>
         </thead>
         <tbody>
@@ -254,12 +312,12 @@ export function Reportes({ periodos, grupos, escuelas }: { periodos: Periodo[]; 
                       <TablaReporte t={t} />
                     </div>
                   ))}
-                  {cfg?.inclusion && <p class="mt-3 rounded-md border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950">{notaEspecialCompleta} En los cuadros, “Matr. sede” corresponde a Matrícula y “Matr. c/ inclusión” a Inclusión.</p>}
                 </div>
               </Card>
             ) : (
               <Card key={b.tablas[0].titulo} title={b.tablas[0].titulo} class="mt-3"><TablaReporte t={b.tablas[0]} /></Card>
             ))}
+            {cfg?.inclusion && <p class="mt-3 rounded-md border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950">{notaEspecialCompleta} En los cuadros, “Matr. sede” corresponde a Matrícula y “Matr. con inclusión” a Matrícula con inclusión.</p>}
           </>
         )}
     </>
