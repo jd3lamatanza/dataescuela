@@ -5,11 +5,11 @@ import { descargarPdf, descargarXlsx } from '../../lib/download'
 import type { Table } from '../../lib/export'
 import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, FIELD, Lbl, Modal, Spinner, toast } from '../../ui/kit'
 
-export const ARTICULACION_CODIGOS = ['JI', 'JV', 'JU', 'PP', 'MS', 'MT', 'ET', 'EL', 'EF']
+export const ARTICULACION_CODIGOS = ['JI', 'JV', 'JU', 'PP', 'MS', 'MT', 'ET', 'EL', 'EF', 'EE']
 export const OTRA = '__otra'
 export const FIRST_CICLO = 2020
 const EGRESAN = ['JI', 'JV', 'JU', 'PP']
-const RECIBEN = ['PP', 'MS', 'MT', 'ET', 'EL', 'EF']
+const RECIBEN = ['PP', 'MS', 'MT', 'ET', 'EL', 'EF', 'EE']
 export const puedeEgresar = (cod: string) => EGRESAN.includes(cod)
 export const puedeIngresar = (cod: string) => RECIBEN.includes(cod)
 
