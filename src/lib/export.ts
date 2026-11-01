@@ -327,12 +327,14 @@ export interface RepTabla {
   total: number[]
 }
 const REP_SUB = ['Sec', 'Mat', 'Asist']
-const repAnchos = (t: RepTabla) => t.grupos.map((g) => g.subs.length * 3)
+const repAnchos = (t: RepTabla) => t.grupos.map((g) => Math.max(g.subs.length, 1) * 3)
+/** Hay nivel de subgrupos (turnos o cursos) entre el grupo y Sec/Mat/Asist */
+const repConSubs = (t: RepTabla) => t.grupos.some((g) => g.subs.length > 0)
 /** Agrupa grupos consecutivos con el mismo `sup`: [etiqueta, columnas] */
 const repSups = (t: RepTabla) => {
   const out: [string, number][] = []
   t.grupos.forEach((g, i) => {
-    const w = g.subs.length * 3
+    const w = Math.max(g.subs.length, 1) * 3
     if (i && g.sup === t.grupos[i - 1].sup) out[out.length - 1][1] += w
     else out.push([g.sup ?? '', w])
   })
@@ -369,10 +371,12 @@ export function buildReporteXlsx(title: string, subtitle: string, tablas: RepTab
     let c = 1
     for (const [g, w] of t.grupos.map((g, i) => [g, repAnchos(t)[i]] as const)) { cells.push(...fill(c, w, g.label)); merges.push(`${colL(c)}${r}:${colL(c + w - 1)}${r}`); c += w }
     push(cells); r++
-    const subs = [lead()]
-    c = 1
-    for (const g of t.grupos) for (const sb of g.subs) { subs.push(...fill(c, 3, sb)); merges.push(`${colL(c)}${r}:${colL(c + 2)}${r}`); c += 3 }
-    push(subs); r++
+    if (repConSubs(t)) {
+      const subs = [lead()]
+      c = 1
+      for (const g of t.grupos) for (const sb of g.subs) { subs.push(...fill(c, 3, sb)); merges.push(`${colL(c)}${r}:${colL(c + 2)}${r}`); c += 3 }
+      push(subs); r++
+    }
     push([lead(), ...t.total.flatMap((_, i) => [str(1 + i, REP_SUB[i % 3], 2)])])
     merges.push(`A${h0}:A${r}`)
     for (const f of t.filas) { r++; push([str(0, f.label, 3), ...f.vals.map((v, i) => num(1 + i, v, 4))]) }
@@ -419,7 +423,8 @@ export async function buildReportePdf(title: string, subtitle: string, tablas: R
     const ncols = t.total.length
     const cw = (W - M * 2 - LW) / ncols
     const conSup = t.grupos.some((g) => g.sup !== undefined)
-    const niveles = conSup ? 4 : 3
+    const conSubs = repConSubs(t)
+    const niveles = (conSup ? 1 : 0) + (conSubs ? 3 : 2)
     if (y - RH * (niveles + 2) < M + 14) nueva()
     page.drawText(latin(t.titulo), { x: M, y: y - 12, size: 11, font: bold, color: rgb(0.06, 0.15, 0.35) })
     y -= 20
@@ -438,9 +443,11 @@ export async function buildReportePdf(title: string, subtitle: string, tablas: R
         c += w
       })
       y -= RH
-      c = 0
-      for (const g of t.grupos) for (const sb of g.subs) { box(M + LW + c * cw, cw * 3, wrap(sb, bold, FS, cw * 3 - 4, 1)[0], { b: true, fill: blue, align: 'c' }); c += 3 }
-      y -= RH
+      if (conSubs) {
+        c = 0
+        for (const g of t.grupos) for (const sb of g.subs) { box(M + LW + c * cw, cw * 3, wrap(sb, bold, FS, cw * 3 - 4, 1)[0], { b: true, fill: blue, align: 'c' }); c += 3 }
+        y -= RH
+      }
       for (let i = 0; i < ncols; i++) box(M + LW + i * cw, cw, REP_SUB[i % 3], { b: true, fill: blue, align: 'c' })
       y -= RH
     }

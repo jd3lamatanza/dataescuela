@@ -20,7 +20,10 @@ const CFG: Record<string, { siglas: string[]; tipo: Tipo; tabs?: [string, string
   'secundaria orientada': { siglas: ['TM', 'TT', 'TV', 'JC', 'JE'], tipo: 'secundaria', tabs: [['general', 'Reporte General'], ['analitico', 'Reporte Analítico']] },
 }
 const CICLOS = ['Ciclo Básico', 'Ciclo Superior', 'Programas']
-const cicloDe = (nombre: string) => { const n = norm(nombre); return n.includes('ciclo basico') ? 0 : n.includes('ciclo superior') ? 1 : n.includes('programas') ? 2 : -1 }
+/** Cada ciclo se reconoce por una expresión sobre el nombre del plan (sin tildes ni mayúsculas); agregar variantes acá */
+const CICLO_RE = [/ciclo\s+basico/, /ciclo\s+superior/, /programas?/]
+const cicloDe = (nombre: string) => CICLO_RE.findIndex((re) => re.test(norm(nombre)))
+const claveCurso = (nombre: string) => norm(nombre).match(/^(\d+)/)?.[1] ?? norm(nombre)
 
 async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[]): Promise<RepTabla[]> {
   const cfg = CFG[norm(grupo.nombre)]
@@ -70,23 +73,29 @@ async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[]): Promise<RepTa
     })
   }
 
-  // Secundaria: un solo cuadro; los planes de un mismo ciclo se suman por número de curso
-  const cols: { ciclo: number; orden: number; nombre: string; ids: Set<number> }[] = []
+  // Secundaria: un solo cuadro sin turnos; los planes de cada ciclo se reconocen por nombre
+  // y sus cursos se unen por número de año (o por nombre si no empiezan con número)
+  const cols: { ciclo: number; clave: string; nombre: string; ids: Set<number> }[] = []
   for (const p of planes) {
     const ciclo = cicloDe(p.nombre)
     if (ciclo < 0) continue
     for (const c of cursos.filter((x) => x.plan_id === p.id)) {
-      const ex = cols.find((x) => x.ciclo === ciclo && x.orden === c.orden)
+      const clave = claveCurso(c.nombre)
+      const ex = cols.find((x) => x.ciclo === ciclo && x.clave === clave)
       if (ex) ex.ids.add(c.id)
-      else cols.push({ ciclo, orden: c.orden, nombre: c.nombre, ids: new Set([c.id]) })
+      else cols.push({ ciclo, clave, nombre: c.nombre, ids: new Set([c.id]) })
     }
   }
-  cols.sort((a, b) => a.ciclo - b.ciclo || a.orden - b.orden)
-  const grupos: RepGrupo[] = [
-    ...cols.map((c) => ({ sup: CICLOS[c.ciclo], label: c.nombre, subs: siglas })),
-    { sup: 'Totales', label: 'Total por curso', subs: [...cols.map((c) => c.nombre), 'Total'] },
-  ]
-  return [tabla(grupo.nombre, grupos, cols)]
+  const ord = (c: { ciclo: number; clave: string }) => (/^\d+$/.test(c.clave) ? Number(c.clave) : 1000)
+  cols.sort((a, b) => a.ciclo - b.ciclo || ord(a) - ord(b))
+  const grupos: RepGrupo[] = [...cols.map((c) => ({ sup: CICLOS[c.ciclo], label: c.nombre, subs: [] })), { sup: 'Totales', label: 'Total', subs: [] }]
+  const filas = es.map((e) => {
+    const dd = (datos.get(e.id) ?? []).filter(visibles)
+    const vals = cols.flatMap((c) => trio(dd.filter((d) => c.ids.has(d.curso_id))))
+    return { label: e.clave, vals: [...vals, ...trio(dd.filter((d) => cols.some((c) => c.ids.has(d.curso_id))))] }
+  })
+  const total = Array.from({ length: (cols.length + 1) * 3 }, (_, i) => filas.reduce((a, f) => a + f.vals[i], 0))
+  return [{ titulo: grupo.nombre, primera: 'Escuela', grupos, filas, total }]
 }
 
 export function TablaReporte({ t }: { t: RepTabla }) {
@@ -94,10 +103,13 @@ export function TablaReporte({ t }: { t: RepTabla }) {
   const td = 'border border-slate-200 px-1.5 py-1 text-right tabular-nums'
   const sub = ['Sec', 'Mat', 'Asist']
   const conSup = t.grupos.some((g) => g.sup !== undefined)
+  const conSubs = t.grupos.some((g) => g.subs.length > 0)
+  const filasTh = (conSubs ? 3 : 2)
   const sups: [string, number][] = []
   t.grupos.forEach((g, i) => {
-    if (i && g.sup === t.grupos[i - 1].sup) sups[sups.length - 1][1] += g.subs.length * 3
-    else sups.push([g.sup ?? '', g.subs.length * 3])
+    const w = Math.max(g.subs.length, 1) * 3
+    if (i && g.sup === t.grupos[i - 1].sup) sups[sups.length - 1][1] += w
+    else sups.push([g.sup ?? '', w])
   })
   return (
     <div class="overflow-x-auto">
@@ -105,15 +117,15 @@ export function TablaReporte({ t }: { t: RepTabla }) {
         <thead>
           {conSup && (
             <tr>
-              <th rowSpan={4} class={th + ' sticky left-0 z-10 min-w-24 text-left'}>{t.primera}</th>
+              <th rowSpan={filasTh + 1} class={th + ' sticky left-0 z-10 min-w-24 text-left'}>{t.primera}</th>
               {sups.map(([label, w], i) => <th key={i} colSpan={w} class={th}>{label}</th>)}
             </tr>
           )}
           <tr>
-            {!conSup && <th rowSpan={3} class={th + ' sticky left-0 z-10 min-w-24 text-left'}>{t.primera}</th>}
-            {t.grupos.map((g) => <th key={g.label} colSpan={g.subs.length * 3} class={th}>{g.label}</th>)}
+            {!conSup && <th rowSpan={filasTh} class={th + ' sticky left-0 z-10 min-w-24 text-left'}>{t.primera}</th>}
+            {t.grupos.map((g) => <th key={g.label} colSpan={Math.max(g.subs.length, 1) * 3} class={th}>{g.label}</th>)}
           </tr>
-          <tr>{t.grupos.flatMap((g) => g.subs.map((s) => <th key={g.label + s} colSpan={3} class={th}>{s}</th>))}</tr>
+          {conSubs && <tr>{t.grupos.flatMap((g) => g.subs.map((s) => <th key={g.label + s} colSpan={3} class={th}>{s}</th>))}</tr>}
           <tr>{t.total.map((_, i) => <th key={i} class={th + ' font-medium'}>{sub[i % 3]}</th>)}</tr>
         </thead>
         <tbody>
