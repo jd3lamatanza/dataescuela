@@ -2,9 +2,9 @@ import { useAsync } from '../lib/hooks'
 import { supabase, check } from '../lib/supabase'
 
 // Plan gratuito de Supabase: 500 MB de base de datos
-const REF = new URL(import.meta.env.VITE_SUPABASE_URL).hostname.split('.')[0]
 const LIMITE_DB = 500 * 1024 * 1024
 
+interface Uso { dia: string; rest: number; auth: number; storage: number; realtime: number }
 interface Estado { db_bytes: number; conexiones: number; max_conexiones: number; usuarios: number }
 
 function Medidor({ label, texto, pct }: { label: string; texto: string; pct: number }) {
@@ -21,7 +21,15 @@ function Medidor({ label, texto, pct }: { label: string; texto: string; pct: num
 
 export function BarraServidor({ collapsed }: { collapsed: boolean }) {
   const { data } = useAsync<Estado>(async () => check(await supabase.rpc('servidor_estado')) as unknown as Estado)
+  // Supabase no limita la cantidad de solicitudes a la API en el plan gratuito
+  const uso = useAsync<Uso | null>(async () => {
+    const { data: d, error } = await supabase.functions.invoke('uso')
+    if (error) return null
+    const hoy = new Date().toISOString().slice(0, 10)
+    return ((d?.dias ?? []) as Uso[]).find((x) => x.dia === hoy) ?? null
+  })
   if (!data) return null
+  const sol = uso.data ? uso.data.rest + uso.data.auth + uso.data.storage + uso.data.realtime : null
   const mb = data.db_bytes / 1024 / 1024
   const pDb = (data.db_bytes / LIMITE_DB) * 100
   const pCon = (data.conexiones / data.max_conexiones) * 100
@@ -31,8 +39,8 @@ export function BarraServidor({ collapsed }: { collapsed: boolean }) {
       <div class="mx-auto flex max-w-5xl flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
         <span class={`text-xs font-semibold ${critico ? 'text-rose-700' : 'text-emerald-700'}`}>{critico ? 'Servidor: atención' : 'Servidor: normal'}</span>
         <Medidor label="Base de datos" texto={`${mb.toFixed(1)} de 500 MB`} pct={pDb} />
+        <div class="min-w-0 flex-1 text-xs"><p class="font-medium text-slate-700">Solicitudes hoy</p><p class="mt-1 text-slate-500">{sol === null ? (uso.loading ? '…' : 'sin datos') : `${sol.toLocaleString('es-AR')} · sin límite`}</p></div>
         <Medidor label="Conexiones" texto={`${data.conexiones} de ${data.max_conexiones}`} pct={pCon} />
-        <a class="shrink-0 text-xs font-medium text-blue-700 hover:underline" href={`https://supabase.com/dashboard/project/${REF}/settings/billing/usage`} target="_blank" rel="noopener noreferrer">Ver uso y transferencia ↗</a>
       </div>
     </div>
   )
