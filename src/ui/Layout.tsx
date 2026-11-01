@@ -86,7 +86,7 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
 
       <main class={`px-3 py-5 sm:px-6 ${collapsed ? 'lg:pl-24' : 'lg:pl-72'}`}>
         <div class="mx-auto max-w-6xl">{children}</div>
-        {user.role === 'distrital' && <div class="h-24 sm:h-14" />}
+        {user.role === 'distrital' && <div class="hidden h-14 lg:block" />}
       </main>
       {user.role === 'distrital' && <BarraServidor collapsed={collapsed} />}
     </div>

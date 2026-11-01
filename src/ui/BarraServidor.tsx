@@ -35,7 +35,7 @@ export function BarraServidor({ collapsed }: { collapsed: boolean }) {
   const pCon = (data.conexiones / data.max_conexiones) * 100
   const critico = pDb >= 85 || pCon >= 85
   return (
-    <div class={`fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 py-2 backdrop-blur ${collapsed ? 'lg:left-16' : 'lg:left-64'}`} aria-label="Estado del servidor">
+    <div class={`fixed inset-x-0 bottom-0 z-30 hidden lg:block border-t border-slate-200 bg-white/95 px-3 py-2 backdrop-blur ${collapsed ? 'lg:left-16' : 'lg:left-64'}`} aria-label="Estado del servidor">
       <div class="mx-auto flex max-w-5xl flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
         <span class={`text-xs font-semibold ${critico ? 'text-rose-700' : 'text-emerald-700'}`}>{critico ? 'Servidor: atención' : 'Servidor: normal'}</span>
         <Medidor label="Base de datos" texto={`${mb.toFixed(1)} de 500 MB`} pct={pDb} />
