@@ -5,13 +5,13 @@ import { descargarPdf, descargarXlsx } from '../../lib/download'
 import type { Table } from '../../lib/export'
 import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, FIELD, Lbl, Modal, Spinner, toast } from '../../ui/kit'
 
-export const ARTICULACION_CODIGOS = ['JI', 'JV', 'JU', 'PP', 'MS', 'MT']
+export const ARTICULACION_CODIGOS = ['JI', 'JV', 'JU', 'PP', 'MS', 'MT', 'ET', 'EL', 'EF']
 export const OTRA = '__otra'
 export const FIRST_CICLO = 2020
-const DESTINOS: Record<string, string[]> = { JI: ['PP'], JV: ['PP'], JU: ['PP'], PP: ['MS', 'MT'] }
-const ORIGENES: Record<string, string[]> = { PP: ['JI', 'JV', 'JU'], MS: ['PP'], MT: ['PP'] }
-export const puedeEgresar = (cod: string) => !!DESTINOS[cod]
-export const puedeIngresar = (cod: string) => !!ORIGENES[cod]
+const EGRESAN = ['JI', 'JV', 'JU', 'PP']
+const RECIBEN = ['PP', 'MS', 'MT', 'ET', 'EL', 'EF']
+export const puedeEgresar = (cod: string) => EGRESAN.includes(cod)
+export const puedeIngresar = (cod: string) => RECIBEN.includes(cod)
 
 export const cicloActual = () => Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric' }).format(new Date()))
 export const ciclos = () => Array.from({ length: cicloActual() + 1 - FIRST_CICLO + 1 }, (_, i) => FIRST_CICLO + i)
