@@ -6,6 +6,8 @@ import { Simulado } from './Simulado'
 import { Turnos } from './Turnos'
 import { Planes } from './Planes'
 import { Agrupamientos } from './Agrupamientos'
+import { Escuelas } from './Escuelas'
+import { Fichas } from './Fichas'
 
 const Pendiente = (titulo: string) => () => (
   <>
@@ -23,6 +25,8 @@ export const PAGES: Record<string, ComponentType> = {
   turnos: Turnos,
   planes: Planes,
   agrupamientos: Agrupamientos,
+  escuelas: Escuelas,
+  fichas: Fichas,
 }
 
 export const pageFor = (id: string, label: string): ComponentType => PAGES[id] ?? Pendiente(label)
