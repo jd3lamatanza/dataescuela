@@ -65,12 +65,21 @@ function Carga({ escuelaId }: { escuelaId: number }) {
 
 function Historial({ escuelaId }: { escuelaId: number }) {
   const { data, error, loading } = useAsync(async () => {
-    const ks = check(await supabase.from('matricula_cargas').select('id,ciclo,mes,confirmada_at,matricula_datos(secciones,matricula,asistencia),escuelas(clave)').eq('escuela_id', escuelaId).not('confirmada_at', 'is', null).order('ciclo', { ascending: false }).order('mes', { ascending: false })) as any[]
-    return ks.map((k) => ({ ...k, sec: k.matricula_datos.reduce((a: number, d: any) => a + d.secciones, 0), mat: k.matricula_datos.reduce((a: number, d: any) => a + d.matricula, 0), asi: k.matricula_datos.reduce((a: number, d: any) => a + d.asistencia, 0) }))
+    const [ks, escuela] = await Promise.all([
+      supabase.from('matricula_cargas').select('id,ciclo,mes,confirmada_at,matricula_datos(secciones,matricula,inclusion,asistencia),escuelas(clave)').eq('escuela_id', escuelaId).not('confirmada_at', 'is', null).order('ciclo', { ascending: false }).order('mes', { ascending: false }),
+      supabase.from('escuelas').select('codigo').eq('id', escuelaId).single(),
+    ])
+    const registros = check(ks) as any[]
+    const codigo = check(escuela).codigo as string | null
+    const especial = ['EE', 'EL', 'ET'].includes(codigo ?? '')
+    return {
+      especial,
+      registros: registros.map((k) => ({ ...k, sec: k.matricula_datos.reduce((a: number, d: any) => a + d.secciones, 0), mat: k.matricula_datos.reduce((a: number, d: any) => a + d.matricula, 0), inc: k.matricula_datos.reduce((a: number, d: any) => a + d.inclusion, 0), asi: k.matricula_datos.reduce((a: number, d: any) => a + d.asistencia, 0) })),
+    }
   }, [escuelaId])
   if (loading && !data) return <Spinner />
   if (error || !data) return <Alert tone="error">{error}</Alert>
-  const excel = async (k: any, t: 'xlsx' | 'pdf') => bajarCarga(t, await cargaFilas(k.id), k, k.escuelas.clave, k.confirmada_at)
+  const excel = async (k: any, t: 'xlsx' | 'pdf') => bajarCarga(t, await cargaFilas(k.id), k, k.escuelas.clave, k.confirmada_at, data.especial)
   const Menu = ({ k }: { k: any }) => <RowMenu items={[
     { label: 'Ver carga', icon: 'eye', onClick: () => setParams({ ver: k.id }) },
     { label: 'Descargar Excel', icon: 'download', onClick: () => excel(k, 'xlsx') },
@@ -78,13 +87,13 @@ function Historial({ escuelaId }: { escuelaId: number }) {
   ]} />
   return (
     <Card>
-      {!data.length ? <EmptyState title="Sin cargas" text="Todavía no confirmaste ninguna carga mensual." /> : (
+      {!data.registros.length ? <EmptyState title="Sin cargas" text="Todavía no confirmaste ninguna carga mensual." /> : (
         <div class="-m-4 overflow-x-auto">
           <table class="w-full text-left text-sm">
-            <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="px-3 py-2">Período</th><th class="px-3 py-2 text-right">Secciones</th><th class="px-3 py-2 text-right">Matrícula</th><th class="px-3 py-2 text-right">Asistencia</th><th class="px-3 py-2">Confirmada</th><th class="px-3 py-2" /></tr></thead>
+            <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="px-3 py-2">Período</th><th class="px-3 py-2 text-right">Secciones</th><th class="px-3 py-2 text-right">Matrícula</th>{data.especial && <th class="px-3 py-2 text-right">Inclusión</th>}<th class="px-3 py-2 text-right">Asistencia</th><th class="px-3 py-2">Confirmada</th><th class="px-3 py-2" /></tr></thead>
             <tbody class="divide-y divide-slate-100">
-              {data.map((k) => (
-                <tr key={k.id}><td class="px-3 py-2.5 font-medium">{MESES[k.mes]} {k.ciclo}</td><td class="px-3 py-2.5 text-right">{k.sec}</td><td class="px-3 py-2.5 text-right">{k.mat}</td><td class="px-3 py-2.5 text-right">{k.asi}</td><td class="px-3 py-2.5 text-xs text-slate-500">{fdia(k.confirmada_at)}</td><td class="px-3 py-2.5"><Menu k={k} /></td></tr>
+              {data.registros.map((k) => (
+                <tr key={k.id}><td class="px-3 py-2.5 font-medium">{MESES[k.mes]} {k.ciclo}</td><td class="px-3 py-2.5 text-right">{k.sec}</td><td class="px-3 py-2.5 text-right">{k.mat}</td>{data.especial && <td class="px-3 py-2.5 text-right">{k.inc}</td>}<td class="px-3 py-2.5 text-right">{k.asi}</td><td class="px-3 py-2.5 text-xs text-slate-500">{fdia(k.confirmada_at)}</td><td class="px-3 py-2.5"><Menu k={k} /></td></tr>
               ))}
             </tbody>
           </table>

@@ -17,8 +17,8 @@ export const descargarXlsx = (t: Table, name: string, sheet = 'Datos') => descar
 export const descargarPdf = async (t: Table, name: string) => descargar(await buildPdf(t), `${name}.pdf`, 'application/pdf')
 
 export type FilaMatriz = Parameters<typeof buildGrids>[0][number]
-export async function descargarMatriz(tipo: 'xlsx' | 'pdf', title: string, subtitle: string, filas: FilaMatriz[], name: string) {
-  const g = buildGrids(filas)
+export async function descargarMatriz(tipo: 'xlsx' | 'pdf', title: string, subtitle: string, filas: FilaMatriz[], name: string, especial = false) {
+  const g = buildGrids(filas, especial)
   if (tipo === 'xlsx') descargar(buildMatrizXlsx(title, subtitle, g, title.slice(0, 31).replace(/[\\/?*[\]:]/g, ' ')), `${name}.xlsx`, XLSX_MIME)
   else descargar(await buildMatrizPdf(title, subtitle, g), `${name}.pdf`, 'application/pdf')
 }

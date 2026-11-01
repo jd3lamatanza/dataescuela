@@ -117,7 +117,7 @@ function Listado({ d, per, reload }: { d: Datos; per?: Periodo; reload(): void }
     toast.ok('Carga eliminada')
     reload()
   }
-  const bajar = async (e: Esc, k: Carga, t: 'xlsx' | 'pdf') => bajarCarga(t, await cargaFilas(k.id), k, e.clave, k.confirmada_at)
+  const bajar = async (e: Esc, k: Carga, t: 'xlsx' | 'pdf') => bajarCarga(t, await cargaFilas(k.id), k, e.clave, k.confirmada_at, ['EE', 'EL', 'ET'].includes(e.codigo ?? ''))
 
   const Acc = ({ e }: { e: Esc }) => {
     const k = kDe(e, per)

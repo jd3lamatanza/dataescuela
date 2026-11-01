@@ -9,16 +9,16 @@ import { nombrePeriodo, type Periodo } from './common'
 
 interface Grupo { id: number; nombre: string; codigos: string[] }
 interface Esc { id: number; clave: string; codigo: string | null }
-interface Dato { plan_id: number; curso_id: number; turno_id: number; secciones: number; matricula: number; asistencia: number }
+interface Dato { plan_id: number; curso_id: number; turno_id: number; secciones: number; matricula: number; inclusion: number; asistencia: number }
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 type Tipo = 'planes' | 'secundaria'
 /** Reportes definidos por agrupamiento: turnos (por sigla, en orden) y forma del cuadro */
-const CFG: Record<string, { siglas: string[]; tipo: Tipo; tabs?: [string, string][] }> = {
+const CFG: Record<string, { siglas: string[]; tipo: Tipo; inclusion?: boolean; tabs?: [string, string][] }> = {
   inicial: { siglas: ['TM', 'TT', 'JC'], tipo: 'planes' },
   primaria: { siglas: ['TM', 'TT', 'JC'], tipo: 'planes' },
   'secundaria orientada': { siglas: ['TM', 'TT', 'TV', 'JC', 'JE'], tipo: 'secundaria', tabs: [['general', 'Reporte General'], ['analitico', 'Reporte Analítico']] },
-  'especial': { siglas: ['TM', 'TT', 'TV'], tipo: 'planes' },
+  'especial': { siglas: ['TM', 'TT', 'TV'], tipo: 'planes', inclusion: true },
   'estetica': { siglas: ['TM', 'TT', 'TV'], tipo: 'planes' },
   'educacion fisica': { siglas: ['TM', 'TT', 'TV'], tipo: 'planes' },
   'adultos': { siglas: ['TM', 'TT', 'TV'], tipo: 'planes' },
@@ -43,7 +43,7 @@ async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[], modo: string):
     supabase.from('escuelas').select('id,nivel,modalidad').in('id', ids),
     supabase.from('planes_estudio').select('id,nombre,activo,nivel:catalogos!nivel_id(nombre),modalidad:catalogos!modalidad_id(nombre)').order('id'),
     supabase.from('planes_cursos').select('id,plan_id,orden,nombre').order('orden'),
-    supabase.from('matricula_cargas').select('escuela_id,matricula_datos(plan_id,curso_id,turno_id,secciones,matricula,asistencia)').eq('ciclo', per.ciclo).eq('mes', per.mes).not('confirmada_at', 'is', null).in('escuela_id', ids),
+    supabase.from('matricula_cargas').select('escuela_id,matricula_datos(plan_id,curso_id,turno_id,secciones,matricula,inclusion,asistencia)').eq('ciclo', per.ciclo).eq('mes', per.mes).not('confirmada_at', 'is', null).in('escuela_id', ids),
   ])
   const turnos = siglas.map((s) => ({ sigla: s, id: (check(ts) as { id: number; sigla: string }[]).find((t) => t.sigla === s)?.id ?? -1 }))
   const pares = new Set((check(ep) as { nivel: string | null; modalidad: string | null }[]).map((e) => `${e.nivel}|${e.modalidad}`))
@@ -58,7 +58,11 @@ async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[], modo: string):
     .filter((p) => usados.has(p.id) || pares.has(`${p.nivel?.nombre}|${p.modalidad?.nombre}`))
 
   const visibles = (d: Dato) => turnos.some((t) => t.id === d.turno_id)
-  const trio = (dd: Dato[]) => dd.reduce((a, d) => [a[0] + d.secciones, a[1] + d.matricula, a[2] + d.asistencia], [0, 0, 0])
+  const metricas = cfg.inclusion ? ['Sec', 'Mat', 'Inclusión', 'Asist'] : undefined
+  const anchoMetrica = metricas?.length ?? 3
+  const trio = (dd: Dato[]) => dd.reduce((a, d) => cfg.inclusion
+    ? [a[0] + d.secciones, a[1] + d.matricula, a[2] + d.inclusion, a[3] + d.asistencia]
+    : [a[0] + d.secciones, a[1] + d.matricula, a[2] + d.asistencia], Array(anchoMetrica).fill(0) as number[])
   const sumas = (cols: { ids: Set<number> }[], e: Esc, plan?: number) => {
     const dd = (datos.get(e.id) ?? []).filter((d) => plan === undefined || d.plan_id === plan)
     const out: number[] = []
@@ -69,8 +73,8 @@ async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[], modo: string):
   }
   const tabla = (titulo: string, grupos: RepGrupo[], cols: { ids: Set<number> }[]): RepTabla => {
     const filas = es.map((e) => ({ label: e.clave, vals: sumas(cols, e) }))
-    const n = grupos.reduce((a, g) => a + g.subs.length, 0) * 3
-    return { titulo, primera: 'Escuela', grupos, filas, total: Array.from({ length: n }, (_, i) => filas.reduce((a, f) => a + f.vals[i], 0)) }
+    const n = grupos.reduce((a, g) => a + g.subs.length, 0) * anchoMetrica
+    return { titulo, metricas, primera: 'Escuela', grupos, filas, total: Array.from({ length: n }, (_, i) => filas.reduce((a, f) => a + f.vals[i], 0)) }
   }
 
   if (cfg.tipo === 'planes') {
@@ -149,13 +153,13 @@ const bloques = (ts: RepTabla[]) => {
 export function TablaReporte({ t }: { t: RepTabla }) {
   const th = 'border border-slate-300 bg-sky-100 px-1.5 py-1 text-center text-xs font-semibold'
   const td = 'border border-slate-200 px-1.5 py-1 text-right tabular-nums'
-  const sub = ['Sec', 'Mat', 'Asist']
+  const sub = t.metricas ?? ['Sec', 'Mat', 'Asist']
   const conSup = t.grupos.some((g) => g.sup !== undefined)
   const conSubs = t.grupos.some((g) => g.subs.length > 0)
   const filasTh = (conSubs ? 3 : 2)
   const sups: [string, number][] = []
   t.grupos.forEach((g, i) => {
-    const w = Math.max(g.subs.length, 1) * 3
+    const w = Math.max(g.subs.length, 1) * sub.length
     if (i && g.sup === t.grupos[i - 1].sup) sups[sups.length - 1][1] += w
     else sups.push([g.sup ?? '', w])
   })
@@ -171,10 +175,10 @@ export function TablaReporte({ t }: { t: RepTabla }) {
           )}
           <tr>
             {!conSup && <th rowSpan={filasTh} class={th + ' sticky left-0 z-10 min-w-24 text-left'}>{t.primera}</th>}
-            {t.grupos.map((g) => <th key={g.label} colSpan={Math.max(g.subs.length, 1) * 3} class={th}>{g.label}</th>)}
+            {t.grupos.map((g) => <th key={g.label} colSpan={Math.max(g.subs.length, 1) * sub.length} class={th}>{g.label}</th>)}
           </tr>
-          {conSubs && <tr>{t.grupos.flatMap((g) => g.subs.map((s) => <th key={g.label + s} colSpan={3} class={th}>{s}</th>))}</tr>}
-          <tr>{t.total.map((_, i) => <th key={i} class={th + ' font-medium'}>{sub[i % 3]}</th>)}</tr>
+          {conSubs && <tr>{t.grupos.flatMap((g) => g.subs.map((s) => <th key={g.label + s} colSpan={sub.length} class={th}>{s}</th>))}</tr>}
+          <tr>{t.total.map((_, i) => <th key={i} class={th + ' font-medium'}>{sub[i % sub.length]}</th>)}</tr>
         </thead>
         <tbody>
           {t.filas.map((f) => (

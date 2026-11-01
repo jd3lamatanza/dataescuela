@@ -143,13 +143,16 @@ export interface Grid {
   first: string
   totalLabel: string
   turnos: string[]
+  metricas: string[]
   rows: { label: string; cells: (number[] | null)[]; total: number[]; kind: 'row' | 'total' | 'grand' }[]
 }
 
-const suma3 = (xs: number[][]) => xs.reduce((a, x) => [a[0] + x[0], a[1] + x[1], a[2] + x[2]], [0, 0, 0])
+const sumaMetricas = (xs: number[][], n: number) => xs.reduce((a, x) => a.map((v, i) => v + (x[i] ?? 0)), Array(n).fill(0) as number[])
 
 /** Arma un cuadro por plan y, si hay varios planes, un cuadro de totales generales al final. */
-export function buildGrids(filas: { plan: string; curso: string; turno: string; hora: string | null; secciones: number; matricula: number; asistencia: number }[]): Grid[] {
+export function buildGrids(filas: { plan: string; curso: string; turno: string; hora: string | null; secciones: number; matricula: number; inclusion?: number; asistencia: number }[], especial = false): Grid[] {
+  const metricas = especial ? ['Secc.', 'Matr.', 'Incl.', 'Asist.'] : ['Secc.', 'Matr.', 'Asist.']
+  const valores = (f: typeof filas[number]) => especial ? [f.secciones, f.matricula, f.inclusion ?? 0, f.asistencia] : [f.secciones, f.matricula, f.asistencia]
   const orden = (xs: typeof filas) =>
     [...new Map(xs.slice().sort((a, b) => String(a.hora ?? '99').localeCompare(String(b.hora ?? '99')) || a.turno.localeCompare(b.turno)).map((f) => [f.turno, f.turno])).keys()]
   const planes = [...new Set(filas.map((f) => f.plan))]
@@ -161,18 +164,18 @@ export function buildGrids(filas: { plan: string; curso: string; turno: string; 
     const turnos = orden(rs)
     const cursos = [...new Set(rs.map((f) => f.curso))]
     const celda = (cu: string | null, t: string) => {
-      const xs = rs.filter((f) => (cu === null || f.curso === cu) && f.turno === t).map((f) => [f.secciones, f.matricula, f.asistencia])
-      return xs.length ? suma3(xs) : null
+      const xs = rs.filter((f) => (cu === null || f.curso === cu) && f.turno === t).map(valores)
+      return xs.length ? sumaMetricas(xs, metricas.length) : null
     }
     const rows: Grid['rows'] = cursos.map((cu) => ({
       label: cu,
       cells: turnos.map((t) => celda(cu, t)),
-      total: suma3(rs.filter((f) => f.curso === cu).map((f) => [f.secciones, f.matricula, f.asistencia])),
+      total: sumaMetricas(rs.filter((f) => f.curso === cu).map(valores), metricas.length),
       kind: 'row',
     }))
-    const total = suma3(rs.map((f) => [f.secciones, f.matricula, f.asistencia]))
+    const total = sumaMetricas(rs.map(valores), metricas.length)
     rows.push({ label: 'Total del plan', cells: turnos.map((t) => celda(null, t)), total, kind: 'total' })
-    grids.push({ title: plan, first: 'Curso', totalLabel: 'Total curso', turnos, rows })
+    grids.push({ title: plan, first: 'Curso', totalLabel: 'Total curso', turnos, metricas, rows })
     porPlan.push({ plan, cells: turnosAll.map((t) => celda(null, t)), total })
   }
   if (planes.length > 1) {
@@ -181,12 +184,12 @@ export function buildGrids(filas: { plan: string; curso: string; turno: string; 
       label: 'TOTAL GENERAL',
       cells: turnosAll.map((_, i) => {
         const xs = porPlan.map((p) => p.cells[i]).filter((x): x is number[] => !!x)
-        return xs.length ? suma3(xs) : null
+        return xs.length ? sumaMetricas(xs, metricas.length) : null
       }),
-      total: suma3(porPlan.map((p) => p.total)),
+      total: sumaMetricas(porPlan.map((p) => p.total), metricas.length),
       kind: 'grand',
     })
-    grids.push({ title: 'Totales generales', first: 'Plan de estudio', totalLabel: 'Total plan', turnos: turnosAll, rows })
+    grids.push({ title: 'Totales generales', first: 'Plan de estudio', totalLabel: 'Total plan', turnos: turnosAll, metricas, rows })
   }
   return grids
 }
@@ -208,9 +211,9 @@ export function buildMatrizXlsx(title: string, subtitle: string, grids: Grid[], 
   const str = (ci: number, v: string, st: number) => `<c r="${colL(ci)}${r}" s="${st}" t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`
   const num = (ci: number, v: number, st: number) => `<c r="${colL(ci)}${r}" s="${st}"><v>${v}</v></c>`
   const push = (cells: string[]) => rows.push(`<row r="${r}">${cells.join('')}</row>`)
-  const trio = (ci: number, v: number[] | null, kind: string, tot: boolean) => {
+  const celdasMetricas = (ci: number, v: number[] | null, kind: string, tot: boolean, medidas: string[]) => {
     const bold = kind !== 'row' || tot
-    return [0, 1, 2].map((j) => (v ? num(ci + j, v[j], bold ? 6 : 4) : str(ci + j, '—', bold ? 6 : 8)))
+    return medidas.map((_, j) => (v ? num(ci + j, v[j], bold ? 6 : 4) : str(ci + j, '—', bold ? 6 : 8)))
   }
 
   r++; push([str(0, title, 7)])
@@ -218,26 +221,26 @@ export function buildMatrizXlsx(title: string, subtitle: string, grids: Grid[], 
   r++
   let ncols = 1
   for (const g of grids) {
-    ncols = Math.max(ncols, 1 + (g.turnos.length + 1) * 3)
+    ncols = Math.max(ncols, 1 + (g.turnos.length + 1) * g.metricas.length)
     r++; push([str(0, g.title, 1)])
     const h1 = ++r
     const cells = [str(0, g.first, 2)]
     ;[...g.turnos, g.totalLabel].forEach((t, i) => {
-      const c0 = 1 + i * 3
-      cells.push(str(c0, t, 2), str(c0 + 1, '', 2), str(c0 + 2, '', 2))
-      merges.push(`${colL(c0)}${h1}:${colL(c0 + 2)}${h1}`)
+      const c0 = 1 + i * g.metricas.length
+      cells.push(str(c0, t, 2), ...g.metricas.slice(1).map((_, j) => str(c0 + j + 1, '', 2)))
+      merges.push(`${colL(c0)}${h1}:${colL(c0 + g.metricas.length - 1)}${h1}`)
     })
     push(cells)
     r++
-    push([str(0, '', 2), ...[...g.turnos, ''].flatMap((_, i) => ['Secc.', 'Matr.', 'Asist.'].map((x, j) => str(1 + i * 3 + j, x, 2)))])
+    push([str(0, '', 2), ...[...g.turnos, ''].flatMap((_, i) => g.metricas.map((x, j) => str(1 + i * g.metricas.length + j, x, 2)))])
     merges.push(`A${h1}:A${r}`)
     for (const row of g.rows) {
       r++
       const bold = row.kind !== 'row'
       push([
         str(0, row.label, bold ? 5 : 3),
-        ...row.cells.flatMap((v, i) => trio(1 + i * 3, v, row.kind, false)),
-        ...trio(1 + g.turnos.length * 3, row.total, row.kind, true),
+        ...row.cells.flatMap((v, i) => celdasMetricas(1 + i * g.metricas.length, v, row.kind, false, g.metricas)),
+        ...celdasMetricas(1 + g.turnos.length * g.metricas.length, row.total, row.kind, true, g.metricas),
       ])
     }
     r++
@@ -277,7 +280,7 @@ export async function buildMatrizPdf(title: string, subtitle: string, grids: Gri
 
   for (const g of grids) {
     const ng = g.turnos.length + 1
-    const cw = (W - M * 2 - LW) / (ng * 3)
+    const cw = (W - M * 2 - LW) / (ng * g.metricas.length)
     const need = 20 + RH * 2 + RH * 2
     if (y - need < M + 14) { page = doc.addPage([W, H]); pages.push(page); y = H - M }
     page.drawText(latin(g.title), { x: M, y: y - 12, size: 11, font: bold, color: rgb(0.06, 0.15, 0.35) })
@@ -285,9 +288,9 @@ export async function buildMatrizPdf(title: string, subtitle: string, grids: Gri
 
     const header = () => {
       box(M, LW, g.first, { b: true, fill: blue, h: RH * 2 })
-      ;[...g.turnos, g.totalLabel].forEach((t, i) => box(M + LW + i * cw * 3, cw * 3, t, { b: true, fill: blue, align: 'c' }))
+      ;[...g.turnos, g.totalLabel].forEach((t, i) => box(M + LW + i * cw * g.metricas.length, cw * g.metricas.length, t, { b: true, fill: blue, align: 'c' }))
       y -= RH
-      ;[...g.turnos, ''].forEach((_, i) => ['Secc.', 'Matr.', 'Asist.'].forEach((x, j) => box(M + LW + (i * 3 + j) * cw, cw, x, { b: true, fill: blue, align: 'c' })))
+      ;[...g.turnos, ''].forEach((_, i) => g.metricas.forEach((x, j) => box(M + LW + (i * g.metricas.length + j) * cw, cw, x, { b: true, fill: blue, align: 'c' })))
       y -= RH
     }
     header()
@@ -304,7 +307,7 @@ export async function buildMatrizPdf(title: string, subtitle: string, grids: Gri
       const vals = [...row.cells, row.total]
       vals.forEach((v, i) => {
         const isTot = i === vals.length - 1
-        for (let j = 0; j < 3; j++) box(M + LW + (i * 3 + j) * cw, cw, v ? String(v[j]) : '-', { b: strong || isTot, fill: strong || isTot ? gray : undefined, align: v ? 'r' : 'c' })
+        for (let j = 0; j < g.metricas.length; j++) box(M + LW + (i * g.metricas.length + j) * cw, cw, v ? String(v[j]) : '-', { b: strong || isTot, fill: strong || isTot ? gray : undefined, align: v ? 'r' : 'c' })
       })
       y -= RH
     }
@@ -322,21 +325,22 @@ export interface RepTabla {
   titulo: string
   /** Tablas con el mismo grupo se muestran juntas en pantalla */
   grupo?: string
+  metricas?: string[]
   primera: string
   grupos: RepGrupo[]
   filas: { label: string; vals: number[] }[]
   /** Fila final de subtotales */
   total: number[]
 }
-const REP_SUB = ['Sec', 'Mat', 'Asist']
-const repAnchos = (t: RepTabla) => t.grupos.map((g) => Math.max(g.subs.length, 1) * 3)
+const repAnchos = (t: RepTabla) => t.grupos.map((g) => Math.max(g.subs.length, 1) * (t.metricas?.length ?? 3))
 /** Hay nivel de subgrupos (turnos o cursos) entre el grupo y Sec/Mat/Asist */
 const repConSubs = (t: RepTabla) => t.grupos.some((g) => g.subs.length > 0)
 /** Agrupa grupos consecutivos con el mismo `sup`: [etiqueta, columnas] */
 const repSups = (t: RepTabla) => {
   const out: [string, number][] = []
+  const n = t.metricas?.length ?? 3
   t.grupos.forEach((g, i) => {
-    const w = Math.max(g.subs.length, 1) * 3
+    const w = Math.max(g.subs.length, 1) * n
     if (i && g.sup === t.grupos[i - 1].sup) out[out.length - 1][1] += w
     else out.push([g.sup ?? '', w])
   })
@@ -376,10 +380,12 @@ export function buildReporteXlsx(title: string, subtitle: string, tablas: RepTab
     if (repConSubs(t)) {
       const subs = [lead()]
       c = 1
-      for (const g of t.grupos) for (const sb of g.subs) { subs.push(...fill(c, 3, sb)); merges.push(`${colL(c)}${r}:${colL(c + 2)}${r}`); c += 3 }
+      const n = t.metricas?.length ?? 3
+      for (const g of t.grupos) for (const sb of g.subs) { subs.push(...fill(c, n, sb)); merges.push(`${colL(c)}${r}:${colL(c + n - 1)}${r}`); c += n }
       push(subs); r++
     }
-    push([lead(), ...t.total.flatMap((_, i) => [str(1 + i, REP_SUB[i % 3], 2)])])
+    const metricas = t.metricas ?? ['Sec', 'Mat', 'Asist']
+    push([lead(), ...t.total.map((_, i) => str(1 + i, metricas[i % metricas.length], 2))])
     merges.push(`A${h0}:A${r}`)
     for (const f of t.filas) { r++; push([str(0, f.label, 3), ...f.vals.map((v, i) => num(1 + i, v, 4))]) }
     r++; push([str(0, 'Subtotales', 5), ...t.total.map((v, i) => num(1 + i, v, 6))])
@@ -447,10 +453,12 @@ export async function buildReportePdf(title: string, subtitle: string, tablas: R
       y -= RH
       if (conSubs) {
         c = 0
-        for (const g of t.grupos) for (const sb of g.subs) { box(M + LW + c * cw, cw * 3, wrap(sb, bold, FS, cw * 3 - 4, 1)[0], { b: true, fill: blue, align: 'c' }); c += 3 }
+        const n = t.metricas?.length ?? 3
+        for (const g of t.grupos) for (const sb of g.subs) { box(M + LW + c * cw, cw * n, wrap(sb, bold, FS, cw * n - 4, 1)[0], { b: true, fill: blue, align: 'c' }); c += n }
         y -= RH
       }
-      for (let i = 0; i < ncols; i++) box(M + LW + i * cw, cw, REP_SUB[i % 3], { b: true, fill: blue, align: 'c' })
+      const metricas = t.metricas ?? ['Sec', 'Mat', 'Asist']
+      for (let i = 0; i < ncols; i++) box(M + LW + i * cw, cw, metricas[i % metricas.length], { b: true, fill: blue, align: 'c' })
       y -= RH
     }
     header()
