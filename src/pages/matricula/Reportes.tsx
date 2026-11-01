@@ -100,25 +100,31 @@ async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[], modo: string):
   }
   if (modo === 'general') return [sinTurnos(grupo.nombre, cols, true)]
 
-  // Analítico: Ciclo Básico (curso > turno), Ciclo Superior (un cuadro por escuela, una fila por plan),
-  // Programas (solo cursos) y total de la escuela
+  // Analítico: por escuela, cuatro cuadros (Ciclo Básico y Superior por curso > turno, Programas por curso, Totales)
   const out: RepTabla[] = []
   const porTurno = (cs: typeof cols): RepGrupo[] => [...cs.map((c) => ({ label: c.nombre, subs: siglas })), { label: 'Total', subs: [...cs.map((c) => c.nombre), 'Total'] }]
-  const basico = cols.filter((c) => c.ciclo === 0)
-  if (basico.length) out.push(tabla(CICLOS[0], porTurno(basico), basico))
-  const superior = cols.filter((c) => c.ciclo === 1)
-  const planesSup = planes.filter((p) => cicloDe(p.nombre) === 1)
-  if (superior.length) {
-    for (const e of es) {
-      const filas = planesSup.map((p) => ({ label: p.nombre, vals: sumas(superior, e, p.id) }))
-      const n = (superior.length * siglas.length + superior.length + 1) * 3
-      out.push({ titulo: `${CICLOS[1]} · ${e.clave}`, primera: 'Plan de estudio', grupos: porTurno(superior), filas, total: Array.from({ length: n }, (_, i) => filas.reduce((a, f) => a + f.vals[i], 0)) })
+  const sumaFila = (filas: { vals: number[] }[], n: number) => Array.from({ length: n }, (_, i) => filas.reduce((a, f) => a + f.vals[i], 0))
+  const ciclo = (n: number) => cols.filter((c) => c.ciclo === n)
+  const planesDe = (n: number) => planes.filter((p) => cicloDe(p.nombre) === n)
+  for (const e of es) {
+    const dd = (datos.get(e.id) ?? []).filter(visibles)
+    for (const n of [0, 1]) {
+      const cs = ciclo(n)
+      if (!cs.length) continue
+      const filas = planesDe(n).map((p) => ({ label: p.nombre, vals: sumas(cs, e, p.id) }))
+      out.push({ titulo: `${e.clave} · ${CICLOS[n]}`, primera: 'Plan de estudio', grupos: porTurno(cs), filas, total: sumaFila(filas, (cs.length * siglas.length + cs.length + 1) * 3) })
     }
+    const prog = ciclo(2)
+    if (prog.length) {
+      const filas = planesDe(2).map((p) => {
+        const dp = dd.filter((d) => d.plan_id === p.id)
+        return { label: p.nombre, vals: [...prog.flatMap((c) => suma3(dp, [c])), ...suma3(dp, prog)] }
+      })
+      out.push({ titulo: `${e.clave} · ${CICLOS[2]}`, primera: 'Plan de estudio', grupos: [...prog.map((c) => ({ label: c.nombre, subs: [] })), { label: 'Total', subs: [] }], filas, total: sumaFila(filas, (prog.length + 1) * 3) })
+    }
+    const vals = suma3(dd, cols)
+    out.push({ titulo: `${e.clave} · Totales`, primera: 'Escuela', grupos: [{ label: 'Total de la escuela', subs: [] }], filas: [{ label: e.clave, vals }], total: vals })
   }
-  const prog = cols.filter((c) => c.ciclo === 2)
-  if (prog.length) out.push(sinTurnos(CICLOS[2], prog, false))
-  const filas = es.map((e) => ({ label: e.clave, vals: suma3((datos.get(e.id) ?? []).filter(visibles), cols) }))
-  out.push({ titulo: 'Total de la escuela', primera: 'Escuela', grupos: [{ label: 'Total escuela', subs: [] }], filas, total: [0, 1, 2].map((i) => filas.reduce((a, f) => a + f.vals[i], 0)) })
   return out
 }
 
