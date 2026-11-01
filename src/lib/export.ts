@@ -320,6 +320,8 @@ export async function buildMatrizPdf(title: string, subtitle: string, grids: Gri
 export interface RepGrupo { label: string; subs: string[]; sup?: string }
 export interface RepTabla {
   titulo: string
+  /** Tablas con el mismo grupo se muestran juntas en pantalla */
+  grupo?: string
   primera: string
   grupos: RepGrupo[]
   filas: { label: string; vals: number[] }[]

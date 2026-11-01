@@ -112,7 +112,7 @@ async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[], modo: string):
       const cs = ciclo(n)
       if (!cs.length) continue
       const filas = planesDe(n).map((p) => ({ label: p.nombre, vals: sumas(cs, e, p.id) }))
-      out.push({ titulo: `${e.clave} · ${CICLOS[n]}`, primera: 'Plan de estudio', grupos: porTurno(cs), filas, total: sumaFila(filas, (cs.length * siglas.length + cs.length + 1) * 3) })
+      out.push({ grupo: e.clave, titulo: `${e.clave} · ${CICLOS[n]}`, primera: 'Plan de estudio', grupos: porTurno(cs), filas, total: sumaFila(filas, (cs.length * siglas.length + cs.length + 1) * 3) })
     }
     const prog = ciclo(2)
     if (prog.length) {
@@ -120,10 +120,20 @@ async function armar(per: Periodo, grupo: Grupo, escuelas: Esc[], modo: string):
         const dp = dd.filter((d) => d.plan_id === p.id)
         return { label: p.nombre, vals: [...prog.flatMap((c) => suma3(dp, [c])), ...suma3(dp, prog)] }
       })
-      out.push({ titulo: `${e.clave} · ${CICLOS[2]}`, primera: 'Plan de estudio', grupos: [...prog.map((c) => ({ label: c.nombre, subs: [] })), { label: 'Total', subs: [] }], filas, total: sumaFila(filas, (prog.length + 1) * 3) })
+      out.push({ grupo: e.clave, titulo: `${e.clave} · ${CICLOS[2]}`, primera: 'Plan de estudio', grupos: [...prog.map((c) => ({ label: c.nombre, subs: [] })), { label: 'Total', subs: [] }], filas, total: sumaFila(filas, (prog.length + 1) * 3) })
     }
     const vals = suma3(dd, cols)
-    out.push({ titulo: `${e.clave} · Totales`, primera: 'Escuela', grupos: [{ label: 'Total de la escuela', subs: [] }], filas: [{ label: e.clave, vals }], total: vals })
+    out.push({ grupo: e.clave, titulo: `${e.clave} · Totales`, primera: 'Escuela', grupos: [{ label: 'Total de la escuela', subs: [] }], filas: [{ label: e.clave, vals }], total: vals })
+  }
+  return out
+}
+
+const bloques = (ts: RepTabla[]) => {
+  const out: { grupo?: string; tablas: RepTabla[] }[] = []
+  for (const t of ts) {
+    const ult = out[out.length - 1]
+    if (t.grupo && ult?.grupo === t.grupo) ult.tablas.push(t)
+    else out.push({ grupo: t.grupo, tablas: [t] })
   }
   return out
 }
@@ -220,8 +230,19 @@ export function Reportes({ periodos, grupos, escuelas }: { periodos: Periodo[]; 
                 <button class={BTN_SECONDARY} onClick={() => bajar('pdf')}><Icon name="download" class="size-5" />PDF</button>
               </div>
             </div>
-            {!rep.data.length ? <Card class="mt-3"><EmptyState title="Sin planes de estudio" text="No hay planes de estudio para este agrupamiento." /></Card> : rep.data.map((t) => (
-              <Card key={t.titulo} title={t.titulo} class="mt-3"><TablaReporte t={t} /></Card>
+            {!rep.data.length ? <Card class="mt-3"><EmptyState title="Sin planes de estudio" text="No hay planes de estudio para este agrupamiento." /></Card> : bloques(rep.data).map((b) => b.grupo ? (
+              <Card key={b.grupo} title={b.grupo} class="mt-3">
+                <div class="space-y-5">
+                  {b.tablas.map((t) => (
+                    <div key={t.titulo}>
+                      <h3 class="mb-2 text-sm font-semibold text-slate-700">{t.titulo.replace(`${b.grupo} · `, '')}</h3>
+                      <TablaReporte t={t} />
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ) : (
+              <Card key={b.tablas[0].titulo} title={b.tablas[0].titulo} class="mt-3"><TablaReporte t={b.tablas[0]} /></Card>
             ))}
           </>
         )}
