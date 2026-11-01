@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks'
 import type { ComponentChildren } from 'preact'
-import { Icon } from './Icon'
+import { Icon, type IconKey as IconName } from './Icon'
 
 export const FIELD = 'block w-full min-h-11 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30 disabled:bg-slate-100 disabled:text-slate-500'
 export const BTN_PRIMARY = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-gradient-to-b from-cyan-500 to-sky-600 px-4 text-sm font-semibold text-white shadow-sm hover:from-cyan-600 hover:to-sky-700 disabled:opacity-50'
@@ -123,7 +123,16 @@ export function Overlays() {
 }
 
 /** Menú contextual de fila (⋮). Los ítems con `sep` dibujan un separador antes. */
-export interface MenuItem { label: string; onClick(): void; danger?: boolean; sep?: boolean; hidden?: boolean }
+export interface MenuItem { label: string; onClick(): void; danger?: boolean; sep?: boolean; hidden?: boolean; icon?: IconName }
+
+// Ícono por defecto según el texto de la opción (se puede forzar con `icon`)
+const ICONOS: [RegExp, IconName][] = [
+  [/eliminar|borrar/i, 'trash'], [/restablecer|contraseña/i, 'key'], [/duplicar|copiar/i, 'copy'], [/mover/i, 'move'],
+  [/desbloquear/i, 'unlock'], [/bloquear|bloqueado/i, 'lock'], [/desactivar/i, 'ban'], [/activar/i, 'power'],
+  [/descargar|excel|pdf/i, 'download'], [/editar|modificar/i, 'edit'], [/ver intervenciones|ver carga|^ver\b/i, 'eye'],
+  [/intervenci[oó]n|nota/i, 'note'], [/fuera de/i, 'external'], [/confirmar|destino/i, 'check'], [/ficha|equipo|referentes/i, 'clipboard'],
+]
+const iconoDe = (i: MenuItem): IconName => i.icon ?? ICONOS.find(([r]) => r.test(i.label))?.[1] ?? 'list'
 export function RowMenu({ items }: { items: MenuItem[] }) {
   const [open, setOpen] = useState(false)
   useEffect(() => {
@@ -140,7 +149,7 @@ export function RowMenu({ items }: { items: MenuItem[] }) {
           {items.filter((i) => !i.hidden).map((i) => (
             <>
               {i.sep && <div class="my-1 border-t border-slate-100" />}
-              <button type="button" onClick={() => { setOpen(false); i.onClick() }} class={`flex min-h-10 w-full items-center px-3 text-left text-sm hover:bg-slate-50 ${i.danger ? 'text-red-600' : 'text-slate-700'}`}>{i.label}</button>
+              <button type="button" onClick={() => { setOpen(false); i.onClick() }} class={`flex min-h-10 w-full items-center gap-2.5 px-3 text-left text-sm hover:bg-slate-50 ${i.danger ? 'text-red-600' : 'text-slate-700'}`}><Icon name={iconoDe(i)} class={`size-4 shrink-0 ${i.danger ? 'text-red-500' : 'text-slate-500'}`} />{i.label}</button>
             </>
           ))}
         </div>
