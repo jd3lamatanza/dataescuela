@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { ROLE_LABELS, type Role } from '../modules'
 import { Icon } from './Icon'
+import { go } from '../lib/router'
 import { BTN_PRIMARY, BTN_SECONDARY, FIELD, Modal, toast } from './kit'
 
 interface Notif { id: number; type: string; title: string; body: string | null; url: string | null; read_at: string | null; created_at: string }
@@ -28,6 +29,7 @@ export function Bandeja() {
     setNotifs((n.data as Notif[]) ?? [])
     setMsgs((m.data as Msg[]) ?? [])
   }
+  useEffect(() => { addEventListener('notifs-changed', load); return () => removeEventListener('notifs-changed', load) }, [])
   useEffect(() => { load(); const t = setInterval(load, 60000); return () => clearInterval(t) }, [user?.id])
 
   const nUnread = notifs.filter((n) => !n.read_at).length
@@ -36,6 +38,11 @@ export function Bandeja() {
   const readMsg = async (m: Msg) => {
     if (!m.read_at) { await supabase.from('messages').update({ read_at: new Date().toISOString() }).eq('id', m.id); load() }
     toast.info(`${m.subject}: ${m.body}`)
+  }
+  const abrir = async (n: Notif) => {
+    if (!n.url) return
+    await supabase.from('notifications').delete().eq('id', n.id)
+    setOpen(null); load(); go(n.url)
   }
   const badge = (n: number) => n > 0 && <span class="absolute -right-1.5 -top-1.5 min-w-5 rounded-full bg-blue-600 px-1 text-center text-[11px] font-semibold leading-5 text-white ring-2 ring-slate-50">{n}</span>
   const toggle = (k: 'notif' | 'msg') => setOpen(open === k ? null : k)
@@ -51,10 +58,11 @@ export function Bandeja() {
           <ul class="divide-y divide-slate-100 overflow-y-auto">
             {notifs.length === 0 && <li class="px-4 py-8 text-center text-sm text-slate-500">Sin notificaciones</li>}
             {notifs.map((n) => (
-              <li key={n.id} class={`px-4 py-3 ${n.read_at ? '' : 'bg-sky-50/60'}`}>
-                <p class="text-sm font-medium text-slate-900">{n.title}</p>
-                {n.body && <p class="text-sm text-slate-600">{n.body}</p>}
-                <p class="mt-0.5 text-xs text-slate-400">{fecha(n.created_at)}</p>
+              <li key={n.id} class={n.read_at ? '' : 'bg-sky-50/60'}>
+                {(() => {
+                  const inner = (<><p class="text-sm font-medium text-slate-900">{n.title}</p>{n.body && <p class="text-sm text-slate-600">{n.body}</p>}<p class="mt-0.5 text-xs text-slate-400">{fecha(n.created_at)}</p></>)
+                  return n.url ? <button type="button" class="block min-h-11 w-full px-4 py-3 text-left hover:bg-slate-50" onClick={() => abrir(n)}>{inner}</button> : <div class="px-4 py-3">{inner}</div>
+                })()}
               </li>
             ))}
           </ul>

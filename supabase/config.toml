@@ -3,3 +3,6 @@ verify_jwt = false
 
 [functions.salidas-drive]
 verify_jwt = false
+
+[functions.labores-drive]
+verify_jwt = false

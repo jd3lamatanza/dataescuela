@@ -8,6 +8,7 @@ import { Inspectores } from './Inspectores'
 import { Perfil } from './Perfil'
 import { Agenda } from './Agenda'
 import { Salidas } from './Salidas'
+import { Labores } from './Labores'
 import { Planes } from './Planes'
 import { Agrupamientos } from './Agrupamientos'
 import { Escuelas } from './Escuelas'
@@ -37,6 +38,8 @@ export const PAGES: Record<string, ComponentType> = {
   perfil: Perfil,
   'agenda-areal': Agenda,
   'agenda-distrito': Agenda,
+  labores: Labores,
+  'labores-distrito': Labores,
   salidas: Salidas,
   'salidas-distrito': Salidas,
   'salidas-areal': Salidas,
