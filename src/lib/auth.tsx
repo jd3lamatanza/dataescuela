@@ -1,7 +1,7 @@
 import { createContext } from 'preact'
 import { useContext, useEffect, useState } from 'preact/hooks'
 import type { ComponentChildren } from 'preact'
-import { authEmail, supabase } from './supabase'
+import { authEmail, setRememberSession, supabase } from './supabase'
 import type { Role } from '../modules'
 
 export interface Profile {
@@ -19,7 +19,9 @@ export interface Profile {
 interface AuthState {
   loading: boolean
   user: Profile | null
-  signIn(ident: string, password: string): Promise<string | null>
+  recoveryPending: boolean
+  signIn(ident: string, password: string, remember: boolean): Promise<string | null>
+  requestPasswordRecovery(ident: string): Promise<string | null>
   signOut(): Promise<void>
   changePassword(next: string): Promise<string | null>
   refresh(): Promise<void>
@@ -38,10 +40,16 @@ async function loadProfile(): Promise<Profile | null> {
 export function AuthProvider({ children }: { children: ComponentChildren }) {
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<Profile | null>(null)
+  const [recoveryPending, setRecoveryPending] = useState(false)
 
   useEffect(() => {
+    setRecoveryPending(sessionStorage.getItem('dw-recovery-pending') === '1')
     loadProfile().then((p) => { setUser(p); setLoading(false) })
     const { data } = supabase.auth.onAuthStateChange((ev) => {
+      if (ev === 'PASSWORD_RECOVERY') {
+        sessionStorage.setItem('dw-recovery-pending', '1')
+        setRecoveryPending(true)
+      }
       if (ev === 'SIGNED_OUT') setUser(null)
     })
     return () => data.subscription.unsubscribe()
@@ -50,7 +58,9 @@ export function AuthProvider({ children }: { children: ComponentChildren }) {
   const value: AuthState = {
     loading,
     user,
-    async signIn(ident, password) {
+    recoveryPending,
+    async signIn(ident, password, remember) {
+      setRememberSession(remember)
       const { error } = await supabase.auth.signInWithPassword({ email: authEmail(ident), password })
       if (error) return 'Usuario o contraseña incorrectos'
       await supabase.rpc('simular_salir') // un ingreso nuevo nunca arranca dentro de una simulación previa
@@ -59,17 +69,28 @@ export function AuthProvider({ children }: { children: ComponentChildren }) {
       setUser(p)
       return null
     },
+    async requestPasswordRecovery(ident) {
+      const { error } = await supabase.functions.invoke('password-recovery', { body: { login: ident.trim() } })
+      if (error) return 'No se pudo procesar la solicitud. Intentá nuevamente más tarde.'
+      return null
+    },
     async signOut() {
       await supabase.rpc('simular_salir')
       await supabase.auth.signOut()
+      sessionStorage.removeItem('dw-recovery-pending')
+      setRecoveryPending(false)
       setUser(null)
     },
     async refresh() { setUser(await loadProfile()) },
     async changePassword(next) {
       const { error } = await supabase.auth.updateUser({ password: next })
       if (error) return error.message
-      await supabase.rpc('clave_cambiada')
+      const { error: flagError } = await supabase.rpc('clave_cambiada')
+      if (flagError) return flagError.message
       setUser(await loadProfile())
+      sessionStorage.removeItem('dw-recovery-pending')
+      setRecoveryPending(false)
+      location.hash = '#/'
       return null
     },
   }

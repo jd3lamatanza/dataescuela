@@ -5,7 +5,7 @@ import { useAsync, useDebounced } from '../lib/hooks'
 import { ROLE_LABELS, ROLES, type Role } from '../modules'
 import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PAGE_SIZE, PageHeader, Pager, RowMenu, Spinner, confirmar, toast } from '../ui/kit'
 
-interface Row { id: string; login: string; name: string; role: Role; active: boolean; must_change: boolean; total: number }
+interface Row { id: string; login: string; name: string; role: Role; active: boolean; must_change: boolean; email: string | null; total: number }
 
 /** Un único módulo para admin (todos los roles + alta) y distrital (solo areal/escolar). */
 export function Usuarios() {
@@ -112,10 +112,11 @@ export function Usuarios() {
 function EditarUsuario({ u, onClose, onDone }: { u: Row; onClose(): void; onDone(): void }) {
   const [name, setName] = useState(u.name)
   const [login, setLogin] = useState(u.login)
+  const [email, setEmail] = useState(u.email ?? '')
   const [err, setErr] = useState<string | null>(null)
   const submit = async (e: Event) => {
     e.preventDefault()
-    const { error } = await supabase.rpc('usuario_editar', { p_id: u.id, p_name: name, p_login: login })
+    const { error } = await supabase.rpc('usuario_editar', { p_id: u.id, p_name: name, p_login: login, p_email: email })
     if (error) setErr(error.message)
     else { toast.ok('Usuario actualizado'); onDone() }
   }
@@ -125,6 +126,8 @@ function EditarUsuario({ u, onClose, onDone }: { u: Row; onClose(): void; onDone
         {err && <Alert tone="error">{err}</Alert>}
         <Lbl label="Nombre"><input class={FIELD} value={name} onInput={(e) => setName(e.currentTarget.value)} required maxLength={200} /></Lbl>
         <Lbl label="Usuario (CUE, CUIL o correo)"><input class={FIELD} value={login} onInput={(e) => setLogin(e.currentTarget.value)} required maxLength={120} /></Lbl>
+        <Lbl label="Correo de recuperación"><input class={FIELD} type="email" value={email} onInput={(e) => setEmail(e.currentTarget.value)} maxLength={254} autocomplete="email" /></Lbl>
+        <p class="text-xs text-slate-500">Para escuelas e inspectores se prioriza el correo de su ficha; este correo sirve como alternativa y es el principal para los demás roles.</p>
         <div class="flex justify-end gap-2"><button type="button" class={BTN_SECONDARY} onClick={onClose}>Cancelar</button><button class={BTN_PRIMARY}>Guardar</button></div>
       </form>
     </Modal>
@@ -132,11 +135,11 @@ function EditarUsuario({ u, onClose, onDone }: { u: Row; onClose(): void; onDone
 }
 
 function NuevoUsuario({ onClose, onDone }: { onClose(): void; onDone(): void }) {
-  const [f, setF] = useState({ name: '', login: '', role: 'escolar', pass: '' })
+  const [f, setF] = useState({ name: '', login: '', role: 'escolar', pass: '', email: '' })
   const [err, setErr] = useState<string | null>(null)
   const submit = async (e: Event) => {
     e.preventDefault()
-    const { error } = await supabase.rpc('usuario_crear', { p_name: f.name, p_login: f.login, p_role: f.role, p_pass: f.pass })
+    const { error } = await supabase.rpc('usuario_crear', { p_name: f.name, p_login: f.login, p_role: f.role, p_pass: f.pass, p_email: f.email || null })
     if (error) setErr(error.message)
     else { toast.ok('Usuario creado'); onDone() }
   }
@@ -148,6 +151,7 @@ function NuevoUsuario({ onClose, onDone }: { onClose(): void; onDone(): void }) 
         <Lbl label="Nombre"><input class={FIELD} value={f.name} onInput={set('name')} required /></Lbl>
         <Lbl label="Usuario (CUE, CUIL o correo)"><input class={FIELD} value={f.login} onInput={set('login')} required /></Lbl>
         <Lbl label="Rol"><select class={FIELD} value={f.role} onChange={set('role')}>{ROLES.map((r) => <option value={r}>{ROLE_LABELS[r]}</option>)}</select></Lbl>
+        <Lbl label="Correo de recuperación"><input class={FIELD} type="email" value={f.email} onInput={set('email')} maxLength={254} autocomplete="email" /></Lbl>
         <Lbl label="Contraseña inicial (mín. 8)"><input class={FIELD} type="password" minLength={8} value={f.pass} onInput={set('pass')} required autocomplete="new-password" /></Lbl>
         <p class="text-xs text-slate-500">El usuario deberá cambiarla en su primer ingreso.</p>
         <div class="flex justify-end gap-2"><button type="button" class={BTN_SECONDARY} onClick={onClose}>Cancelar</button><button class={BTN_PRIMARY}>Crear</button></div>

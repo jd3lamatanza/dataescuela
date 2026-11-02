@@ -9,11 +9,11 @@ import { pageFor } from './pages/registry'
 import './index.css'
 
 function Router() {
-  const { loading, user, signOut } = useAuth()
+  const { loading, user, signOut, recoveryPending } = useAuth()
   const { path } = useRoute()
   if (loading) return <Spinner />
   if (!user) return <Login />
-  if (user.must_change) return <CambiarClave forced />
+  if (user.must_change || recoveryPending) return <CambiarClave forced recovery={recoveryPending} />
 
   // Cada módulo valida el rol para abrirse; si no corresponde, 403 visual.
   const mod = [...MODULES].sort((a, b) => b.path.length - a.path.length).find((m) => (m.path === '/' ? path === '/' : path.startsWith(m.path)))
