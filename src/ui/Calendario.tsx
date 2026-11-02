@@ -8,7 +8,7 @@ import { Icon, iconOr } from './Icon'
 
 export interface TipoEvento { id: number; nombre: string; icono: string; color: string; rol: Role; activo: boolean }
 export interface Evento {
-  id: number; fecha: string; tipo_id: number; nombre: string; descripcion: string | null
+  id: number; fecha: string; tipo_id: number; nombre: string; descripcion: string | null; lugar?: string | null
   user_id: string; rol: Role; autor: string; para_roles: Role[]
 }
 
@@ -140,6 +140,7 @@ export function Calendario() {
                 <dl class="space-y-2 text-sm">
                   <div><dt class="text-xs uppercase text-slate-500">Autor</dt><dd>{detalle.autor} · {ROLE_LABELS[detalle.rol]}</dd></div>
                   {detalle.para_roles.length > 0 && <div><dt class="text-xs uppercase text-slate-500">Asignado a</dt><dd>{detalle.para_roles.map((r) => (r === 'areal' ? 'Areales' : 'Escuelas')).join(' y ')}</dd></div>}
+                  {detalle.lugar && <div><dt class="text-xs uppercase text-slate-500">Lugar</dt><dd>{detalle.lugar}</dd></div>}
                   <div><dt class="text-xs uppercase text-slate-500">Descripción</dt><dd class="whitespace-pre-line">{detalle.descripcion || 'Sin descripción'}</dd></div>
                 </dl>
                 <div class="flex flex-wrap justify-between gap-2">

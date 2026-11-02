@@ -11,7 +11,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const BRAND = { name: 'DataEscuela v2', org: 'Jefatura Distrital 3 - La Matanza' } as const
 
-export type IconName = 'home' | 'users' | 'school' | 'map' | 'chart' | 'building' | 'settings' | 'bell' | 'search' | 'check' | 'alert' | 'shield' | 'transfer' | 'login' | 'route' | 'list' | 'clock' | 'book' | 'layers' | 'clipboard' | 'org' | 'bus'
+export type IconName = 'home' | 'users' | 'school' | 'map' | 'chart' | 'building' | 'settings' | 'bell' | 'search' | 'check' | 'alert' | 'shield' | 'transfer' | 'login' | 'route' | 'list' | 'clock' | 'book' | 'layers' | 'clipboard' | 'org' | 'bus' | 'calendar'
 
 export interface AppModule {
   id: string
@@ -50,6 +50,8 @@ export const MODULES: readonly AppModule[] = [
   { id: 'salidas', label: 'Salida Educativa', path: '/salidas', icon: 'bus', roles: ['escolar'], primary: true },
   { id: 'salidas-distrito', label: 'Salida Educativa', path: '/salidas-distrito', icon: 'bus', roles: ['distrital'], primary: true },
   { id: 'salidas-areal', label: 'Salida Educativa', path: '/salidas-areal', icon: 'bus', roles: ['areal'], primary: true },
+  { id: 'agenda-areal', label: 'Agenda Anticipada', path: '/agenda-areal', icon: 'calendar', roles: ['areal'], primary: true },
+  { id: 'agenda-distrito', label: 'Agenda Anticipada', path: '/agenda-distrito', icon: 'calendar', roles: ['distrital'], primary: true },
   { id: 'perfil', label: 'Mi perfil', path: '/perfil', icon: 'users', roles: ['distrital'], userMenu: true },
 ]
 
