@@ -32,17 +32,32 @@ async function driveToken() {
   return d.access_token as string
 }
 
-async function ensureFolder(admin: ReturnType<typeof createClient>, token: string, s: { id: number; clave: string | null; titulo: string; drive_folder_id: string | null }) {
-  if (s.drive_folder_id) return s.drive_folder_id
+async function findOrCreateFolder(token: string, name: string, parent: string) {
+  const auth = { Authorization: `Bearer ${token}` }
+  const esc = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+  const q = `name = '${esc}' and '${parent}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
+  const f = await fetch(`https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id)&pageSize=1&q=${encodeURIComponent(q)}`, { headers: auth })
+  const fd = await f.json()
+  if (!f.ok) { console.error('Drive search error:', JSON.stringify(fd)); throw new HttpError(503, 'No se pudo consultar Google Drive') }
+  if (fd.files?.[0]?.id) return fd.files[0].id as string
   const r = await fetch('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: safeName(`${s.clave ?? 'sin clave'} - ${s.id} - ${s.titulo}`), mimeType: 'application/vnd.google-apps.folder', parents: [env('DRIVE_FOLDER_ID')] }),
+    headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parent] }),
   })
   const d = await r.json()
   if (!r.ok || !d.id) { console.error('Drive folder error:', JSON.stringify(d)); throw new HttpError(503, 'No se pudo crear la carpeta en Google Drive') }
-  await admin.from('salidas').update({ drive_folder_id: d.id }).eq('id', s.id)
   return d.id as string
+}
+
+// DRIVE_FOLDER_ID / {clave de la escuela} / {fecha de carga}
+async function ensureFolder(admin: ReturnType<typeof createClient>, token: string, s: { id: number; clave: string | null; cue: string; drive_folder_id: string | null }) {
+  if (s.drive_folder_id) return s.drive_folder_id
+  const escuela = await findOrCreateFolder(token, safeName(s.clave ?? s.cue), env('DRIVE_FOLDER_ID'))
+  const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date())
+  const id = await findOrCreateFolder(token, hoy, escuela)
+  await admin.from('salidas').update({ drive_folder_id: id }).eq('id', s.id)
+  return id
 }
 
 async function sendMail(opts: { to: string; cc?: string; subject: string; content: string; attachments: { filename: string; content: Uint8Array; contentType: string }[] }) {
