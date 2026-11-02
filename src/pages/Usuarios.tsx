@@ -7,11 +7,11 @@ import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl,
 
 interface Row { id: string; login: string; name: string; role: Role; active: boolean; must_change: boolean; email: string | null; total: number }
 
-/** Un único módulo para admin (todos los roles + alta) y distrital (solo areal/escolar). */
+/** Un único módulo para admin (todos los roles) y distrital (solo cuentas distritales). */
 export function Usuarios() {
   const { user } = useAuth()
   const admin = user?.role === 'admin'
-  const roles = admin ? ROLES : (['areal', 'escolar'] as const)
+  const roles = admin ? ROLES : (['distrital'] as const)
   const [q, setQ] = useState('')
   const [rol, setRol] = useState('')
   const [estado, setEstado] = useState('')
@@ -41,10 +41,15 @@ export function Usuarios() {
     if (u.active && !(await confirmar('Bloquear usuario', { text: `${u.name} no podrá ingresar.`, ok: 'Bloquear', danger: true }))) return
     act(() => supabase.rpc('usuario_activo', { p_id: u.id, p_activo: !u.active }), u.active ? 'Usuario bloqueado' : 'Usuario desbloqueado')
   }
+  const eliminar = async (u: Row) => {
+    if (await confirmar('Eliminar usuario', { text: `Se elimina la cuenta de ${u.name}. Esta acción no se puede deshacer.`, ok: 'Eliminar', danger: true }))
+      act(() => supabase.rpc('usuario_eliminar', { p_id: u.id }), 'Usuario eliminado')
+  }
   const menu = (u: Row) => [
     { label: 'Editar', onClick: () => setEdit(u) },
     { label: 'Restablecer contraseña', onClick: () => reset(u) },
     { label: u.active ? 'Bloquear' : 'Desbloquear', onClick: () => activo(u), danger: u.active, hidden: u.id === user?.id },
+    { label: 'Eliminar', onClick: () => eliminar(u), danger: true, hidden: u.id === user?.id },
   ]
   const estadoBadges = (u: Row) => (
     <span class="inline-flex flex-wrap gap-1">
@@ -56,14 +61,16 @@ export function Usuarios() {
 
   return (
     <>
-      <PageHeader title="Usuarios" subtitle={admin ? 'Todas las cuentas de la aplicación' : 'Cuentas de inspectores y escuelas'}
-        actions={admin && <button class={BTN_PRIMARY} onClick={() => setNuevo(true)}>Nuevo usuario</button>} />
-      <div class="grid gap-2 sm:grid-cols-3">
+      <PageHeader title="Usuarios" subtitle={admin ? 'Todas las cuentas de la aplicación' : 'Cuentas del rol distrital'}
+        actions={<button class={BTN_PRIMARY} onClick={() => setNuevo(true)}>Nuevo usuario</button>} />
+      <div class={`grid gap-2 ${roles.length > 1 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
         <input type="search" class={FIELD} placeholder="Nombre, CUE o CUIL" value={q} onInput={(e) => setF(() => setQ(e.currentTarget.value))} aria-label="Buscar" />
-        <select class={FIELD} value={rol} onChange={(e) => setF(() => setRol(e.currentTarget.value))} aria-label="Rol">
-          <option value="">Todos los roles</option>
-          {roles.map((r) => <option value={r}>{ROLE_LABELS[r]}</option>)}
-        </select>
+        {roles.length > 1 && (
+          <select class={FIELD} value={rol} onChange={(e) => setF(() => setRol(e.currentTarget.value))} aria-label="Rol">
+            <option value="">Todos los roles</option>
+            {roles.map((r) => <option value={r}>{ROLE_LABELS[r]}</option>)}
+          </select>
+        )}
         <select class={FIELD} value={estado} onChange={(e) => setF(() => setEstado(e.currentTarget.value))} aria-label="Estado">
           <option value="">Estado: todos</option><option value="act">Activos</option><option value="blk">Bloqueados</option>
         </select>
@@ -104,7 +111,7 @@ export function Usuarios() {
       </Card>
       <Pager page={page} total={Number(total)} onPage={setPage} />
       {edit && <EditarUsuario u={edit} onClose={() => setEdit(null)} onDone={() => { setEdit(null); reload() }} />}
-      {nuevo && <NuevoUsuario onClose={() => setNuevo(false)} onDone={() => { setNuevo(false); reload() }} />}
+      {nuevo && <NuevoUsuario roles={roles} onClose={() => setNuevo(false)} onDone={() => { setNuevo(false); reload() }} />}
     </>
   )
 }
@@ -134,8 +141,8 @@ function EditarUsuario({ u, onClose, onDone }: { u: Row; onClose(): void; onDone
   )
 }
 
-function NuevoUsuario({ onClose, onDone }: { onClose(): void; onDone(): void }) {
-  const [f, setF] = useState({ name: '', login: '', role: 'escolar', pass: '', email: '' })
+function NuevoUsuario({ roles, onClose, onDone }: { roles: readonly Role[]; onClose(): void; onDone(): void }) {
+  const [f, setF] = useState({ name: '', login: '', role: roles.length === 1 ? roles[0] : 'escolar', pass: '', email: '' })
   const [err, setErr] = useState<string | null>(null)
   const submit = async (e: Event) => {
     e.preventDefault()
@@ -150,7 +157,7 @@ function NuevoUsuario({ onClose, onDone }: { onClose(): void; onDone(): void }) 
         {err && <Alert tone="error">{err}</Alert>}
         <Lbl label="Nombre"><input class={FIELD} value={f.name} onInput={set('name')} required /></Lbl>
         <Lbl label="Usuario (CUE, CUIL o correo)"><input class={FIELD} value={f.login} onInput={set('login')} required /></Lbl>
-        <Lbl label="Rol"><select class={FIELD} value={f.role} onChange={set('role')}>{ROLES.map((r) => <option value={r}>{ROLE_LABELS[r]}</option>)}</select></Lbl>
+        <Lbl label="Rol"><select class={FIELD} value={f.role} onChange={set('role')}>{roles.map((r) => <option value={r}>{ROLE_LABELS[r]}</option>)}</select></Lbl>
         <Lbl label="Correo de recuperación"><input class={FIELD} type="email" value={f.email} onInput={set('email')} maxLength={254} autocomplete="email" /></Lbl>
         <Lbl label="Contraseña inicial (mín. 8)"><input class={FIELD} type="password" minLength={8} value={f.pass} onInput={set('pass')} required autocomplete="new-password" /></Lbl>
         <p class="text-xs text-slate-500">El usuario deberá cambiarla en su primer ingreso.</p>
