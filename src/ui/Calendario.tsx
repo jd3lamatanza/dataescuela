@@ -35,7 +35,8 @@ export function Calendario() {
   const { user } = useAuth()
   const hoy = key(new Date())
   const [ym, setYm] = useState(() => ({ y: new Date().getFullYear(), m: new Date().getMonth() }))
-  const [sel, setSel] = useState(hoy)
+  const [dia, setDia] = useState<string | null>(null)
+  const [detalle, setDetalle] = useState<Evento | null>(null)
   const [edit, setEdit] = useState<Partial<Evento> | null>(null)
 
   const celdas = useMemo(() => {
@@ -64,21 +65,25 @@ export function Calendario() {
     for (const e of data?.eventos ?? []) m.set(e.fecha, [...(m.get(e.fecha) ?? []), e])
     return m
   }, [data])
-  const delDia = porDia.get(sel) ?? []
+  const resumen = (evs: Evento[]) => {
+    const m = new Map<number, number>()
+    evs.forEach((e) => m.set(e.tipo_id, (m.get(e.tipo_id) ?? 0) + 1))
+    return [...m.entries()].sort(([a], [b]) => a - b).map(([id, n]) => [tipoDe(id), n] as const)
+  }
+  const delDia = useMemo(() => [...(dia ? porDia.get(dia) ?? [] : [])].sort((a, b) => a.tipo_id - b.tipo_id || a.id - b.id), [dia, porDia])
 
   const ir = (delta: number) => {
     const d = new Date(ym.y, ym.m + delta, 1)
     setYm({ y: d.getFullYear(), m: d.getMonth() })
-    setSel(key(d) === key(new Date(new Date().getFullYear(), new Date().getMonth(), 1)) ? hoy : key(d))
   }
-  const irHoy = () => { const d = new Date(); setYm({ y: d.getFullYear(), m: d.getMonth() }); setSel(hoy) }
-  const puedeEditar = (e: Evento) => e.user_id === user?.id || user?.role === 'distrital'
+  const irHoy = () => { const d = new Date(); setYm({ y: d.getFullYear(), m: d.getMonth() }) }
+  const esAutor = (e: Evento) => e.user_id === user?.id
 
   const eliminar = async (e: Evento) => {
     if (!(await confirmar('Eliminar evento', { text: `Se eliminará "${e.nombre}".`, ok: 'Eliminar', danger: true }))) return
     const { error } = await supabase.rpc('evento_eliminar', { p_id: e.id })
     if (error) toast.error(error.message)
-    else { toast.ok('Evento eliminado'); reload() }
+    else { toast.ok('Evento eliminado'); setDetalle(null); reload() }
   }
 
   return (
@@ -89,7 +94,7 @@ export function Calendario() {
           <button type="button" class="flex size-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-100" aria-label="Mes anterior" onClick={() => ir(-1)}><Icon name="chevl" /></button>
           <button type="button" class="min-h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 hover:bg-slate-100" onClick={irHoy}>Hoy</button>
           <button type="button" class="flex size-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-100" aria-label="Mes siguiente" onClick={() => ir(1)}><Icon name="chevr" /></button>
-          {propios.length > 0 && <button type="button" class={BTN_PRIMARY} onClick={() => setEdit({ fecha: sel })}>Nuevo evento</button>}
+          {propios.length > 0 && <button type="button" class={BTN_PRIMARY} onClick={() => setEdit({ fecha: hoy })}>Nuevo evento</button>}
         </div>
       </div>
       {error && <Alert tone="error">{error}</Alert>}
@@ -101,15 +106,15 @@ export function Calendario() {
           const evs = porDia.get(k) ?? []
           const fuera = d.getMonth() !== ym.m
           return (
-            <button key={k} type="button" onClick={() => setSel(k)} aria-label={`${diaLabel(k)}${evs.length ? `, ${evs.length} eventos` : ''}`} aria-pressed={k === sel}
-              class={`flex min-h-14 flex-col items-center gap-1 p-1 text-sm sm:min-h-24 sm:items-stretch sm:text-left ${fuera ? 'bg-slate-50 text-slate-400' : 'bg-white text-slate-800'} ${k === sel ? 'ring-2 ring-inset ring-sky-500' : 'hover:bg-slate-50'}`}>
-              <span class={`flex size-7 items-center justify-center rounded-full text-xs font-medium sm:self-start ${k === hoy ? 'bg-sky-600 text-white' : ''}`}>{d.getDate()}</span>
-              <span class="flex flex-wrap justify-center gap-0.5 sm:hidden">
-                {evs.slice(0, 4).map((e) => <span key={e.id} class={`size-1.5 rounded-full ${col(tipoDe(e.tipo_id)?.color).dot}`} />)}
-              </span>
-              <span class="hidden w-full flex-col gap-0.5 sm:flex">
-                {evs.slice(0, 2).map((e) => <span key={e.id} class={`truncate rounded px-1 py-0.5 text-[11px] leading-tight ${col(tipoDe(e.tipo_id)?.color).chip}`}>{e.nombre}</span>)}
-                {evs.length > 2 && <span class="px-1 text-[11px] text-slate-500">+{evs.length - 2} más</span>}
+            <button key={k} type="button" onClick={() => { setDia(k); setDetalle(null) }} aria-label={`${diaLabel(k)}${evs.length ? `, ${evs.length} eventos` : ''}`}
+              class={`flex min-h-14 flex-col items-center gap-1 p-1 text-sm sm:min-h-20 sm:items-start ${fuera ? 'bg-slate-50 text-slate-400' : 'bg-white text-slate-800'} hover:bg-sky-50`}>
+              <span class={`flex size-7 items-center justify-center rounded-full text-xs font-medium ${k === hoy ? 'bg-sky-600 text-white' : ''}`}>{d.getDate()}</span>
+              <span class="flex flex-wrap justify-center gap-0.5 sm:justify-start">
+                {resumen(evs).map(([t, n]) => (
+                  <span key={t?.id ?? 0} title={`${t?.nombre ?? 'Evento'}: ${n}`} class={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[11px] font-semibold leading-none ${col(t?.color).chip}`}>
+                    <Icon name={iconOr(t?.icono)} class="size-3.5" />{n}
+                  </span>
+                ))}
               </span>
             </button>
           )
@@ -122,33 +127,56 @@ export function Calendario() {
         </ul>
       )}
 
-      <div class="mt-4 border-t border-slate-100 pt-3">
-        <h3 class="mb-2 text-sm font-semibold capitalize text-slate-900">{diaLabel(sel)}</h3>
-        {loading && !data ? <Spinner /> : delDia.length === 0 ? <p class="text-sm text-slate-500">Sin eventos este día.</p> : (
-          <ul class="space-y-2">
-            {delDia.map((e) => {
-              const t = tipoDe(e.tipo_id)
-              const c = col(t?.color)
-              return (
-                <li key={e.id} class="flex items-start gap-3 rounded-lg border border-slate-200 p-3">
-                  <span class={`flex size-10 shrink-0 items-center justify-center rounded-lg border ${c.card}`}><Icon name={iconOr(t?.icono)} /></span>
-                  <div class="min-w-0 flex-1">
-                    <p class="font-medium text-slate-900">{e.nombre}</p>
-                    <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
-                      <span class={`rounded px-1.5 py-0.5 font-medium ${c.chip}`}>{t?.nombre ?? 'Evento'}</span>
-                      <span>{e.autor} · {ROLE_LABELS[e.rol]}</span>
-                      {e.para_roles.length > 0 && <span>Para: {e.para_roles.map((r) => (r === 'areal' ? 'Areales' : 'Escuelas')).join(' y ')}</span>}
-                    </p>
-                    {e.descripcion && <p class="mt-1.5 whitespace-pre-line text-sm text-slate-700">{e.descripcion}</p>}
-                  </div>
-                  {puedeEditar(e) && <RowMenu items={[{ label: 'Editar', onClick: () => setEdit(e) }, { label: 'Eliminar', onClick: () => eliminar(e), danger: true }]} />}
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </div>
-      {edit && <Form e={edit} tipos={propios} rol={user!.role} onClose={() => setEdit(null)} onDone={() => { setEdit(null); reload() }} />}
+    {dia && !edit && (
+        <Modal title={detalle ? detalle.nombre : diaLabel(dia).replace(/^./, (c) => c.toUpperCase())} onClose={() => { setDia(null); setDetalle(null) }}>
+          {detalle ? (() => {
+            const t = tipoDe(detalle.tipo_id); const c = col(t?.color)
+            return (
+              <div class="space-y-4">
+                <div class="flex items-center gap-3">
+                  <span class={`flex size-12 shrink-0 items-center justify-center rounded-lg border ${c.card}`}><Icon name={iconOr(t?.icono)} class="size-6" /></span>
+                  <div><span class={`rounded px-1.5 py-0.5 text-xs font-medium ${c.chip}`}>{t?.nombre ?? 'Evento'}</span><p class="mt-1 text-sm capitalize text-slate-600">{diaLabel(detalle.fecha)}</p></div>
+                </div>
+                <dl class="space-y-2 text-sm">
+                  <div><dt class="text-xs uppercase text-slate-500">Autor</dt><dd>{detalle.autor} · {ROLE_LABELS[detalle.rol]}</dd></div>
+                  {detalle.para_roles.length > 0 && <div><dt class="text-xs uppercase text-slate-500">Asignado a</dt><dd>{detalle.para_roles.map((r) => (r === 'areal' ? 'Areales' : 'Escuelas')).join(' y ')}</dd></div>}
+                  <div><dt class="text-xs uppercase text-slate-500">Descripción</dt><dd class="whitespace-pre-line">{detalle.descripcion || 'Sin descripción'}</dd></div>
+                </dl>
+                <div class="flex flex-wrap justify-between gap-2">
+                  <button type="button" class={BTN_SECONDARY} onClick={() => setDetalle(null)}>Volver</button>
+                  {esAutor(detalle) && (
+                    <div class="flex gap-2">
+                      <button type="button" class="min-h-11 rounded-md border border-red-300 px-4 text-sm font-medium text-red-600 hover:bg-red-50" onClick={() => eliminar(detalle)}>Eliminar</button>
+                      <button type="button" class={BTN_PRIMARY} onClick={() => setEdit(detalle)}>Editar</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })() : (
+            <div class="space-y-3">
+              {loading && !data ? <Spinner /> : delDia.length === 0 ? <p class="text-sm text-slate-500">Sin eventos este día.</p> : (
+                <ul class="space-y-2">
+                  {delDia.map((e) => {
+                    const t = tipoDe(e.tipo_id); const c = col(t?.color)
+                    return (
+                      <li key={e.id}>
+                        <button type="button" onClick={() => setDetalle(e)} class="flex w-full items-center gap-3 rounded-lg border border-slate-200 p-3 text-left hover:border-sky-300 hover:bg-sky-50">
+                          <span class={`flex size-10 shrink-0 items-center justify-center rounded-lg border ${c.card}`}><Icon name={iconOr(t?.icono)} /></span>
+                          <span class="min-w-0 flex-1"><span class="block truncate font-medium text-slate-900">{e.nombre}</span><span class="block truncate text-xs text-slate-500">{t?.nombre ?? 'Evento'} · {e.autor}</span></span>
+                          <Icon name="chevr" class="size-4 shrink-0 text-slate-400" />
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              {propios.length > 0 && <button type="button" class={`${BTN_PRIMARY} w-full`} onClick={() => setEdit({ fecha: dia })}>Nuevo evento en esta fecha</button>}
+            </div>
+          )}
+        </Modal>
+      )}
+      {edit && <Form e={edit} tipos={propios} rol={user!.role} onClose={() => setEdit(null)} onDone={() => { setEdit(null); setDetalle(null); reload() }} />}
     </Card>
   )
 }
