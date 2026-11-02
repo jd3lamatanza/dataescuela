@@ -110,7 +110,7 @@ export function Labores() {
       <PageHeader title="Labores" subtitle={distrito ? 'Registro de labores de los inspectores.' : 'Tus labores y las de equipo en las que participás.'}
         actions={!distrito && <button class={BTN_PRIMARY} onClick={() => setEdit({})}>Nueva labor</button>} />
       <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <input class={FIELD} type="search" placeholder="Buscar motivo o inspector" value={f.q} onInput={set('q')} aria-label="Buscar" />
+        <input class={FIELD} type="search" placeholder={distrito ? 'Buscar motivo o inspector' : 'Buscar por motivo'} value={f.q} onInput={set('q')} aria-label="Buscar" />
         {distrito && <select class={FIELD} value={f.insp} onChange={set('insp')} aria-label="Inspector"><option value="">Inspector: todos</option>{(insps.data ?? []).map((i) => <option value={i.user_id}>{i.nombre}</option>)}</select>}
         {COLS.map(([k, c, l]) => sel(k, c, l))}
         <Lbl label="Desde"><input class={FIELD} type="date" value={f.desde} onInput={set('desde')} /></Lbl>
