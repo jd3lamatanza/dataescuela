@@ -22,6 +22,8 @@ export interface AppModule {
   roles: readonly Role[]
   /** Mostrar en la barra inferior móvil */
   primary?: boolean
+  /** Solo se llega desde el menú de usuario (no aparece en el menú lateral ni en Inicio) */
+  userMenu?: boolean
 }
 
 // Registro único de módulos. Agregar un módulo = una línea aquí + su página en src/pages/registry.ts
@@ -45,7 +47,8 @@ export const MODULES: readonly AppModule[] = [
   { id: 'plantas', label: 'Plantas', path: '/plantas', icon: 'org', roles: ['distrital'], primary: true },
   { id: 'matriculas', label: 'Matrícula', path: '/matriculas', icon: 'chart', roles: ['distrital'], primary: true },
   { id: 'usuarios', label: 'Usuarios', path: '/usuarios', icon: 'users', roles: ['admin'], primary: true },
+  { id: 'perfil', label: 'Mi perfil', path: '/perfil', icon: 'users', roles: ['distrital'], userMenu: true },
 ]
 
 export const canAccess = (m: AppModule, role: Role) => m.roles.includes(role)
-export const modulesFor = (role: Role) => MODULES.filter((m) => canAccess(m, role))
+export const modulesFor = (role: Role) => MODULES.filter((m) => canAccess(m, role) && !m.userMenu)

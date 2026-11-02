@@ -1,6 +1,6 @@
-import { useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import type { ComponentChildren } from 'preact'
-import { BRAND, ROLE_LABELS, modulesFor } from '../modules'
+import { BRAND, MODULES, ROLE_LABELS, canAccess, modulesFor } from '../modules'
 import type { Profile } from '../lib/auth'
 import { BarraServidor } from './BarraServidor'
 import { Icon } from './Icon'
@@ -64,9 +64,7 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
         <a href={href('/')} class="flex items-center gap-2 font-semibold text-slate-900"><Logo class="size-8" /><span class="hidden sm:inline">{BRAND.name}</span></a>
         <div class="ml-auto flex items-center gap-2">
           <Bandeja />
-          <div class="hidden text-right leading-tight sm:block"><p class="max-w-56 truncate text-sm font-medium text-slate-900">{user.name}</p><p class="text-xs text-slate-500">{ROLE_LABELS[user.role]}</p></div>
-          <span class="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 text-xs font-semibold text-white">{initials}</span>
-          <button type="button" onClick={onLogout} aria-label="Salir" title="Salir" class="flex size-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-100"><Icon name="logout" /></button>
+          <UserMenu user={user} initials={initials} onLogout={onLogout} />
         </div>
       </header>
 
@@ -89,6 +87,42 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
         {user.role === 'distrital' && <div class="hidden h-14 lg:block" />}
       </main>
       {user.role === 'distrital' && <BarraServidor collapsed={collapsed} />}
+    </div>
+  )
+}
+
+/** Menú desplegable del usuario: datos de la cuenta, módulos personales y salida. */
+function UserMenu({ user, initials, onLogout }: { user: Profile; initials: string; onLogout(): void }) {
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    addEventListener('click', close); addEventListener('keydown', key)
+    return () => { removeEventListener('click', close); removeEventListener('keydown', key) }
+  }, [open])
+  const own = MODULES.filter((m) => m.userMenu && canAccess(m, user.role))
+  const item = 'flex min-h-11 w-full items-center gap-2.5 px-3 text-left text-sm hover:bg-slate-50'
+
+  return (
+    <div class="relative">
+      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label="Menú de usuario" onClick={(e) => { e.stopPropagation(); setOpen(!open) }}
+        class="flex min-h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-1.5 text-slate-700 shadow-sm hover:bg-slate-100 sm:pl-2.5">
+        <span class="hidden max-w-48 truncate text-sm font-medium sm:block">{user.name}</span>
+        <span class="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 text-xs font-semibold text-white">{initials}</span>
+      </button>
+      {open && (
+        <div role="menu" class="absolute right-0 z-50 mt-1 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div class="border-b border-slate-100 px-3 py-2.5">
+            <p class="truncate text-sm font-semibold text-slate-900">{user.name}</p>
+            <p class="text-xs text-slate-500">{ROLE_LABELS[user.role]}</p>
+          </div>
+          {own.map((m) => (
+            <a key={m.id} role="menuitem" href={href(m.path)} onClick={() => setOpen(false)} class={`${item} text-slate-700`}><Icon name={m.icon} class="size-[18px] text-slate-500" />{m.label}</a>
+          ))}
+          <button type="button" role="menuitem" onClick={() => { setOpen(false); onLogout() }} class={`${item} ${own.length ? 'border-t border-slate-100' : ''} text-slate-700`}><Icon name="logout" class="size-[18px] text-slate-500" />Cerrar sesión</button>
+        </div>
+      )}
     </div>
   )
 }

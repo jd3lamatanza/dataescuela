@@ -5,6 +5,7 @@ import { Usuarios } from './Usuarios'
 import { Simulado } from './Simulado'
 import { Turnos } from './Turnos'
 import { Inspectores } from './Inspectores'
+import { Perfil } from './Perfil'
 import { Planes } from './Planes'
 import { Agrupamientos } from './Agrupamientos'
 import { Escuelas } from './Escuelas'
@@ -31,6 +32,7 @@ export const PAGES: Record<string, ComponentType> = {
   simulado: Simulado,
   turnos: Turnos,
   inspectores: Inspectores,
+  perfil: Perfil,
   planes: Planes,
   agrupamientos: Agrupamientos,
   escuelas: Escuelas,

@@ -12,6 +12,9 @@ export interface Profile {
   active: boolean
   cue: string | null
   must_change: boolean
+  email?: string | null
+  telefono?: string | null
+  cargo?: string | null
   /** Nombre de quien inició el ingreso simulado (si corresponde) */
   simulador: string | null
 }
