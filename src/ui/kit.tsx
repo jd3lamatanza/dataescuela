@@ -143,7 +143,7 @@ export function RowMenu({ items }: { items: MenuItem[] }) {
   }, [open])
   return (
     <div class="relative">
-      <button type="button" aria-label="Acciones" onClick={(e) => { e.stopPropagation(); setOpen(!open) }} class="flex size-10 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100"><Icon name="dots" class="size-5" /></button>
+      <button type="button" aria-label="Acciones" onClick={(e) => { e.stopPropagation(); setOpen(!open) }} class="flex size-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 shadow-sm hover:border-slate-400 hover:bg-slate-100 hover:text-slate-900"><Icon name="dots" class="size-5" /></button>
       {open && (
         <div class="absolute right-0 z-40 mt-1 w-60 rounded-lg border border-slate-200 bg-white py-1 shadow-xl">
           {items.filter((i) => !i.hidden).map((i) => (
