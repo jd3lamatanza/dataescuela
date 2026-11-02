@@ -1,25 +1,28 @@
-import { useState } from 'preact/hooks'
+import { useMemo, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { useAsync, useDebounced } from '../lib/hooks'
+import { useAsync } from '../lib/hooks'
+import { descargar, XLSX_MIME } from '../lib/download'
+import { buildPdf, buildXlsx, type Table } from '../lib/export'
+import { Calendario } from '../ui/Calendario'
+import { Icon } from '../ui/Icon'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, RowMenu, Spinner, confirmar, toast } from '../ui/kit'
 
 interface Item { id: number; fecha: string; nombre: string; descripcion: string | null; lugar: string | null; user_id: string; autor: string }
 
 const fmt = (d: string) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(d + 'T00:00:00Z'))
-const hoy = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date())
 
 /** Agenda Anticipada: el inspector gestiona sus eventos; el distrito los lista (solo lectura). */
 export function Agenda() {
   const { user } = useAuth()
   const distrito = user?.role === 'distrital'
-  const [q, setQ] = useState('')
-  const [pasados, setPasados] = useState(false)
+  const [sel, setSel] = useState('')
+  const [ym, setYm] = useState(() => ({ y: new Date().getFullYear(), m: new Date().getMonth() }))
   const [edit, setEdit] = useState<Partial<Item> | null>(null)
   const [ver, setVer] = useState<Item | null>(null)
-  const dq = useDebounced(q)
 
-  const { data, loading, error, reload } = useAsync(async () => {
+  const [version, setVersion] = useState(0)
+  const { data, loading, error, reload: recargar } = useAsync(async () => {
     const { data: tipo, error: e1 } = await supabase.from('evento_tipos').select('id').eq('nombre', 'Agenda Anticipada').maybeSingle()
     if (e1) throw e1
     if (!tipo) return [] as Item[]
@@ -28,10 +31,31 @@ export function Agenda() {
     return data as Item[]
   })
 
-  const t = dq.trim().toLowerCase()
-  const h = hoy()
-  const rows = (data ?? []).filter((i) =>
-    (pasados || i.fecha >= h) && (!t || `${i.nombre} ${i.lugar ?? ''} ${i.autor}`.toLowerCase().includes(t)))
+  const reload = () => { recargar(); setVersion((v) => v + 1) }
+  // Distrito filtra por inspector; el inspector, por lugar
+  const campo = (i: Item) => (distrito ? i.autor : i.lugar ?? '')
+  const opciones = useMemo(() => [...new Set((data ?? []).map(campo).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es')), [data, distrito])
+  const mesKey = `${ym.y}-${String(ym.m + 1).padStart(2, '0')}`
+  const mesTxt = new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(new Date(ym.y, ym.m, 1))
+  const rows = (data ?? []).filter((i) => i.fecha.startsWith(mesKey) && (!sel || campo(i) === sel))
+
+  const bajar = async (tipo: 'xlsx' | 'pdf') => {
+    const tabla: Table = {
+      title: 'Agenda Anticipada',
+      subtitle: `${mesTxt.replace(/^./, (c) => c.toUpperCase())}${sel ? ` · ${distrito ? 'Inspector' : 'Lugar'}: ${sel}` : ''} · ${rows.length} evento(s)`,
+      headers: distrito ? ['Fecha', 'Título', 'Lugar', 'Inspector', 'Descripción'] : ['Fecha', 'Título', 'Lugar', 'Descripción'],
+      widths: distrito ? [12, 28, 22, 24, 40] : [12, 30, 24, 44],
+      rows: rows.map((i) => {
+        const f = i.fecha.split('-').reverse().join('/')
+        return distrito ? [f, i.nombre, i.lugar ?? '', i.autor, i.descripcion ?? ''] : [f, i.nombre, i.lugar ?? '', i.descripcion ?? '']
+      }),
+    }
+    const name = `agenda-anticipada-${mesKey}`
+    try {
+      if (tipo === 'xlsx') descargar(buildXlsx(tabla, 'Agenda'), `${name}.xlsx`, XLSX_MIME)
+      else descargar(await buildPdf(tabla), `${name}.pdf`, 'application/pdf')
+    } catch { toast.error('No se pudo generar el archivo') }
+  }
 
   const eliminar = async (i: Item) => {
     if (!(await confirmar('Eliminar evento', { text: `Se elimina “${i.nombre}” de la agenda y del calendario.`, ok: 'Eliminar', danger: true }))) return
@@ -59,12 +83,20 @@ export function Agenda() {
       <PageHeader title="Agenda Anticipada" subtitle={distrito ? 'Eventos cargados por los inspectores.' : 'Tus eventos próximos; también se ven en el calendario del Home.'}
         actions={!distrito && <button class={BTN_PRIMARY} onClick={() => setEdit({})}>Nuevo evento</button>} />
       <div class="grid gap-2 sm:grid-cols-2">
-        <input type="search" class={FIELD} placeholder={distrito ? 'Título, lugar o inspector' : 'Título o lugar'} value={q} onInput={(e) => setQ(e.currentTarget.value)} aria-label="Buscar" />
-        <label class="flex min-h-11 items-center gap-2 text-sm text-slate-700"><input type="checkbox" class="size-4" checked={pasados} onChange={(e) => setPasados(e.currentTarget.checked)} />Incluir eventos pasados</label>
+        <select class={FIELD} value={sel} onChange={(e) => setSel(e.currentTarget.value)} aria-label={distrito ? 'Inspector' : 'Lugar'}>
+          <option value="">{distrito ? 'Inspector: todos' : 'Lugar: todos'}</option>
+          {opciones.map((o) => <option value={o}>{o}</option>)}
+        </select>
+        <div class="flex gap-2">
+          <button type="button" class={`${BTN_SECONDARY} flex-1`} disabled={rows.length === 0} onClick={() => bajar('xlsx')}><Icon name="download" class="size-5" />Excel</button>
+          <button type="button" class={`${BTN_SECONDARY} flex-1`} disabled={rows.length === 0} onClick={() => bajar('pdf')}><Icon name="download" class="size-5" />PDF</button>
+        </div>
       </div>
+      <section aria-label="Calendario" class="mt-3"><Calendario ctl={{ ym, setYm, tipoNombre: 'Agenda Anticipada', filtro: (e) => !sel || (distrito ? e.autor : e.lugar ?? '') === sel, version }} /></section>
+      <h2 class="mb-1 mt-4 text-sm font-semibold capitalize text-slate-700">{mesTxt}</h2>
       {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
-      <Card class="mt-3">
-        {loading && !data ? <Spinner /> : rows.length === 0 ? <EmptyState title="Sin eventos" text={distrito ? 'Los inspectores todavía no cargaron eventos.' : 'Cargá el primero con “Nuevo evento”.'} /> : <ul class="divide-y divide-slate-100">{rows.map(fila)}</ul>}
+      <Card>
+        {loading && !data ? <Spinner /> : rows.length === 0 ? <EmptyState title="Sin eventos" text={sel ? 'No hay eventos con ese filtro en el mes.' : 'No hay eventos este mes.'} /> : <ul class="divide-y divide-slate-100">{rows.map(fila)}</ul>}
       </Card>
       {edit && <Formulario item={edit} onClose={() => setEdit(null)} onDone={() => { setEdit(null); reload() }} />}
       {ver && (

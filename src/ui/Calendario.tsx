@@ -31,10 +31,21 @@ const DIAS = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
 const mesLabel = (y: number, m: number) => new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(new Date(y, m, 1))
 const diaLabel = (k: string) => new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(k + 'T00:00:00'))
 
-export function Calendario() {
+export interface CalendarioCtl {
+  ym: { y: number; m: number }
+  setYm(v: { y: number; m: number }): void
+  /** Si se indica, muestra solo ese tipo de evento y sin alta ni edición desde el calendario. */
+  tipoNombre?: string
+  filtro?(e: Evento): boolean
+  version?: number
+}
+
+export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
   const { user } = useAuth()
   const hoy = key(new Date())
-  const [ym, setYm] = useState(() => ({ y: new Date().getFullYear(), m: new Date().getMonth() }))
+  const [ymLocal, setYmLocal] = useState(() => ({ y: new Date().getFullYear(), m: new Date().getMonth() }))
+  const ym = ctl?.ym ?? ymLocal
+  const setYm = ctl?.setYm ?? setYmLocal
   const [dia, setDia] = useState<string | null>(null)
   const [detalle, setDetalle] = useState<Evento | null>(null)
   const [edit, setEdit] = useState<Partial<Evento> | null>(null)
@@ -55,16 +66,17 @@ export function Calendario() {
     if (e.error) throw e.error
     if (t.error) throw t.error
     return { eventos: e.data as Evento[], tipos: t.data as TipoEvento[] }
-  }, [desde, hasta])
+  }, [desde, hasta, ctl?.version])
 
-  const tipos = data?.tipos ?? []
+  const tipoFijo = ctl?.tipoNombre
+  const tipos = (data?.tipos ?? []).filter((t) => !tipoFijo || t.nombre === tipoFijo)
   const tipoDe = (id: number) => tipos.find((t) => t.id === id)
-  const propios = tipos.filter((t) => t.rol === user?.role)
+  const propios = ctl?.tipoNombre ? [] : tipos.filter((t) => t.rol === user?.role)
   const porDia = useMemo(() => {
     const m = new Map<string, Evento[]>()
-    for (const e of data?.eventos ?? []) m.set(e.fecha, [...(m.get(e.fecha) ?? []), e])
+    for (const e of data?.eventos ?? []) if (tipos.some((t) => t.id === e.tipo_id) && (!ctl?.filtro || ctl.filtro(e))) m.set(e.fecha, [...(m.get(e.fecha) ?? []), e])
     return m
-  }, [data])
+  }, [data, ctl?.filtro, tipoFijo])
   const resumen = (evs: Evento[]) => {
     const m = new Map<number, number>()
     evs.forEach((e) => m.set(e.tipo_id, (m.get(e.tipo_id) ?? 0) + 1))
@@ -77,7 +89,7 @@ export function Calendario() {
     setYm({ y: d.getFullYear(), m: d.getMonth() })
   }
   const irHoy = () => { const d = new Date(); setYm({ y: d.getFullYear(), m: d.getMonth() }) }
-  const esAutor = (e: Evento) => e.user_id === user?.id
+  const esAutor = (e: Evento) => !ctl?.tipoNombre && e.user_id === user?.id
 
   const eliminar = async (e: Evento) => {
     if (!(await confirmar('Eliminar evento', { text: `Se eliminará "${e.nombre}".`, ok: 'Eliminar', danger: true }))) return
