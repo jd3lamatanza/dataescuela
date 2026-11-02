@@ -38,7 +38,7 @@ export const MODULES: readonly AppModule[] = [
   { id: 'fichas', label: 'Fichas de Datos', path: '/fichas', icon: 'clipboard', roles: ['escolar'], primary: true },
   { id: 'planes', label: 'Planes de Estudio', path: '/planes', icon: 'book', roles: ['admin'], primary: true },
   { id: 'turnos', label: 'Turnos', path: '/turnos', icon: 'clock', roles: ['admin'], primary: true },
-  { id: 'inspectores', label: 'Inspectores', path: '/inspectores', icon: 'shield', roles: ['admin'], primary: false },
+  { id: 'inspectores', label: 'Inspectores', path: '/inspectores', icon: 'shield', roles: ['distrital'], primary: false },
   { id: 'agrupamientos', label: 'Agrupamiento de Matrículas', path: '/agrupamientos', icon: 'layers', roles: ['admin'], primary: false },
   { id: 'planta', label: 'Mi Planta', path: '/planta', icon: 'org', roles: ['escolar'], primary: true },
   { id: 'matricula', label: 'Matrícula', path: '/matricula', icon: 'chart', roles: ['escolar'], primary: true },
