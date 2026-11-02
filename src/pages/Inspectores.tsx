@@ -5,7 +5,7 @@ import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl,
 
 interface Insp {
   id: number; user_id: string | null; nombre: string | null; cuil: string; modalidad_id: number | null; nivel_o_modalidad: string | null
-  situacion_revista: string | null; cargo_base: string | null; fecha_toma_posesion: string | null; telefono: string | null; email: string | null
+  situacion_revista: string | null; revista_id: number | null; cargo_base: string | null; fecha_toma_posesion: string | null; telefono: string | null; email: string | null
   escuelas_asignadas: string[]; activo: boolean
 }
 interface Modalidad { id: number; nombre: string }
@@ -16,13 +16,15 @@ export function Inspectores() {
   const [estado, setEstado] = useState('')
   const [edit, setEdit] = useState<Partial<Insp> | null>(null)
   const { data, loading, error, reload } = useAsync(async () => {
-    const [i, m] = await Promise.all([
+    const [i, m, r] = await Promise.all([
       supabase.from('inspectores').select('*').order('nombre'),
       supabase.from('modalidades_inspeccion').select('id, nombre').eq('activo', true).order('orden'),
+      supabase.from('catalogos').select('id, nombre').eq('coleccion', 'situacion_revista').eq('activo', true).order('orden'),
     ])
     if (i.error) throw i.error
     if (m.error) throw m.error
-    return { insp: i.data as Insp[], mods: m.data as Modalidad[] }
+    if (r.error) throw r.error
+    return { insp: i.data as Insp[], mods: m.data as Modalidad[], revistas: r.data as Modalidad[] }
   })
 
   const run = async (p: PromiseLike<{ error: { message: string } | null }>, ok: string) => {
@@ -102,14 +104,14 @@ export function Inspectores() {
           </>
         )}
       </Card>
-      {edit && data && <Form i={edit} mods={data.mods} onClose={() => setEdit(null)} onDone={() => { setEdit(null); reload() }} />}
+      {edit && data && <Form i={edit} mods={data.mods} revistas={data.revistas} onClose={() => setEdit(null)} onDone={() => { setEdit(null); reload() }} />}
     </>
   )
 }
 
-function Form({ i, mods, onClose, onDone }: { i: Partial<Insp>; mods: Modalidad[]; onClose(): void; onDone(): void }) {
+function Form({ i, mods, revistas, onClose, onDone }: { i: Partial<Insp>; mods: Modalidad[]; revistas: Modalidad[]; onClose(): void; onDone(): void }) {
   const [f, setF] = useState({
-    nombre: i.nombre ?? '', cuil: i.cuil ?? '', modalidad: i.modalidad_id ? String(i.modalidad_id) : '', situacion: i.situacion_revista ?? '',
+    nombre: i.nombre ?? '', cuil: i.cuil ?? '', modalidad: i.modalidad_id ? String(i.modalidad_id) : '', revista: i.revista_id ? String(i.revista_id) : '',
     cargo: i.cargo_base ?? '', toma: i.fecha_toma_posesion ?? '', telefono: i.telefono ?? '', email: i.email ?? '',
   })
   const [err, setErr] = useState<string | null>(null)
@@ -118,7 +120,8 @@ function Form({ i, mods, onClose, onDone }: { i: Partial<Insp>; mods: Modalidad[
   const submit = async (e: Event) => {
     e.preventDefault()
     if (!f.modalidad) return setErr('Elegí la modalidad')
-    const args = { p_nombre: f.nombre, p_cuil: f.cuil, p_modalidad: Number(f.modalidad), p_situacion: f.situacion, p_cargo: f.cargo, p_toma: f.toma, p_telefono: f.telefono, p_email: f.email }
+    if (!f.revista) return setErr('Elegí la situación de revista')
+    const args = { p_nombre: f.nombre, p_cuil: f.cuil, p_modalidad: Number(f.modalidad), p_revista: Number(f.revista), p_cargo: f.cargo, p_toma: f.toma, p_telefono: f.telefono, p_email: f.email }
     const { error } = i.id ? await supabase.rpc('inspector_editar', { p_id: i.id, ...args }) : await supabase.rpc('inspector_crear', args)
     if (error) return setErr(error.message)
     toast.ok(i.id ? 'Inspector actualizado' : 'Inspector creado (usuario: su CUIL, clave inicial 12345678)'); onDone()
@@ -139,7 +142,12 @@ function Form({ i, mods, onClose, onDone }: { i: Partial<Insp>; mods: Modalidad[
           </Lbl>
           <Lbl label="Correo (recuperación de clave)"><input class={FIELD} type="email" value={f.email} onInput={set('email')} maxLength={254} autocomplete="email" /></Lbl>
           <Lbl label="Teléfono"><input class={FIELD} type="tel" value={f.telefono} onInput={set('telefono')} maxLength={40} /></Lbl>
-          <Lbl label="Situación de revista"><input class={FIELD} value={f.situacion} onInput={set('situacion')} maxLength={80} /></Lbl>
+          <Lbl label="Situación de revista">
+            <select class={FIELD} value={f.revista} onChange={(e) => setF({ ...f, revista: e.currentTarget.value })} required>
+              <option value="">Elegir…</option>
+              {revistas.map((m) => <option value={m.id}>{m.nombre}</option>)}
+            </select>
+          </Lbl>
           <Lbl label="Cargo base"><input class={FIELD} value={f.cargo} onInput={set('cargo')} maxLength={120} /></Lbl>
           <Lbl label="Toma de posesión (dd/mm/aaaa)"><input class={FIELD} value={f.toma} onInput={set('toma')} maxLength={10} placeholder="dd/mm/aaaa" /></Lbl>
         </div>
