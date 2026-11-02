@@ -109,7 +109,8 @@ Deno.serve(async (req) => {
       const s = await loadSalida(salidaId)
       const name = safeName(String(body?.name ?? ''))
       const size = Number(body?.size)
-      const mime = clean(String(body?.mime || 'application/octet-stream')).slice(0, 120)
+      if (!/\.pdf$/i.test(name)) throw new HttpError(400, 'Solo se admiten archivos PDF')
+      const mime = 'application/pdf'
       if (!Number.isFinite(size) || size <= 0) throw new HttpError(400, 'El archivo está vacío')
       const token = await driveToken()
       const folder = await ensureFolder(admin, token, s)
@@ -137,6 +138,10 @@ Deno.serve(async (req) => {
       const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true&fields=id,name,size,mimeType,parents`, { headers: { Authorization: `Bearer ${token}` } })
       const f = await r.json()
       if (!r.ok || !f.parents?.includes(s.drive_folder_id)) throw new HttpError(400, 'El archivo no corresponde a esta salida')
+      if (f.mimeType !== 'application/pdf' || !/\.pdf$/i.test(f.name)) {
+        await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+        throw new HttpError(400, 'Solo se admiten archivos PDF')
+      }
       const { error } = await admin.from('salida_archivos').insert({ salida_id: salidaId, nombre: f.name, mime: f.mimeType, bytes: Number(f.size ?? 0), drive_file_id: f.id })
       if (error) throw new HttpError(500, 'No se pudo registrar el archivo')
       return json({ ok: true })
@@ -154,6 +159,8 @@ Deno.serve(async (req) => {
     if (action === 'send') {
       await requireOwner(salidaId)
       const s = await loadSalida(salidaId)
+      const { data: sent } = await admin.from('salidas').select('mail_enviado_at').eq('id', salidaId).maybeSingle()
+      if (sent?.mail_enviado_at) throw new HttpError(409, 'El correo de esta salida ya fue enviado')
       const { data: files } = await user.from('salida_archivos').select('nombre, mime, bytes, drive_file_id').eq('salida_id', salidaId).order('id')
       const { data: esc } = await admin.from('escuelas').select('email').eq('cue', s.cue).not('email', 'is', null).order('id').limit(1).maybeSingle()
       const cc = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((esc?.email ?? '').trim()) ? (esc!.email as string).trim() : undefined

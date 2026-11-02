@@ -36,6 +36,7 @@ export const PAGES: Record<string, ComponentType> = {
   perfil: Perfil,
   salidas: Salidas,
   'salidas-distrito': Salidas,
+  'salidas-areal': Salidas,
   planes: Planes,
   agrupamientos: Agrupamientos,
   escuelas: Escuelas,
