@@ -255,7 +255,12 @@ function Formulario({ item, cats, onClose, onDone }: { item: Partial<Labor>; cat
           </fieldset>
         )}
         <div>
-          <Lbl label="Probanza (cualquier tipo de archivo, sin límite)"><input class={FIELD} type="file" multiple onChange={(e) => { setNuevos([...nuevos, ...Array.from(e.currentTarget.files ?? [])]); e.currentTarget.value = '' }} /></Lbl>
+          <h3 class="mb-1 text-sm font-medium text-slate-700">Probanza</h3>
+          <label class="flex min-h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-3 text-center text-sm text-slate-600 hover:border-sky-400 hover:bg-sky-50">
+            <Icon name="download" class="size-6 rotate-180 text-slate-400" />
+            Tocá para elegir archivos (cualquier tipo, sin límite de cantidad ni peso)
+            <input type="file" multiple class="sr-only" onChange={(e) => { setNuevos([...nuevos, ...Array.from(e.currentTarget.files ?? [])]); e.currentTarget.value = '' }} />
+          </label>
           <ul class="mt-2 space-y-1 text-sm">
             {existentes.map((a) => <li class="flex items-center gap-2"><span class="min-w-0 flex-1 truncate">{a.nombre}</span><button type="button" class="text-red-600 hover:underline" onClick={() => quitar(a)}>Quitar</button></li>)}
             {nuevos.map((a, i) => <li class="flex items-center gap-2"><span class="min-w-0 flex-1 truncate">{a.name} <span class="text-xs text-slate-400">nuevo · {tam(a.size)}</span></span><button type="button" class="text-red-600 hover:underline" onClick={() => setNuevos(nuevos.filter((_, j) => j !== i))}>Sacar</button></li>)}
