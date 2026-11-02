@@ -6,6 +6,7 @@ import { Simulado } from './Simulado'
 import { Turnos } from './Turnos'
 import { Inspectores } from './Inspectores'
 import { Perfil } from './Perfil'
+import { Salidas } from './Salidas'
 import { Planes } from './Planes'
 import { Agrupamientos } from './Agrupamientos'
 import { Escuelas } from './Escuelas'
@@ -33,6 +34,8 @@ export const PAGES: Record<string, ComponentType> = {
   turnos: Turnos,
   inspectores: Inspectores,
   perfil: Perfil,
+  salidas: Salidas,
+  'salidas-distrito': Salidas,
   planes: Planes,
   agrupamientos: Agrupamientos,
   escuelas: Escuelas,

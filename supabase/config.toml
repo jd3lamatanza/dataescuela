@@ -1,2 +1,5 @@
 [functions.password-recovery]
 verify_jwt = false
+
+[functions.salidas-drive]
+verify_jwt = false

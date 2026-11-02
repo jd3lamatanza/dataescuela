@@ -1,6 +1,6 @@
 import type { IconName } from '../modules'
 
-const PATHS: Record<IconName | 'menu' | 'logout' | 'x' | 'grid' | 'mail' | 'sidebar' | 'plus' | 'dots' | 'edit' | 'trash' | 'list' | 'note' | 'external' | 'eye' | 'key' | 'lock' | 'unlock' | 'copy' | 'power' | 'download' | 'move' | 'ban' | 'calendar' | 'bus' | 'flag' | 'chevl' | 'chevr', string> = {
+const PATHS: Record<IconName | 'menu' | 'logout' | 'x' | 'grid' | 'mail' | 'sidebar' | 'plus' | 'dots' | 'edit' | 'trash' | 'list' | 'note' | 'external' | 'eye' | 'key' | 'lock' | 'unlock' | 'copy' | 'power' | 'download' | 'move' | 'ban' | 'calendar' | 'flag' | 'chevl' | 'chevr', string> = {
   org: 'M9 3h6v5H9V3ZM3 16h6v5H3v-5Zm12 0h6v5h-6v-5ZM12 8v4M6 16v-4h12v4',
   home: 'm2.25 12 8.955-8.955a1.5 1.5 0 0 1 2.09 0L22.25 12M4.5 9.75V21h5v-6h5v6h5V9.75',
   users: 'M15 19.13a9.4 9.4 0 0 0 4.12-.9 4 4 0 0 0-7.1-2.6M15 19.13V19.13a8 8 0 0 1-.01.4A12 12 0 0 1 8.5 21c-2.4 0-4.65-.7-6.5-1.87v-.1a6.4 6.4 0 0 1 11.96-3.2M12 7a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Zm8.5 2a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z',

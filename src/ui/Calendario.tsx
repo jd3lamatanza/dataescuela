@@ -23,7 +23,7 @@ const COLORS: Record<string, { dot: string; chip: string; card: string }> = {
   amber: { dot: 'bg-amber-500', chip: 'bg-amber-100 text-amber-800', card: 'border-amber-200 bg-amber-50 text-amber-700' },
   slate: { dot: 'bg-slate-500', chip: 'bg-slate-100 text-slate-800', card: 'border-slate-200 bg-slate-50 text-slate-700' },
 }
-const col = (c?: string) => COLORS[c ?? ''] ?? COLORS.slate
+export const col = (c?: string) => COLORS[c ?? ''] ?? COLORS.slate
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const key = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`

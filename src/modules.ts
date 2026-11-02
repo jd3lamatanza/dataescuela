@@ -11,7 +11,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const BRAND = { name: 'DataEscuela v2', org: 'Jefatura Distrital 3 - La Matanza' } as const
 
-export type IconName = 'home' | 'users' | 'school' | 'map' | 'chart' | 'building' | 'settings' | 'bell' | 'search' | 'check' | 'alert' | 'shield' | 'transfer' | 'login' | 'route' | 'list' | 'clock' | 'book' | 'layers' | 'clipboard' | 'org'
+export type IconName = 'home' | 'users' | 'school' | 'map' | 'chart' | 'building' | 'settings' | 'bell' | 'search' | 'check' | 'alert' | 'shield' | 'transfer' | 'login' | 'route' | 'list' | 'clock' | 'book' | 'layers' | 'clipboard' | 'org' | 'bus'
 
 export interface AppModule {
   id: string
@@ -47,6 +47,8 @@ export const MODULES: readonly AppModule[] = [
   { id: 'plantas', label: 'Plantas', path: '/plantas', icon: 'org', roles: ['distrital'], primary: true },
   { id: 'matriculas', label: 'Matrícula', path: '/matriculas', icon: 'chart', roles: ['distrital'], primary: true },
   { id: 'usuarios', label: 'Usuarios', path: '/usuarios', icon: 'users', roles: ['admin'], primary: true },
+  { id: 'salidas', label: 'Salida Educativa', path: '/salidas', icon: 'bus', roles: ['escolar'], primary: true },
+  { id: 'salidas-distrito', label: 'Salida Educativa', path: '/salidas-distrito', icon: 'bus', roles: ['distrital'], primary: true },
   { id: 'perfil', label: 'Mi perfil', path: '/perfil', icon: 'users', roles: ['distrital'], userMenu: true },
 ]
 
