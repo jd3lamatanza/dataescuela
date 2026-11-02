@@ -1,6 +1,6 @@
 import type { IconName } from '../modules'
 
-const PATHS: Record<IconName | 'menu' | 'logout' | 'x' | 'grid' | 'mail' | 'sidebar' | 'plus' | 'dots' | 'edit' | 'trash' | 'list' | 'note' | 'external' | 'eye' | 'key' | 'lock' | 'unlock' | 'copy' | 'power' | 'download' | 'move' | 'ban', string> = {
+const PATHS: Record<IconName | 'menu' | 'logout' | 'x' | 'grid' | 'mail' | 'sidebar' | 'plus' | 'dots' | 'edit' | 'trash' | 'list' | 'note' | 'external' | 'eye' | 'key' | 'lock' | 'unlock' | 'copy' | 'power' | 'download' | 'move' | 'ban' | 'calendar' | 'bus' | 'flag' | 'chevl' | 'chevr', string> = {
   org: 'M9 3h6v5H9V3ZM3 16h6v5H3v-5Zm12 0h6v5h-6v-5ZM12 8v4M6 16v-4h12v4',
   home: 'm2.25 12 8.955-8.955a1.5 1.5 0 0 1 2.09 0L22.25 12M4.5 9.75V21h5v-6h5v6h5V9.75',
   users: 'M15 19.13a9.4 9.4 0 0 0 4.12-.9 4 4 0 0 0-7.1-2.6M15 19.13V19.13a8 8 0 0 1-.01.4A12 12 0 0 1 8.5 21c-2.4 0-4.65-.7-6.5-1.87v-.1a6.4 6.4 0 0 1 11.96-3.2M12 7a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Zm8.5 2a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z',
@@ -42,10 +42,16 @@ const PATHS: Record<IconName | 'menu' | 'logout' | 'x' | 'grid' | 'mail' | 'side
   download: 'M12 4v11m0 0-4-4m4 4 4-4M4 20h16',
   move: 'M5 12h14m0 0-5-5m5 5-5 5',
   ban: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM5.6 5.6l12.8 12.8',
+  calendar: 'M7 3v3m10-3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z',
+  bus: 'M5 4h14a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1ZM4 11h16M7 17v2m10-2v2M8 14h.01M16 14h.01',
+  flag: 'M5 21V4m0 0h11l-2 4 2 4H5',
+  chevl: 'm15 6-6 6 6 6',
+  chevr: 'm9 6 6 6-6 6',
   shield: 'M12 3 4 6v6c0 4.5 3.4 8.4 8 9 4.6-.6 8-4.5 8-9V6l-8-3Zm-3 9 2.5 2.5L15.5 10',
 }
 
 export type IconKey = keyof typeof PATHS
+export const iconOr = (name: string | null | undefined, fallback: IconKey = 'calendar'): IconKey => (name && name in PATHS ? (name as IconKey) : fallback)
 export const Icon = ({ name, class: cls = 'size-5' }: { name: IconKey; class?: string }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class={cls} aria-hidden="true">
     <path d={PATHS[name]} />

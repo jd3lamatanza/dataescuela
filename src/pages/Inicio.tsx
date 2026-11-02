@@ -3,6 +3,7 @@ import { ROLE_LABELS, modulesFor } from '../modules'
 import { Card, PageHeader } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 import { href } from '../lib/router'
+import { Calendario } from '../ui/Calendario'
 
 export function Inicio() {
   const { user } = useAuth()
@@ -11,6 +12,8 @@ export function Inicio() {
   return (
     <>
       <PageHeader title={`Hola, ${user.name}`} subtitle={`Rol: ${ROLE_LABELS[user.role]}`} />
+      <section aria-label="Calendario"><Calendario /></section>
+      <h2 class="mb-2 mt-6 text-sm font-semibold uppercase text-slate-500">Módulos</h2>
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {mods.map((m) => (
           <a key={m.id} href={href(m.path)} class="group">

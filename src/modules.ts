@@ -28,7 +28,7 @@ export interface AppModule {
 
 // Registro único de módulos. Agregar un módulo = una línea aquí + su página en src/pages/registry.ts
 export const MODULES: readonly AppModule[] = [
-  { id: 'inicio', label: 'Inicio', path: '/', icon: 'home', roles: ROLES, primary: true },
+  { id: 'inicio', label: 'Home', path: '/', icon: 'home', roles: ROLES, primary: true },
   { id: 'articulacion', label: 'Articulación', path: '/articulacion', icon: 'transfer', roles: ['escolar'], primary: true },
   { id: 'areal', label: 'Articulación', path: '/areal', icon: 'transfer', roles: ['areal'], primary: true },
   { id: 'matricula-areal', label: 'Matrícula', path: '/matricula-areal', icon: 'chart', roles: ['areal'], primary: true },
