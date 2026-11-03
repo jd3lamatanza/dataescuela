@@ -6,3 +6,6 @@ verify_jwt = false
 
 [functions.labores-drive]
 verify_jwt = false
+
+[functions.eav-drive]
+verify_jwt = false

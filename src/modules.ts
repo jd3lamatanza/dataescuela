@@ -55,6 +55,7 @@ export const MODULES: readonly AppModule[] = [
   { id: 'labores', label: 'Labores', path: '/labores', icon: 'clipboard', roles: ['areal'], primary: true },
   { id: 'labores-distrito', label: 'Labores', path: '/labores-distrito', icon: 'clipboard', roles: ['distrital'], primary: true },
   { id: 'eav', label: 'Escuela de Verano', path: '/eav', icon: 'sun', roles: ['distrital'], primary: true },
+  { id: 'eav-escolar', label: 'Escuela de Verano', path: '/eav-escolar', icon: 'sun', roles: ['escolar'], primary: true },
   { id: 'perfil', label: 'Mi perfil', path: '/perfil', icon: 'users', roles: ['distrital'], userMenu: true },
 ]
 

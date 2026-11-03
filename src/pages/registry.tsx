@@ -10,6 +10,7 @@ import { Agenda } from './Agenda'
 import { Salidas } from './Salidas'
 import { Labores } from './Labores'
 import { EscuelaVerano } from './EscuelaVerano'
+import { EscuelaVeranoEscolar } from './EscuelaVeranoEscolar'
 import { Planes } from './Planes'
 import { Agrupamientos } from './Agrupamientos'
 import { Escuelas } from './Escuelas'
@@ -41,6 +42,7 @@ export const PAGES: Record<string, ComponentType> = {
   'agenda-distrito': Agenda,
   labores: Labores,
   eav: EscuelaVerano,
+  'eav-escolar': EscuelaVeranoEscolar,
   'labores-distrito': Labores,
   salidas: Salidas,
   'salidas-distrito': Salidas,
