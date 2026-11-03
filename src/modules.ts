@@ -11,7 +11,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const BRAND = { name: 'DataEscuela v2', org: 'Jefatura Distrital 3 - La Matanza' } as const
 
-export type IconName = 'home' | 'users' | 'school' | 'map' | 'chart' | 'building' | 'settings' | 'bell' | 'search' | 'check' | 'alert' | 'shield' | 'transfer' | 'login' | 'route' | 'list' | 'clock' | 'book' | 'layers' | 'clipboard' | 'org' | 'bus' | 'calendar'
+export type IconName = 'home' | 'users' | 'school' | 'map' | 'chart' | 'building' | 'settings' | 'bell' | 'search' | 'check' | 'alert' | 'shield' | 'transfer' | 'login' | 'route' | 'list' | 'clock' | 'book' | 'layers' | 'clipboard' | 'org' | 'bus' | 'calendar' | 'sun'
 
 export interface AppModule {
   id: string
@@ -54,6 +54,7 @@ export const MODULES: readonly AppModule[] = [
   { id: 'agenda-distrito', label: 'Agenda Anticipada', path: '/agenda-distrito', icon: 'calendar', roles: ['distrital'], primary: true },
   { id: 'labores', label: 'Labores', path: '/labores', icon: 'clipboard', roles: ['areal'], primary: true },
   { id: 'labores-distrito', label: 'Labores', path: '/labores-distrito', icon: 'clipboard', roles: ['distrital'], primary: true },
+  { id: 'eav', label: 'Escuela de Verano', path: '/eav', icon: 'sun', roles: ['distrital'], primary: true },
   { id: 'perfil', label: 'Mi perfil', path: '/perfil', icon: 'users', roles: ['distrital'], userMenu: true },
 ]
 
