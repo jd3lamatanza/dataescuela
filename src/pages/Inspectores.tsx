@@ -8,6 +8,21 @@ interface Insp {
   situacion_revista: string | null; revista_id: number | null; cargo_base: string | null; fecha_toma_posesion: string | null; telefono: string | null; email: string | null
   escuelas_asignadas: string[]; activo: boolean
 }
+const DIA = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+const dias = (iso: string) => Math.round((Date.parse(DIA.format(new Date())) - Date.parse(DIA.format(new Date(iso)))) / 864e5)
+
+/** Último acceso en lenguaje natural, con un indicador de color según la antigüedad. */
+function Acceso({ iso }: { iso?: string | null }) {
+  const d = iso ? Math.max(0, dias(iso)) : null
+  const [txt, dot, chip] = d === null ? ['Nunca', 'bg-slate-300', 'bg-slate-100 text-slate-600']
+    : d === 0 ? ['Hoy', 'bg-emerald-500', 'bg-emerald-50 text-emerald-800']
+    : d === 1 ? ['Ayer', 'bg-emerald-400', 'bg-emerald-50 text-emerald-700']
+    : d <= 7 ? [`Hace ${d} días`, 'bg-sky-500', 'bg-sky-50 text-sky-800']
+    : d <= 30 ? [`Hace ${d} días`, 'bg-amber-500', 'bg-amber-50 text-amber-800']
+    : [`Hace ${d} días`, 'bg-rose-500', 'bg-rose-50 text-rose-800']
+  return <span title={iso ? new Date(iso).toLocaleString('es-AR') : 'Nunca ingresó'} class={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${chip}`}><span class={`size-2 rounded-full ${dot}`} />{txt}</span>
+}
+
 interface Modalidad { id: number; nombre: string }
 
 export function Inspectores() {
@@ -17,15 +32,17 @@ export function Inspectores() {
   const [edit, setEdit] = useState<Partial<Insp> | null>(null)
   const [asignar, setAsignar] = useState<Insp | null>(null)
   const { data, loading, error, reload } = useAsync(async () => {
-    const [i, m, r] = await Promise.all([
+    const [i, m, r, a] = await Promise.all([
       supabase.from('inspectores').select('*').order('nombre'),
       supabase.from('modalidades_inspeccion').select('id, nombre').eq('activo', true).order('orden'),
       supabase.from('catalogos').select('id, nombre').eq('coleccion', 'situacion_revista').eq('activo', true).order('orden'),
+      supabase.rpc('inspectores_acceso'),
     ])
     if (i.error) throw i.error
     if (m.error) throw m.error
     if (r.error) throw r.error
-    return { insp: i.data as Insp[], mods: m.data as Modalidad[], revistas: r.data as Modalidad[] }
+    const acceso = new Map(((a.data ?? []) as { user_id: string; ultimo_acceso: string | null }[]).map((x) => [x.user_id, x.ultimo_acceso]))
+    return { acceso, insp: i.data as Insp[], mods: m.data as Modalidad[], revistas: r.data as Modalidad[] }
   })
 
   const run = async (p: PromiseLike<{ error: { message: string } | null }>, ok: string) => {
@@ -77,7 +94,7 @@ export function Inspectores() {
           <>
             <div class="-m-4 hidden overflow-x-auto md:block">
               <table class="w-full text-left text-sm">
-                <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="px-3 py-2">Nombre</th><th class="px-3 py-2">CUIL</th><th class="px-3 py-2">Modalidad</th><th class="px-3 py-2">Escuelas</th><th class="px-3 py-2">Estado</th><th class="w-12 px-3 py-2" /></tr></thead>
+                <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="px-3 py-2">Nombre</th><th class="px-3 py-2">CUIL</th><th class="px-3 py-2">Modalidad</th><th class="px-3 py-2">Escuelas</th><th class="px-3 py-2">Último acceso</th><th class="px-3 py-2">Estado</th><th class="w-12 px-3 py-2" /></tr></thead>
                 <tbody class="divide-y divide-slate-100">
                   {rows.map((i) => (
                     <tr key={i.id} class="hover:bg-slate-50">
@@ -85,6 +102,7 @@ export function Inspectores() {
                       <td class="whitespace-nowrap px-3 py-2.5 font-mono text-xs">{i.cuil}</td>
                       <td class="px-3 py-2.5 text-xs">{nombreMod(i)}</td>
                       <td class="px-3 py-2.5 text-xs">{i.escuelas_asignadas.length}</td>
+                      <td class="px-3 py-2.5"><Acceso iso={i.user_id ? data?.acceso.get(i.user_id) : null} /></td>
                       <td class="px-3 py-2.5">{badges(i)}</td>
                       <td class="px-3 py-2.5"><RowMenu items={menu(i)} /></td>
                     </tr>
@@ -99,7 +117,7 @@ export function Inspectores() {
                     <div class="min-w-0"><p class="font-semibold">{i.nombre ?? '—'}</p><p class="text-xs text-slate-500"><span class="font-mono">{i.cuil}</span> · {nombreMod(i)} · {i.escuelas_asignadas.length} escuelas</p></div>
                     <RowMenu items={menu(i)} />
                   </div>
-                  {badges(i)}
+                  <span class="flex flex-wrap items-center gap-1">{badges(i)}<Acceso iso={i.user_id ? data?.acceso.get(i.user_id) : null} /></span>
                 </li>
               ))}
             </ul>
