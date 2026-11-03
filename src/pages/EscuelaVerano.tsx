@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAsync, useDebounced } from '../lib/hooks'
-import { setParams, useRoute } from '../lib/router'
+import { go, setParams, useRoute } from '../lib/router'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Modal, PAGE_SIZE, PageHeader, Pager, RowMenu, Spinner, TabBar, Toggle, confirmar, toast, type TabItem } from '../ui/kit'
 
 const TABS = [
@@ -73,7 +73,14 @@ function Escuelas() {
                   <p class="font-mono text-xs text-slate-500">{e.clave} · CUE {e.cue}</p>
                   <p class="text-xs text-slate-600">{[e.nivel, e.modalidad, e.localidad].filter(Boolean).join(' · ')}</p>
                 </div>
-                <Toggle checked onChange={() => quitar(e)} label="Escuela de verano" />
+                <div class="flex shrink-0 items-center gap-2">
+                  <Toggle checked onChange={() => quitar(e)} label="Escuela de verano" />
+                  <RowMenu items={[
+                    { label: 'Ficha de Escuela', onClick: () => go(`/escuelas?e=${e.id}&from=eav`) },
+                    { label: 'Cargos', onClick: () => toast.info('La lista de cargos todavía no está implementada.') },
+                    { label: 'Inscriptos', onClick: () => toast.info('La lista de inscriptos todavía no está implementada.') },
+                  ]} />
+                </div>
               </li>
             ))}
           </ul>

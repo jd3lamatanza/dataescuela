@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useAsync, useDebounced } from '../lib/hooks'
-import { setParams, useRoute } from '../lib/router'
+import { go, setParams, useRoute } from '../lib/router'
 import { Alert, Card, EmptyState, FIELD, PageHeader, Pager, PAGE_SIZE, RowMenu, Spinner, BTN_SECONDARY, confirmar, toast } from '../ui/kit'
 import { Equipo, TIPOS, type TipoEquipo } from '../ui/Equipo'
 import { FichaEscuela, nombreEscuela } from '../ui/FichaEscuela'
@@ -17,7 +17,7 @@ const VISTAS = [{ id: 'ficha', label: 'Ficha de Escuela' }, ...(Object.keys(TIPO
 export function Escuelas() {
   const { params } = useRoute()
   const eid = Number(params.get('e')) || 0
-  return eid ? <Detalle id={eid} vista={params.get('v') ?? 'ficha'} /> : <Listado />
+  return eid ? <Detalle id={eid} vista={params.get('v') ?? 'ficha'} from={params.get('from')} /> : <Listado />
 }
 
 function Listado() {
@@ -122,7 +122,7 @@ function Listado() {
   )
 }
 
-function Detalle({ id, vista }: { id: number; vista: string }) {
+function Detalle({ id, vista, from }: { id: number; vista: string; from: string | null }) {
   const { data, error } = useAsync(async () => {
     const r = await supabase.from('escuelas').select('id,clave,cue,tipo,numero,nombre').eq('id', id).maybeSingle()
     if (r.error) throw r.error
@@ -130,7 +130,7 @@ function Detalle({ id, vista }: { id: number; vista: string }) {
     return r.data
   }, [id])
   const v = VISTAS.some((x) => x.id === vista) ? vista : 'ficha'
-  const volver = () => setParams({ e: null, v: null })
+  const volver = () => from === 'eav' ? go('/eav') : setParams({ e: null, v: null, from: null })
   return (
     <>
       <button class="inline-flex min-h-11 items-center text-sm font-medium text-blue-700 hover:underline" onClick={volver}>← Volver al listado</button>
