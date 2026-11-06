@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../lib/auth'
 import { useAsync } from '../lib/hooks'
 import { descargar, descargarPdf, XLSX_MIME } from '../lib/download'
 import { diferencia, diferenciaPba, fechaPba, leerMatriculaPba, numeroPba, type MatriculaPba } from '../lib/estadisticaPba'
@@ -39,6 +40,8 @@ async function cargar() {
 }
 
 export function Estadistica() {
+  const { user } = useAuth()
+  const distrito = user?.role === 'distrital'
   const { data, loading, error, reload } = useAsync(cargar)
   const [q, setQ] = useState('')
   const [orden, setOrden] = useState('clave')
@@ -68,12 +71,12 @@ export function Estadistica() {
       if (!data) throw new Error('Esperá a que termine la carga de escuelas.')
       if (!archivo.name.toLowerCase().endsWith('.csv')) throw new Error('Seleccioná un archivo CSV descargado de ABC.')
       const doc = await leerMatriculaPba(await archivo.text())
-      const asignadas = doc.filas.filter((f) => data.claves.has(f.clave))
-      if (!asignadas.length) throw new Error('El archivo no contiene escuelas asignadas a tu área.')
-      const r = await supabase.rpc('estadistica_pba_importar', { p_fecha: doc.fecha, p_filas: asignadas })
+      const escuelas = doc.filas.filter((f) => data.claves.has(f.clave))
+      if (!escuelas.length) throw new Error('El archivo no contiene escuelas del padrón distrital.')
+      const r = await supabase.rpc('estadistica_pba_importar', { p_fecha: doc.fecha, p_filas: escuelas })
       if (r.error) throw r.error
       const total = r.data as { guardadas: number; anteriores: number }
-      setResultado(`Fecha del archivo: ${fechaPba(doc.fecha)}. ${total.guardadas} escuelas guardadas; ${total.anteriores} conservaron datos más recientes. ${doc.filas.length - asignadas.length} filas fuera de tu área no se importaron.`)
+      setResultado(`Fecha del archivo: ${fechaPba(doc.fecha)}. ${total.guardadas} escuelas guardadas; ${total.anteriores} conservaron datos más recientes. ${doc.filas.length - escuelas.length} filas fuera del padrón distrital no se importaron.`)
       toast.ok('Importación finalizada')
       setPagina(1)
       reload()
@@ -105,17 +108,19 @@ export function Estadistica() {
 
   return (
     <>
-      <PageHeader title="Estadística" subtitle="Información provincial de tus escuelas asignadas" />
+      <PageHeader title="Estadística" subtitle={distrito ? 'Información provincial de las escuelas del distrito' : 'Información provincial de tus escuelas asignadas'} />
       <TabBar label="Estadística" items={TABS} active="pba" onChange={() => {}} />
-      <Card title="Matrícula PBA" action={<label class={`${BTN_PRIMARY} cursor-pointer focus-within:ring-2 focus-within:ring-sky-500 focus-within:ring-offset-2 ${importando || !data ? 'pointer-events-none opacity-50' : ''}`}>
+      <Card title="Matrícula PBA" action={distrito ? <label class={`${BTN_PRIMARY} cursor-pointer focus-within:ring-2 focus-within:ring-sky-500 focus-within:ring-offset-2 ${importando || !data ? 'pointer-events-none opacity-50' : ''}`}>
         {importando ? 'Importando…' : 'Importar CSV de ABC'}
         <input type="file" accept=".csv,text/csv" class="sr-only" disabled={importando || !data} onChange={(e) => {
           const archivo = e.currentTarget.files?.[0]
           e.currentTarget.value = ''
           if (archivo) void importar(archivo)
         }} />
-      </label>}>
-        <p class="text-sm text-slate-600">Se actualizan solo tus escuelas asignadas. Los datos más recientes y las escuelas ausentes del archivo se conservan.</p>
+      </label> : undefined}>
+        <p class="text-sm text-slate-600">{distrito
+          ? 'Se actualizan solo las escuelas del padrón distrital. Los datos más recientes y las escuelas ausentes del archivo se conservan.'
+          : 'Vista de solo lectura de tus escuelas asignadas. El distrito actualiza los datos mediante la importación de ABC.'}</p>
         {resultado && <div class="mt-3"><Alert tone="success">{resultado}</Alert></div>}
       </Card>
       {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
@@ -132,7 +137,7 @@ export function Estadistica() {
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('xlsx')}>Excel</button>
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pdf')}>PDF</button>
         </div>}>
-          {!filas.length ? <EmptyState title="Sin datos" text={q ? 'Probá con otra búsqueda.' : 'Importá un CSV de ABC para comenzar.'} /> : <>
+          {!filas.length ? <EmptyState title="Sin datos" text={q ? 'Probá con otra búsqueda.' : distrito ? 'Importá un CSV de ABC para comenzar.' : 'Todavía no hay datos para tus escuelas asignadas.'} /> : <>
             <div class="-m-4 overflow-x-auto">
               <table class="w-full text-left text-sm">
                 <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr>
