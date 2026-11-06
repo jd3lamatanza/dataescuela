@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { diferencia, diferenciaPba, leerMatriculaPba } from '../src/lib/estadisticaPba.ts'
+import { coincideAgrupamiento, diferencia, diferenciaPba, leerMatriculaPba } from '../src/lib/estadisticaPba.ts'
 
 const cabecera = '"Clave del establecimiento";"CUE";"Nombre del establecimiento";"Matrícula activa 2026";"Matrícula inscripta 2025";"Matrícula relevamiento inicial 2026"'
 const csv = (filas, fecha = '05-11-2026') => `\ufeff""\n"Matrícula activa al ${fecha} - LA MATANZA-Inicial"\n""\n${cabecera}\n${filas}\n\nNota de confidencialidad`
@@ -27,4 +27,13 @@ test('diferencias usan la referencia y nunca dividen por cero', () => {
   assert.deepEqual(diferencia(20, 0), { valor: 20, porcentaje: null })
   assert.deepEqual(diferencia(null, 10), { valor: null, porcentaje: null })
   assert.match(diferenciaPba(20, 0), /sin porcentaje/)
+})
+
+test('agrupamiento incluye cualquier código de la clave y conserva todos sin filtro', () => {
+  const codigos = new Set(['EP', 'JI'])
+  assert.equal(coincideAgrupamiento(codigos, new Set(['JI'])), true)
+  assert.equal(coincideAgrupamiento(codigos, new Set(['ES'])), false)
+  assert.equal(coincideAgrupamiento(undefined, new Set(['JI'])), false)
+  assert.equal(coincideAgrupamiento(undefined, null), true)
+  assert.equal(coincideAgrupamiento(codigos, new Set()), false)
 })

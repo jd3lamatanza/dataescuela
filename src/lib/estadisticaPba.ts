@@ -52,6 +52,11 @@ export function diferencia(actual: number | null, base: number | null) {
   return { valor, porcentaje: base === 0 ? null : valor * 100 / base }
 }
 
+export function coincideAgrupamiento(codigosEscuela: ReadonlySet<string> | undefined, codigosGrupo: ReadonlySet<string> | null) {
+  if (!codigosGrupo) return true
+  return codigosEscuela ? [...codigosEscuela].some((codigo) => codigosGrupo.has(codigo)) : false
+}
+
 export const fechaPba = (fecha: string) => fecha.split('-').reverse().join('/')
 export const numeroPba = (n: number | null) => n === null ? 'Sin dato' : n.toLocaleString('es-AR')
 export const diferenciaPba = (actual: number | null, base: number | null) => {

@@ -4,7 +4,7 @@ import { useAuth } from '../lib/auth'
 import { useAsync } from '../lib/hooks'
 import { descargar, XLSX_MIME } from '../lib/download'
 import { buildPdf } from '../lib/export'
-import { diferencia, diferenciaPba, fechaPba, leerMatriculaPba, numeroPba, type MatriculaPba } from '../lib/estadisticaPba'
+import { coincideAgrupamiento, diferencia, diferenciaPba, fechaPba, leerMatriculaPba, numeroPba, type MatriculaPba } from '../lib/estadisticaPba'
 import { BRAND } from '../modules'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, PAGE_SIZE, PageHeader, Pager, Spinner, TabBar, toast, type TabItem } from '../ui/kit'
 import { Icon } from '../ui/Icon'
@@ -13,6 +13,8 @@ interface Escuela { clave: string | null; cue: string; codigo: string | null; nu
 interface Registro extends MatriculaPba { fecha: string }
 interface Fila extends Registro { escuela: Escuela }
 interface Inspector { id: number; nombre: string | null; cuil: string; escuelas_asignadas: string[] }
+interface Grupo { id: number; nombre: string }
+interface CodigoGrupo { agrupamiento_id: number; codigo: string }
 const TABS: TabItem[] = [{ id: 'pba', label: 'Matrícula PBA', icon: 'chart', color: 'cyan' }]
 const nombre = (e: Escuela) => [e.codigo, e.numero].filter(Boolean).join(' ') || e.nombre || e.cue
 const mensaje = (e: unknown) => e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e)
@@ -21,7 +23,21 @@ async function cargar(distrito: boolean) {
   const escuelas: Escuela[] = []
   const registros: Registro[] = []
   const inspectores: Inspector[] = []
+  const grupos: Grupo[] = []
+  const codigosGrupo: CodigoGrupo[] = []
   const size = 1000
+  for (let desde = 0; ; desde += size) {
+    const r = await supabase.from('agrupamientos_matricula').select('id,nombre').order('nombre').order('id').range(desde, desde + size - 1)
+    if (r.error) throw r.error
+    grupos.push(...(r.data as Grupo[]))
+    if (r.data.length < size) break
+  }
+  for (let desde = 0; ; desde += size) {
+    const r = await supabase.from('agrupamiento_codigos').select('agrupamiento_id,codigo').order('agrupamiento_id').order('codigo').range(desde, desde + size - 1)
+    if (r.error) throw r.error
+    codigosGrupo.push(...(r.data as CodigoGrupo[]))
+    if (r.data.length < size) break
+  }
   if (distrito) {
     for (let desde = 0; ; desde += size) {
       const r = await supabase.from('inspectores').select('id,nombre,cuil,escuelas_asignadas').order('nombre').order('id').range(desde, desde + size - 1)
@@ -43,13 +59,21 @@ async function cargar(distrito: boolean) {
     if (r.data.length < size) break
   }
   const porClave = new Map<string, Escuela>()
-  for (const e of escuelas) if (e.clave && !porClave.has(e.clave)) porClave.set(e.clave, e)
+  const codigosPorClave = new Map<string, Set<string>>()
+  for (const e of escuelas) {
+    if (!e.clave) continue
+    if (!porClave.has(e.clave)) porClave.set(e.clave, e)
+    if (e.codigo) {
+      if (!codigosPorClave.has(e.clave)) codigosPorClave.set(e.clave, new Set())
+      codigosPorClave.get(e.clave)!.add(e.codigo)
+    }
+  }
   const filas: Fila[] = []
   for (const r of registros) {
     const escuela = porClave.get(r.clave)
     if (escuela) filas.push({ ...r, escuela })
   }
-  return { claves: porClave, filas, inspectores }
+  return { claves: porClave, filas, inspectores, grupos, codigosGrupo, codigosPorClave }
 }
 
 export function Estadistica() {
@@ -61,6 +85,7 @@ function EstadisticaVista({ distrito }: { distrito: boolean }) {
   const { data, loading, error, reload } = useAsync(() => cargar(distrito), [distrito])
   const [q, setQ] = useState('')
   const [inspector, setInspector] = useState('')
+  const [grupo, setGrupo] = useState('')
   const [orden, setOrden] = useState('clave')
   const [pagina, setPagina] = useState(1)
   const [importando, setImportando] = useState(false)
@@ -69,8 +94,10 @@ function EstadisticaVista({ distrito }: { distrito: boolean }) {
     const buscar = q.trim().toLocaleLowerCase('es-AR')
     const seleccion = inspector && distrito ? data?.inspectores.find((i) => String(i.id) === inspector) : undefined
     const asignadas = inspector && distrito ? new Set(seleccion?.escuelas_asignadas ?? []) : null
+    const codigos = grupo ? new Set(data?.codigosGrupo.filter((c) => String(c.agrupamiento_id) === grupo).map((c) => c.codigo) ?? []) : null
     const lista = (data?.filas ?? []).filter((r) =>
       (!asignadas || asignadas.has(r.clave)) &&
+      coincideAgrupamiento(data?.codigosPorClave.get(r.clave), codigos) &&
       [r.clave, r.escuela.cue, r.escuela.codigo, r.escuela.numero, r.escuela.nombre, r.escuela.localidad].join(' ').toLocaleLowerCase('es-AR').includes(buscar))
     const valor = (r: Fila) => orden === 'activa-desc' || orden === 'activa-asc' ? r.activa
       : orden === 'anterior' ? (diferencia(r.activa, r.anterior).valor === null ? null : Math.abs(diferencia(r.activa, r.anterior).valor!))
@@ -82,7 +109,7 @@ function EstadisticaVista({ distrito }: { distrito: boolean }) {
       if (y === null) return -1
       return (orden === 'activa-asc' || orden === 'disminucion' ? x - y : y - x) || a.clave.localeCompare(b.clave)
     })
-  }, [data, q, orden, inspector, distrito])
+  }, [data, q, orden, inspector, distrito, grupo])
 
   const importar = async (archivo: File) => {
     setImportando(true)
@@ -122,9 +149,10 @@ function EstadisticaVista({ distrito }: { distrito: boolean }) {
         const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
         if (!respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
         const seleccionado = distrito && inspector ? data?.inspectores.find((i) => String(i.id) === inspector) : undefined
+        const agrupamiento = data?.grupos.find((g) => String(g.id) === grupo)
         const pdf = await buildPdf({
           title: 'Matrícula PBA',
-          subtitle: `${filas.length} escuelas · ${seleccionado ? `Inspector: ${seleccionado.nombre || seleccionado.cuil}` : 'datos filtrados'}`,
+          subtitle: `${filas.length} escuelas · ${[seleccionado && `Inspector: ${seleccionado.nombre || seleccionado.cuil}`, agrupamiento && `Agrupamiento: ${agrupamiento.nombre}`].filter(Boolean).join(' · ') || 'datos filtrados'}`,
           headers: ['Clave', 'CUE', 'Escuela', 'Fecha', 'Activa', 'Anterior', 'Inicial', 'Dif. inicial', 'Dif. anterior'],
           widths: [13, 12, 18, 12, 8, 8, 8, 17, 17],
           rows: filas.map((r) => [r.clave, r.escuela.cue, nombre(r.escuela), fechaPba(r.fecha),
@@ -158,12 +186,16 @@ function EstadisticaVista({ distrito }: { distrito: boolean }) {
       </Card>
       {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
       {loading && !data ? <Spinner /> : data && <>
-        <div class={`mt-4 grid gap-2 ${distrito ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+        <div class={`mt-4 grid gap-2 ${distrito ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3'}`}>
           <input class={FIELD} type="search" aria-label="Buscar escuela" placeholder="Buscar por escuela, clave, CUE o localidad" value={q} onInput={(e) => { setQ(e.currentTarget.value); setPagina(1) }} />
           {distrito && <select class={FIELD} aria-label="Filtrar por inspector" value={inspector} onChange={(e) => { setInspector(e.currentTarget.value); setPagina(1) }}>
             <option value="">Todos los inspectores</option>
             {data.inspectores.map((i) => <option key={i.id} value={i.id}>{i.nombre || i.cuil}</option>)}
           </select>}
+          <select class={FIELD} aria-label="Filtrar por agrupamiento de matrícula" value={grupo} onChange={(e) => { setGrupo(e.currentTarget.value); setPagina(1) }}>
+            <option value="">Todos los agrupamientos</option>
+            {data.grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+          </select>
           <select class={FIELD} aria-label="Ordenar escuelas" value={orden} onChange={(e) => { setOrden(e.currentTarget.value); setPagina(1) }}>
             <option value="clave">Ordenar por clave</option><option value="activa-desc">Mayor matrícula activa</option><option value="activa-asc">Menor matrícula activa</option>
             <option value="incremento">Mayor incremento vs. inicial</option><option value="disminucion">Mayor disminución vs. inicial</option><option value="anterior">Mayor diferencia absoluta vs. año anterior</option>
@@ -174,7 +206,7 @@ function EstadisticaVista({ distrito }: { distrito: boolean }) {
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('xlsx')}>Excel</button>
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pdf')}>PDF</button>
         </div>}>
-          {!filas.length ? <EmptyState title="Sin datos" text={q || inspector ? 'Probá con otros filtros.' : distrito ? 'Importá un CSV de ABC para comenzar.' : 'Todavía no hay datos para tus escuelas asignadas.'} /> : <>
+          {!filas.length ? <EmptyState title="Sin datos" text={q || inspector || grupo ? 'Probá con otros filtros.' : distrito ? 'Importá un CSV de ABC para comenzar.' : 'Todavía no hay datos para tus escuelas asignadas.'} /> : <>
             <div class="-m-4 overflow-x-auto">
               <table class="w-full text-left text-sm">
                 <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr>

@@ -119,8 +119,9 @@ export async function buildPdf(t: Table, options: PdfOptions = {}): Promise<Uint
   }
   page.drawText(latin(t.title), { x: M, y: y - 14, size: 15, font: bold, color: rgb(0.06, 0.15, 0.35) })
   y -= 30
-  page.drawText(latin(t.subtitle), { x: M, y: y - 2, size: 9, font, color: rgb(0.35, 0.4, 0.5) })
-  y -= 18
+  const subtitleLines = options.brand ? wrap(t.subtitle, font, 9, W - M * 2, 50) : [latin(t.subtitle)]
+  subtitleLines.forEach((line, i) => page.drawText(line, { x: M, y: y - 2 - i * 11, size: 9, font, color: rgb(0.35, 0.4, 0.5) }))
+  y -= 18 + (subtitleLines.length - 1) * 11
   header()
 
   for (const [rowIndex, row] of t.rows.entries()) {
