@@ -35,8 +35,8 @@ export function Estadistica() {
   const [tab, setTab] = useState('resumen')
   const distrito = user?.role === 'distrital'
   return <>
-    <PageHeader title="Estadística" subtitle={distrito ? 'Información provincial de las escuelas del distrito' : 'Información provincial de tus escuelas asignadas'} />
-    <TabBar label="Estadística" items={TABS} active={tab} onChange={setTab} />
+    <PageHeader title="Estadística" subtitle={distrito ? 'Información provincial de las escuelas del distrito' : 'Solo lectura · Información provincial de tus escuelas asignadas'} />
+    <TabBar label="Estadística" items={distrito ? TABS : TABS.map((item) => item.id === 'resumen' ? { ...item, label: 'Reporte Areal' } : item)} active={tab} onChange={setTab} />
     {tab === 'resumen' ? <ReporteDistrital key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'pba' ? <EstadisticaVista key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'fichas' ? <FichasInscripcion key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'salidas' ? <SalidasSinIngreso key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'sincierre' ? <MatriculaSinCierre key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'boletin' ? <BoletinDigital key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'asistencia' ? <AsistenciaEstadistica key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'comparados' ? <IndicadoresComparados key={`${user?.id}:${user?.role}`} distrito={distrito} /> : <DesempenoEstadistica key={`${user?.id}:${user?.role}`} distrito={distrito} />}
   </>
 }

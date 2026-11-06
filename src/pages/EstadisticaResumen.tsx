@@ -46,6 +46,7 @@ function Seccion({ titulo, fecha, vacio, children }: { titulo: string; fecha: st
 const Grafico = ({ t, children }: { t: string; children: ComponentChildren }) => <div class="rounded-lg border border-slate-100 p-3"><h4 class="mb-3 text-sm font-semibold text-slate-700">{t}</h4>{children}</div>
 
 export function ReporteDistrital({ distrito }: { distrito: boolean }) {
+  const titulo = distrito ? 'Reporte Distrital' : 'Reporte Areal'
   const { data, loading, error } = useAsync(() => cargarTodo(distrito), [distrito])
   const [q, setQ] = useState('')
   const [inspector, setInspector] = useState('')
@@ -122,7 +123,7 @@ export function ReporteDistrital({ distrito }: { distrito: boolean }) {
       const seleccionado = distrito && inspector ? data?.base.inspectores.find((i) => String(i.id) === inspector) : undefined
       const agrupamiento = data?.base.grupos.find((g) => String(g.id) === grupo)
       const filtros = [seleccionado && `Inspector: ${seleccionado.nombre || seleccionado.cuil}`, agrupamiento && `Agrupamiento: ${agrupamiento.nombre}`, escuela && `Escuela: ${escuela}`].filter(Boolean).join(' · ')
-      await descargarTabla(tipo, 'reporte-distrital', 'Reporte distrital', 'Reporte Distrital', `${claves.size} escuelas · ${filtros || 'datos filtrados'}`,
+      await descargarTabla(tipo, distrito ? 'reporte-distrital' : 'reporte-areal', titulo, titulo, `${claves.size} escuelas · ${filtros || 'datos filtrados'}`,
         ['Sección', 'Indicador', 'Valor', '%'], [24, 44, 14, 10],
         lineasExport.map(([s, i, v, p]) => [s, i, v, p]), lineasExport.map(([s, i, v, p]) => [s, i, numeroPba(v), p]))
     } catch (e) { toast.error(`No se pudo descargar: ${mensaje(e)}`) }
@@ -133,12 +134,12 @@ export function ReporteDistrital({ distrito }: { distrito: boolean }) {
 
   return (
     <>
-      <Card title="Reporte Distrital" action={<div class="flex flex-wrap gap-2">
+      <Card title={titulo} action={<div class="flex flex-wrap gap-2">
         <button class={BTN_SECONDARY} disabled={!m} onClick={() => void exportar('xlsx')}>Excel</button>
         <button class={BTN_SECONDARY} disabled={!m} onClick={() => void exportar('pdf')}>PDF</button>
         <button class={BTN_SECONDARY} disabled={!m} onClick={() => void exportar('pptx')}>PPTX</button>
       </div>}>
-        <p class="text-sm text-slate-600">Resumen general de todas las pestañas de Estadística con totales, porcentajes y gráficos. Todo respeta los filtros elegidos.</p>
+        <p class="text-sm text-slate-600">Resumen general de todas las pestañas de Estadística con totales, porcentajes y gráficos. Todo respeta los filtros elegidos.{!distrito && ' Solo se incluyen tus escuelas asignadas.'}</p>
       </Card>
       {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
       {loading && !data ? <Spinner /> : data && m && <>
