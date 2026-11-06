@@ -2,11 +2,10 @@ import { useMemo, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAsync } from '../lib/hooks'
 import { descargar, XLSX_MIME } from '../lib/download'
-import { buildPdf } from '../lib/export'
 import { coincideAgrupamiento, fechaPba, numeroPba } from '../lib/estadisticaPba'
 import { leerSalidasSinIngreso, nivelDesdeNombre, NIVELES_SALIDAS } from '../lib/estadisticaSalidas'
 import { BRAND } from '../modules'
-import { cargar, mensaje, nombre, type Escuela } from './estadisticaDatos'
+import { buildInforme, cargar, mensaje, nombre, PPTX_MIME, type Escuela, type FormatoEstadistica } from './estadisticaDatos'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, confirmar, EmptyState, FIELD, Modal, PAGE_SIZE, Pager, Spinner, toast } from '../ui/kit'
 
 interface Registro {
@@ -21,7 +20,7 @@ const esRechazado = (e: string | null) => /rechazad/i.test(e ?? '')
 const HEAD_NOMINA = ['Apellido', 'Nombre', 'DNI', 'Turno', 'Año', 'Sección', 'Estado de pase']
 const filaNomina = (r: Registro) => [r.apellido ?? '', r.nombre ?? '', r.dni ?? '', r.turno ?? '', r.anio ?? '', r.seccion ?? '', r.estado ?? '']
 
-async function descargarTabla(tipo: 'xlsx' | 'pdf', archivo: string, titulo: string, subtitulo: string, headers: string[], widths: number[], filas: (string | number)[][]) {
+async function descargarTabla(tipo: FormatoEstadistica, archivo: string, titulo: string, subtitulo: string, headers: string[], widths: number[], filas: (string | number)[][]) {
   if (tipo === 'xlsx') {
     const XLSX = await import('xlsx')
     const hoja = XLSX.utils.aoa_to_sheet([headers, ...filas])
@@ -31,11 +30,11 @@ async function descargarTabla(tipo: 'xlsx' | 'pdf', archivo: string, titulo: str
     descargar(new Uint8Array(XLSX.write(libro, { type: 'array', bookType: 'xlsx' })), `${archivo}.xlsx`, XLSX_MIME)
     return
   }
-  const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
-  if (!respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
-  const pdf = await buildPdf({ title: titulo, subtitle: subtitulo, headers, widths, rows: filas.map((f) => f.map(String)) },
-    { brand: { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) } })
-  descargar(pdf, `${archivo}.pdf`, 'application/pdf')
+  const respuesta = tipo === 'pdf' ? await fetch(`${import.meta.env.BASE_URL}icon-192.png`) : null
+  if (respuesta && !respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
+  const pdf = await buildInforme(tipo, { title: titulo, subtitle: subtitulo, headers, widths, rows: filas.map((f) => f.map(String)) },
+    { brand: respuesta ? { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) } : undefined })
+  descargar(pdf, `${archivo}.${tipo}`, tipo === 'pdf' ? 'application/pdf' : PPTX_MIME)
 }
 
 export function SalidasSinIngreso({ distrito }: { distrito: boolean }) {
@@ -105,7 +104,7 @@ export function SalidasSinIngreso({ distrito }: { distrito: boolean }) {
     finally { setImportando(false) }
   }
 
-  const exportarLista = async (tipo: 'xlsx' | 'pdf') => {
+  const exportarLista = async (tipo: FormatoEstadistica) => {
     try {
       const seleccionado = distrito && inspector ? data?.inspectores.find((i) => String(i.id) === inspector) : undefined
       const agrupamiento = data?.grupos.find((g) => String(g.id) === grupo)
@@ -116,7 +115,7 @@ export function SalidasSinIngreso({ distrito }: { distrito: boolean }) {
     } catch (e) { toast.error(`No se pudo descargar: ${mensaje(e)}`) }
   }
 
-  const exportarNominaCompleta = async (tipo: 'xlsx' | 'pdf') => {
+  const exportarNominaCompleta = async (tipo: FormatoEstadistica) => {
     try {
       await descargarTabla(tipo, 'salidas-sin-ingreso-nomina', 'Nómina de salidas sin ingreso', `${filas.reduce((s, r) => s + r.total, 0)} estudiantes de ${filas.length} escuelas`,
         ['Clave', 'Escuela', ...HEAD_NOMINA], [12, 18, 14, 14, 11, 9, 8, 8, 12],
@@ -167,8 +166,10 @@ export function SalidasSinIngreso({ distrito }: { distrito: boolean }) {
         <Card class="mt-4" title={`Escuelas · ${filas.length}`} action={<div class="flex flex-wrap gap-2">
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportarLista('xlsx')}>Lista Excel</button>
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportarLista('pdf')}>Lista PDF</button>
+          <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportarLista('pptx')}>Lista PPTX</button>
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportarNominaCompleta('xlsx')}>Nómina Excel</button>
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportarNominaCompleta('pdf')}>Nómina PDF</button>
+          <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportarNominaCompleta('pptx')}>Nómina PPTX</button>
         </div>}>
           {!filas.length ? <EmptyState title="Sin datos" text={q || inspector || grupo || nivel ? 'Probá con otros filtros.' : distrito ? 'Importá un CSV de ABC para comenzar.' : 'Todavía no hay datos para tus escuelas asignadas.'} /> : (
             <div class="-m-4 overflow-x-auto">
@@ -199,7 +200,7 @@ export function SalidasSinIngreso({ distrito }: { distrito: boolean }) {
 function Nomina({ resumen, onClose }: { resumen: Resumen; onClose(): void }) {
   const [pagina, setPagina] = useState(1)
   const lista = useMemo(() => [...resumen.estudiantes].sort((a, b) => (a.apellido ?? '').localeCompare(b.apellido ?? '', 'es') || (a.nombre ?? '').localeCompare(b.nombre ?? '', 'es')), [resumen])
-  const exportar = async (tipo: 'xlsx' | 'pdf') => {
+  const exportar = async (tipo: FormatoEstadistica) => {
     try {
       await descargarTabla(tipo, `nomina-${resumen.clave}`, `Nómina ${resumen.clave}`, `${nombre(resumen.escuela)} · ${etiquetaNivel(resumen.nivel)} · ${fechaPba(resumen.fecha)} · ${lista.length} estudiantes`,
         HEAD_NOMINA, [16, 16, 12, 9, 8, 8, 14], lista.map(filaNomina))
@@ -208,7 +209,7 @@ function Nomina({ resumen, onClose }: { resumen: Resumen; onClose(): void }) {
   return <Modal title={`Nómina · ${nombre(resumen.escuela)}`} onClose={onClose} wide>
     <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
       <p class="text-sm text-slate-600">{lista.length} estudiantes · {resumen.pendientes} pendientes · {resumen.rechazados} rechazados</p>
-      <div class="flex gap-2"><button class={BTN_SECONDARY} onClick={() => void exportar('xlsx')}>Excel</button><button class={BTN_SECONDARY} onClick={() => void exportar('pdf')}>PDF</button></div>
+      <div class="flex flex-wrap gap-2"><button class={BTN_SECONDARY} onClick={() => void exportar('xlsx')}>Excel</button><button class={BTN_SECONDARY} onClick={() => void exportar('pdf')}>PDF</button><button class={BTN_SECONDARY} onClick={() => void exportar('pptx')}>PPTX</button></div>
     </div>
     <div class="overflow-x-auto rounded-md border border-slate-200">
       <table class="w-full text-left text-sm">

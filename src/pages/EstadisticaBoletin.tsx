@@ -2,12 +2,11 @@ import { useMemo, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAsync } from '../lib/hooks'
 import { descargar, XLSX_MIME } from '../lib/download'
-import { buildPdf } from '../lib/export'
 import { coincideAgrupamiento, fechaPba, numeroPba } from '../lib/estadisticaPba'
 import { avanceBoletin, leerBoletin, totalBoletin, type Boletin } from '../lib/estadisticaBoletin'
 import { porcentajeTexto } from '../lib/estadisticaFichas'
 import { BRAND } from '../modules'
-import { cargar, mensaje, nombre, type Escuela } from './estadisticaDatos'
+import { buildInforme, cargar, mensaje, nombre, PPTX_MIME, type Escuela, type FormatoEstadistica } from './estadisticaDatos'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, PAGE_SIZE, Pager, Spinner, toast } from '../ui/kit'
 
 type Fila = Boletin & { fecha: string; trimestre: string | null; escuela: Escuela }
@@ -64,7 +63,7 @@ export function BoletinDigital({ distrito }: { distrito: boolean }) {
     finally { setImportando(false) }
   }
 
-  const exportar = async (tipo: 'xlsx' | 'pdf') => {
+  const exportar = async (tipo: FormatoEstadistica) => {
     try {
       const headers = ['Clave', 'CUE', 'Escuela', 'Fecha', 'Trimestre', 'Completo', 'Parcial', 'Sin carga', 'Total', '% completo']
       if (tipo === 'xlsx') {
@@ -75,17 +74,17 @@ export function BoletinDigital({ distrito }: { distrito: boolean }) {
         XLSX.utils.book_append_sheet(libro, hoja, 'Boletín Digital')
         descargar(new Uint8Array(XLSX.write(libro, { type: 'array', bookType: 'xlsx' })), 'boletin-digital.xlsx', XLSX_MIME)
       } else {
-        const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
-        if (!respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
+        const respuesta = tipo === 'pdf' ? await fetch(`${import.meta.env.BASE_URL}icon-192.png`) : null
+        if (respuesta && !respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
         const seleccionado = distrito && inspector ? data?.inspectores.find((i) => String(i.id) === inspector) : undefined
         const agrupamiento = data?.grupos.find((g) => String(g.id) === grupo)
-        const pdf = await buildPdf({
+        const pdf = await buildInforme(tipo, {
           title: 'Carga de Boletín Digital',
           subtitle: `${filas.length} escuelas · ${[seleccionado && `Inspector: ${seleccionado.nombre || seleccionado.cuil}`, agrupamiento && `Agrupamiento: ${agrupamiento.nombre}`].filter(Boolean).join(' · ') || 'datos filtrados'}`,
           headers: ['Clave', 'Escuela', 'Fecha', 'Trimestre', 'Completo', 'Parcial', 'Sin carga', '% completo'], widths: [13, 28, 11, 12, 10, 10, 10, 11],
           rows: filas.map((r) => [r.clave, nombre(r.escuela), fechaPba(r.fecha), r.trimestre ?? '', numeroPba(r.completo), numeroPba(r.parcial), numeroPba(r.sin_carga), porcentajeTexto(avanceBoletin(r))]),
-        }, { brand: { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) } })
-        descargar(pdf, 'boletin-digital.pdf', 'application/pdf')
+        }, { brand: respuesta ? { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) } : undefined })
+        descargar(pdf, `boletin-digital.${tipo}`, tipo === 'pdf' ? 'application/pdf' : PPTX_MIME)
       }
     } catch (e) { toast.error(`No se pudo descargar: ${mensaje(e)}`) }
   }
@@ -139,6 +138,7 @@ export function BoletinDigital({ distrito }: { distrito: boolean }) {
         <Card class="mt-4" title={`Escuelas · ${filas.length}`} action={<div class="flex flex-wrap gap-2">
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('xlsx')}>Excel</button>
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pdf')}>PDF</button>
+          <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pptx')}>PPTX</button>
         </div>}>
           {!filas.length ? <EmptyState title="Sin datos" text={q || inspector || grupo ? 'Probá con otros filtros.' : distrito ? 'Importá un CSV de ABC para comenzar.' : 'Todavía no hay datos para tus escuelas asignadas.'} /> : (
             <div class="-m-4 overflow-x-auto">

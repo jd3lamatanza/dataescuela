@@ -45,25 +45,35 @@ async function cargarComparados(distrito: boolean) {
 function grafico(filas: Comparacion[], tituloX: string, tituloY: string, unidadX: string, unidadY: string) {
   const pares = filas.filter((r): r is Comparacion & { x: Metrica & { valor: number }; y: Metrica & { valor: number } } => r.x.valor !== null && r.y.valor !== null)
   const r = correlacion(pares.map((p) => [p.x.valor, p.y.valor]))
-  const xmax = Math.max(1, ...pares.map((p) => p.x.valor))
-  const ymax = Math.max(1, ...pares.map((p) => p.y.valor))
+  const primeras = filas.slice(0, 20)
+  let xmax = Math.max(unidadX === '%' ? 100 : 1, ...primeras.map((p) => p.x.valor ?? 0))
+  let ymax = Math.max(unidadY === '%' ? 100 : 1, ...primeras.map((p) => p.y.valor ?? 0))
+  if (unidadX === unidadY) xmax = ymax = Math.max(xmax, ymax)
   return <div>
     <p class="text-sm text-slate-600">Escuelas con ambos indicadores: <strong>{pares.length}</strong>. Correlación de Pearson: <strong>{r === null ? 'no calculable' : r.toLocaleString('es-AR', { maximumFractionDigits: 2 })}</strong>.</p>
     <p class="mt-1 text-xs text-slate-500">La correlación describe una asociación entre escuelas, no demuestra causalidad. No es calculable con menos de tres pares o si un indicador no varía.</p>
-    {pares.length > 0 && <div class="mt-3 overflow-hidden rounded-lg border border-slate-100 p-3">
-      <p class="text-xs font-medium text-slate-600">Vertical: {tituloY}</p>
-      <svg viewBox="0 0 400 205" class="mx-auto mt-2 w-full max-w-2xl" role="img" aria-label={`Dispersión: ${tituloX} y ${tituloY}. Cada punto representa una escuela.`}>
-        <line x1="42" y1="8" x2="42" y2="175" stroke="#94a3b8" />
-        <line x1="42" y1="175" x2="390" y2="175" stroke="#94a3b8" />
-        <text x="38" y="12" text-anchor="end" font-size="9" fill="#64748b">{formato(ymax, unidadY)}</text>
-        <text x="38" y="178" text-anchor="end" font-size="9" fill="#64748b">0</text>
-        <text x="390" y="190" text-anchor="end" font-size="9" fill="#64748b">{formato(xmax, unidadX)}</text>
-        {pares.map((p) => <circle key={p.clave} cx={42 + p.x.valor / xmax * 345} cy={175 - p.y.valor / ymax * 163} r="4" fill="#0891b2" fill-opacity="0.7">
-          <title>{`${nombre(p.escuela)} · ${p.clave}: ${formato(p.x.valor, unidadX)}, ${formato(p.y.valor, unidadY)}`}</title>
-        </circle>)}
-      </svg>
-      <p class="text-center text-xs font-medium text-slate-600">Horizontal: {tituloX}</p>
+    {primeras.length > 0 && <div class="mt-3 rounded-lg border border-slate-100 p-3">
+      <p class="text-sm font-semibold text-slate-700">Primeras {primeras.length} escuelas según el orden seleccionado</p>
+      <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+        <span><span class="mr-1 inline-block size-2.5 rounded-sm bg-cyan-600" />{tituloX} · escala 0–{formato(xmax, unidadX)}</span>
+        <span><span class="mr-1 inline-block size-2.5 rounded-sm bg-violet-500" />{tituloY} · escala 0–{formato(ymax, unidadY)}</span>
+      </div>
+      {unidadX !== unidadY && <p class="mt-1 text-xs text-slate-500">Las barras usan escalas independientes: sus longitudes no son comparables entre indicadores.</p>}
+      <ol class="mt-3 space-y-2">
+        {primeras.map((p) => <li key={p.clave} class="grid gap-1 border-b border-slate-100 pb-2 last:border-0 sm:grid-cols-[minmax(9rem,12rem)_1fr]">
+          <div class="min-w-0 text-xs"><span class="font-semibold text-slate-700">{nombre(p.escuela)}</span><span class="block font-mono text-slate-500">{p.clave}</span></div>
+          <div class="space-y-1">
+            {([['x', unidadX, xmax, 'bg-cyan-600', tituloX], ['y', unidadY, ymax, 'bg-violet-500', tituloY]] as const).map(([eje, unidad, maximo, color, titulo]) => <div key={eje} class="flex items-center gap-2">
+              <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100" role="img" aria-label={`${titulo}: ${formato(p[eje].valor, unidad)}`}>
+                {p[eje].valor !== null && <div class={`h-full rounded-full ${color}`} style={{ width: `${Math.max(0, p[eje].valor!) / maximo * 100}%` }} />}
+              </div>
+              <span class="w-16 shrink-0 text-right text-xs tabular-nums text-slate-700">{formato(p[eje].valor, unidad)}</span>
+            </div>)}
+          </div>
+        </li>)}
+      </ol>
     </div>}
+    {!primeras.length && <p class="mt-3 text-sm text-slate-500">No hay escuelas para los filtros seleccionados.</p>}
   </div>
 }
 
@@ -157,7 +167,7 @@ export function IndicadoresComparados({ distrito }: { distrito: boolean }) {
     })
   }, [data, distrito, inspector, grupo, escuela, q, ciclo, trimestreActivo, tab, orden])
 
-  const exportar = async (tipo: 'xlsx' | 'pdf') => {
+  const exportar = async (tipo: 'xlsx' | 'pdf' | 'pptx') => {
     try {
       const seleccionado = distrito && inspector ? data?.base.inspectores.find((i) => String(i.id) === inspector) : undefined
       const agrupamiento = data?.base.grupos.find((g) => String(g.id) === grupo)
@@ -214,6 +224,7 @@ export function IndicadoresComparados({ distrito }: { distrito: boolean }) {
       <Card class="mt-4" title={`Escuelas · ${filas.length}`} action={<div class="flex flex-wrap gap-2">
         <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('xlsx')}>Excel</button>
         <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pdf')}>PDF</button>
+        <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pptx')}>PPTX</button>
       </div>}>
         {!filas.length ? <EmptyState title="Sin escuelas" text="Probá con otros filtros." /> : <div class="-m-4 overflow-x-auto">
           <table class="w-full text-left text-sm">

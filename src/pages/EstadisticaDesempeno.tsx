@@ -17,7 +17,7 @@ const CAMPOS = ['clave', 'ciclo', 'trimestre', 'anio', 'fecha', 'matricula', ...
 const vacio = (): Totales => ({ matricula: 0, aprobadas: 0, de_1_2: 0, de_3_4: 0, mas_5: 0, ninguna: 0, sin_info: 0 })
 const sumar = (t: Totales, f: Totales | Fila) => { t.matricula += f.matricula ?? 0; for (const c of CATEGORIAS_DESEMPENO) t[c.key] += f[c.key] ?? 0 }
 const enRiesgo = (t: Totales) => t.de_3_4 + t.mas_5 + t.ninguna
-const descargarTabla = (tipo: 'xlsx' | 'pdf', archivo: string, ...resto: Parameters<typeof descargarBase> extends [unknown, unknown, unknown, ...infer R] ? R : never) => descargarBase(tipo, archivo, 'Desempeño', ...resto)
+const descargarTabla = (tipo: 'xlsx' | 'pdf' | 'pptx', archivo: string, ...resto: Parameters<typeof descargarBase> extends [unknown, unknown, unknown, ...infer R] ? R : never) => descargarBase(tipo, archivo, 'Desempeño', ...resto)
 const textoCat = (t: Totales, c: typeof CATEGORIAS_DESEMPENO[number]) => `${numeroPba(t[c.key])} (${porcentajeTexto(pct(t[c.key], t.matricula))})`
 
 function Barra({ t }: { t: Totales }) {
@@ -110,7 +110,7 @@ export function DesempenoEstadistica({ distrito }: { distrito: boolean }) {
     finally { setImportando(false) }
   }
 
-  const exportar = async (tipo: 'xlsx' | 'pdf') => {
+  const exportar = async (tipo: 'xlsx' | 'pdf' | 'pptx') => {
     try {
       const seleccionado = distrito && inspector ? data?.inspectores.find((i) => String(i.id) === inspector) : undefined
       const agrupamiento = data?.grupos.find((g) => String(g.id) === grupo)
@@ -162,6 +162,7 @@ export function DesempenoEstadistica({ distrito }: { distrito: boolean }) {
         <Card class="mt-4" title={`Escuelas · ${filas.length}`} action={<div class="flex flex-wrap gap-2">
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('xlsx')}>Excel</button>
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pdf')}>PDF</button>
+          <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pptx')}>PPTX</button>
         </div>}>
           {!filas.length ? <EmptyState title="Sin datos" text={q || inspector || grupo ? 'Probá con otros filtros.' : distrito ? `No hay informes del ciclo ${cicloActivo}. Importá un CSV de ABC para comenzar.` : `Todavía no hay datos del ciclo ${cicloActivo} para tus escuelas asignadas.`} /> : (
             <div class="-m-4 overflow-x-auto">
@@ -202,7 +203,7 @@ function Informe({ resumen, ciclo, onClose }: { resumen: Resumen; ciclo: string;
     return f ? { t, fecha: f.fecha, tot: { matricula: f.matricula ?? 0, ...Object.fromEntries(CATEGORIAS_DESEMPENO.map((c) => [c.key, f[c.key] ?? 0])) } as Totales } : { t, fecha: '', tot: null }
   }) })),
   { etiqueta: 'Total escuela', trimestres: TRIMESTRES.map((t) => { const p = resumen.periodos.get(t); return { t, fecha: p?.fecha ?? '', tot: p ?? null } }) }]
-  const exportar = async (tipo: 'xlsx' | 'pdf') => {
+  const exportar = async (tipo: 'xlsx' | 'pdf' | 'pptx') => {
     try {
       const planas = lineas.flatMap((l) => l.trimestres.filter((x) => x.tot).map((x) => ({ etiqueta: l.etiqueta, ...x, tot: x.tot! })))
       await descargarTabla(tipo, `desempeno-${resumen.clave}-${ciclo}`, `Desempeño ${resumen.clave}`, `${nombre(resumen.escuela)} · Ciclo ${ciclo} · informe por año de estudio`,
@@ -214,7 +215,7 @@ function Informe({ resumen, ciclo, onClose }: { resumen: Resumen; ciclo: string;
   return <Modal title={`Desempeño · ${nombre(resumen.escuela)}`} onClose={onClose} wide>
     <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
       <p class="text-sm text-slate-600">{resumen.clave} · Ciclo lectivo {ciclo}</p>
-      <div class="flex gap-2"><button class={BTN_SECONDARY} onClick={() => void exportar('xlsx')}>Excel</button><button class={BTN_SECONDARY} onClick={() => void exportar('pdf')}>PDF</button></div>
+      <div class="flex flex-wrap gap-2"><button class={BTN_SECONDARY} onClick={() => void exportar('xlsx')}>Excel</button><button class={BTN_SECONDARY} onClick={() => void exportar('pdf')}>PDF</button><button class={BTN_SECONDARY} onClick={() => void exportar('pptx')}>PPTX</button></div>
     </div>
     <div class="overflow-x-auto rounded-md border border-slate-200">
       <table class="w-full text-left text-sm">

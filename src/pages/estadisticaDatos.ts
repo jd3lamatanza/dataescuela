@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { descargar, XLSX_MIME } from '../lib/download'
-import { buildPdf } from '../lib/export'
+import { buildPdf, type PdfOptions, type Table } from '../lib/export'
 import { BRAND } from '../modules'
 
 export interface Escuela { clave: string | null; cue: string; codigo: string | null; numero: number | null; nombre: string | null; localidad: string | null }
@@ -81,7 +81,16 @@ export async function cargar<T extends { clave: string; fecha: string }>(distrit
 }
 
 export type DescargaArgs = Parameters<typeof descargarTabla>
-export async function descargarTabla(tipo: 'xlsx' | 'pdf', archivo: string, hojaNombre: string, titulo: string, subtitulo: string, headers: string[], widths: number[], filas: (string | number | null)[][], pdfFilas: string[][]) {
+export type FormatoEstadistica = 'xlsx' | 'pdf' | 'pptx'
+export const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+
+export async function buildInforme(tipo: 'pdf' | 'pptx', tabla: Table, opciones?: PdfOptions) {
+  if (tipo === 'pdf') return buildPdf(tabla, opciones)
+  const { buildPptx } = await import('../lib/pptx')
+  return buildPptx(tabla)
+}
+
+export async function descargarTabla(tipo: FormatoEstadistica, archivo: string, hojaNombre: string, titulo: string, subtitulo: string, headers: string[], widths: number[], filas: (string | number | null)[][], pdfFilas: string[][]) {
   if (tipo === 'xlsx') {
     const XLSX = await import('xlsx')
     const hoja = XLSX.utils.aoa_to_sheet([headers, ...filas])
@@ -89,6 +98,11 @@ export async function descargarTabla(tipo: 'xlsx' | 'pdf', archivo: string, hoja
     const libro = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(libro, hoja, hojaNombre)
     descargar(new Uint8Array(XLSX.write(libro, { type: 'array', bookType: 'xlsx' })), `${archivo}.xlsx`, XLSX_MIME)
+    return
+  }
+  if (tipo === 'pptx') {
+    const bytes = await buildInforme('pptx', { title: titulo, subtitle: subtitulo, headers, widths, rows: filas.map((fila) => fila.map((v) => v === null ? 'Sin dato' : String(v))) })
+    descargar(bytes, `${archivo}.pptx`, PPTX_MIME)
     return
   }
   const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)

@@ -17,7 +17,7 @@ const sumar = (t: Totales, f: Fila) => { t.matricula += f.matricula ?? 0; for (c
 const criticos = (t: Totales) => t.de_28_44 + t.mas_45
 const pct = (n: number, t: number) => porcentajeAsistencia(n, t)
 
-const descargarTabla = (tipo: 'xlsx' | 'pdf', archivo: string, ...resto: DescargaResto) => descargarBase(tipo, archivo, 'Asistencia', ...resto)
+const descargarTabla = (tipo: 'xlsx' | 'pdf' | 'pptx', archivo: string, ...resto: DescargaResto) => descargarBase(tipo, archivo, 'Asistencia', ...resto)
 
 function Barra({ t }: { t: Totales }) {
   const suma = TRAMOS_ASISTENCIA.reduce((s, x) => s + t[x.key], 0)
@@ -93,7 +93,7 @@ export function AsistenciaEstadistica({ distrito }: { distrito: boolean }) {
     finally { setImportando(false) }
   }
 
-  const exportar = async (tipo: 'xlsx' | 'pdf') => {
+  const exportar = async (tipo: 'xlsx' | 'pdf' | 'pptx') => {
     try {
       const seleccionado = distrito && inspector ? data?.inspectores.find((i) => String(i.id) === inspector) : undefined
       const agrupamiento = data?.grupos.find((g) => String(g.id) === grupo)
@@ -154,6 +154,7 @@ export function AsistenciaEstadistica({ distrito }: { distrito: boolean }) {
         <Card class="mt-4" title={`Escuelas · ${filas.length}`} action={<div class="flex flex-wrap gap-2">
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('xlsx')}>Excel</button>
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pdf')}>PDF</button>
+          <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pptx')}>PPTX</button>
         </div>}>
           {!filas.length ? <EmptyState title="Sin datos" text={q || inspector || grupo ? 'Probá con otros filtros.' : distrito ? 'Importá un CSV de ABC para comenzar.' : 'Todavía no hay datos para tus escuelas asignadas.'} /> : (
             <div class="-m-4 overflow-x-auto">
@@ -187,7 +188,7 @@ export function AsistenciaEstadistica({ distrito }: { distrito: boolean }) {
 function Informe({ resumen, onClose }: { resumen: Resumen; onClose(): void }) {
   const filas = [...resumen.anios.map((a) => ({ etiqueta: a.anio, t: { matricula: a.matricula ?? 0, ...Object.fromEntries(TRAMOS_ASISTENCIA.map((x) => [x.key, a[x.key] ?? 0])) } as Totales, fecha: a.fecha })),
     { etiqueta: 'Total escuela', t: resumen as Totales, fecha: resumen.fecha }]
-  const exportar = async (tipo: 'xlsx' | 'pdf') => {
+  const exportar = async (tipo: 'xlsx' | 'pdf' | 'pptx') => {
     try {
       await descargarTabla(tipo, `asistencia-${resumen.clave}`, `Asistencia ${resumen.clave}`, `${nombre(resumen.escuela)} · ${resumen.ciclo ? `Ciclo ${resumen.ciclo} · ` : ''}informe por año de estudio`,
         ['Año', 'Fecha', 'Matrícula', ...TRAMOS_ASISTENCIA.flatMap((t) => [t.label, `% ${t.label}`])], [14, 12, 11, ...TRAMOS_ASISTENCIA.flatMap(() => [11, 11])],
@@ -198,7 +199,7 @@ function Informe({ resumen, onClose }: { resumen: Resumen; onClose(): void }) {
   return <Modal title={`Asistencia · ${nombre(resumen.escuela)}`} onClose={onClose} wide>
     <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
       <p class="text-sm text-slate-600">{resumen.clave}{resumen.ciclo ? ` · Ciclo lectivo ${resumen.ciclo}` : ''} · {resumen.anios.length} años de estudio</p>
-      <div class="flex gap-2"><button class={BTN_SECONDARY} onClick={() => void exportar('xlsx')}>Excel</button><button class={BTN_SECONDARY} onClick={() => void exportar('pdf')}>PDF</button></div>
+      <div class="flex flex-wrap gap-2"><button class={BTN_SECONDARY} onClick={() => void exportar('xlsx')}>Excel</button><button class={BTN_SECONDARY} onClick={() => void exportar('pdf')}>PDF</button><button class={BTN_SECONDARY} onClick={() => void exportar('pptx')}>PPTX</button></div>
     </div>
     <div class="overflow-x-auto rounded-md border border-slate-200">
       <table class="w-full text-left text-sm">

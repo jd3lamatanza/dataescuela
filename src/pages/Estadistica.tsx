@@ -3,10 +3,9 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useAsync } from '../lib/hooks'
 import { descargar, XLSX_MIME } from '../lib/download'
-import { buildPdf } from '../lib/export'
 import { coincideAgrupamiento, diferencia, diferenciaPba, fechaPba, leerMatriculaPba, numeroPba, type MatriculaPba } from '../lib/estadisticaPba'
 import { BRAND } from '../modules'
-import { cargar, mensaje, nombre, type Escuela } from './estadisticaDatos'
+import { buildInforme, cargar, mensaje, nombre, PPTX_MIME, type Escuela, type FormatoEstadistica } from './estadisticaDatos'
 import { FichasInscripcion } from './EstadisticaFichas'
 import { SalidasSinIngreso } from './EstadisticaSalidas'
 import { MatriculaSinCierre } from './EstadisticaSinCierre'
@@ -92,7 +91,7 @@ function EstadisticaVista({ distrito }: { distrito: boolean }) {
     finally { setImportando(false) }
   }
 
-  const exportar = async (tipo: 'xlsx' | 'pdf') => {
+  const exportar = async (tipo: FormatoEstadistica) => {
     try {
       const headers = ['Clave', 'CUE', 'Escuela', 'Fecha', 'Activa', 'Anterior', 'Inicial', 'Dif. inicial', '% inicial', 'Dif. anterior', '% anterior']
       const datos = filas.map((r) => {
@@ -107,11 +106,11 @@ function EstadisticaVista({ distrito }: { distrito: boolean }) {
         XLSX.utils.book_append_sheet(libro, hoja, 'Matrícula PBA')
         descargar(new Uint8Array(XLSX.write(libro, { type: 'array', bookType: 'xlsx' })), 'matricula-pba.xlsx', XLSX_MIME)
       } else {
-        const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
-        if (!respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
+        const respuesta = tipo === 'pdf' ? await fetch(`${import.meta.env.BASE_URL}icon-192.png`) : null
+        if (respuesta && !respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
         const seleccionado = distrito && inspector ? data?.inspectores.find((i) => String(i.id) === inspector) : undefined
         const agrupamiento = data?.grupos.find((g) => String(g.id) === grupo)
-        const pdf = await buildPdf({
+        const pdf = await buildInforme(tipo, {
           title: 'Matrícula PBA',
           subtitle: `${filas.length} escuelas · ${[seleccionado && `Inspector: ${seleccionado.nombre || seleccionado.cuil}`, agrupamiento && `Agrupamiento: ${agrupamiento.nombre}`].filter(Boolean).join(' · ') || 'datos filtrados'}`,
           headers: ['Clave', 'CUE', 'Escuela', 'Fecha', 'Activa', 'Anterior', 'Inicial', 'Dif. inicial', 'Dif. anterior'],
@@ -120,10 +119,10 @@ function EstadisticaVista({ distrito }: { distrito: boolean }) {
             numeroPba(r.activa), numeroPba(r.anterior), numeroPba(r.inicial),
             diferenciaPba(r.activa, r.inicial), diferenciaPba(r.activa, r.anterior)]),
         }, {
-          brand: { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) },
+          brand: respuesta ? { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) } : undefined,
           indicators: filas.map((r) => [null, null, null, null, null, null, null, diferencia(r.activa, r.inicial).valor, diferencia(r.activa, r.anterior).valor]),
         })
-        descargar(pdf, 'matricula-pba.pdf', 'application/pdf')
+        descargar(pdf, `matricula-pba.${tipo}`, tipo === 'pdf' ? 'application/pdf' : PPTX_MIME)
       }
     } catch (e) { toast.error(`No se pudo descargar: ${mensaje(e)}`) }
   }
@@ -164,6 +163,7 @@ function EstadisticaVista({ distrito }: { distrito: boolean }) {
         <Card class="mt-4" title={`Escuelas · ${filas.length}`} action={<div class="flex flex-wrap gap-2">
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('xlsx')}>Excel</button>
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pdf')}>PDF</button>
+          <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pptx')}>PPTX</button>
         </div>}>
           {!filas.length ? <EmptyState title="Sin datos" text={q || inspector || grupo ? 'Probá con otros filtros.' : distrito ? 'Importá un CSV de ABC para comenzar.' : 'Todavía no hay datos para tus escuelas asignadas.'} /> : <>
             <div class="-m-4 overflow-x-auto">

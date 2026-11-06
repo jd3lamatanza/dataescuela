@@ -117,7 +117,7 @@ export function ReporteDistrital({ distrito }: { distrito: boolean }) {
     return l
   }, [m])
 
-  const exportar = async (tipo: 'xlsx' | 'pdf') => {
+  const exportar = async (tipo: 'xlsx' | 'pdf' | 'pptx') => {
     try {
       const seleccionado = distrito && inspector ? data?.base.inspectores.find((i) => String(i.id) === inspector) : undefined
       const agrupamiento = data?.base.grupos.find((g) => String(g.id) === grupo)
@@ -136,6 +136,7 @@ export function ReporteDistrital({ distrito }: { distrito: boolean }) {
       <Card title="Reporte Distrital" action={<div class="flex flex-wrap gap-2">
         <button class={BTN_SECONDARY} disabled={!m} onClick={() => void exportar('xlsx')}>Excel</button>
         <button class={BTN_SECONDARY} disabled={!m} onClick={() => void exportar('pdf')}>PDF</button>
+        <button class={BTN_SECONDARY} disabled={!m} onClick={() => void exportar('pptx')}>PPTX</button>
       </div>}>
         <p class="text-sm text-slate-600">Resumen general de todas las pestañas de Estadística con totales, porcentajes y gráficos. Todo respeta los filtros elegidos.</p>
       </Card>
