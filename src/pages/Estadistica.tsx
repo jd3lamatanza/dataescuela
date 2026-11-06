@@ -2,22 +2,34 @@ import { useMemo, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useAsync } from '../lib/hooks'
-import { descargar, descargarPdf, XLSX_MIME } from '../lib/download'
+import { descargar, XLSX_MIME } from '../lib/download'
+import { buildPdf } from '../lib/export'
 import { diferencia, diferenciaPba, fechaPba, leerMatriculaPba, numeroPba, type MatriculaPba } from '../lib/estadisticaPba'
+import { BRAND } from '../modules'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, PAGE_SIZE, PageHeader, Pager, Spinner, TabBar, toast, type TabItem } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 
 interface Escuela { clave: string | null; cue: string; codigo: string | null; numero: number | null; nombre: string | null; localidad: string | null }
 interface Registro extends MatriculaPba { fecha: string }
 interface Fila extends Registro { escuela: Escuela }
+interface Inspector { id: number; nombre: string | null; cuil: string; escuelas_asignadas: string[] }
 const TABS: TabItem[] = [{ id: 'pba', label: 'Matrícula PBA', icon: 'chart', color: 'cyan' }]
 const nombre = (e: Escuela) => [e.codigo, e.numero].filter(Boolean).join(' ') || e.nombre || e.cue
 const mensaje = (e: unknown) => e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e)
 
-async function cargar() {
+async function cargar(distrito: boolean) {
   const escuelas: Escuela[] = []
   const registros: Registro[] = []
+  const inspectores: Inspector[] = []
   const size = 1000
+  if (distrito) {
+    for (let desde = 0; ; desde += size) {
+      const r = await supabase.from('inspectores').select('id,nombre,cuil,escuelas_asignadas').order('nombre').order('id').range(desde, desde + size - 1)
+      if (r.error) throw r.error
+      inspectores.push(...(r.data as Inspector[]))
+      if (r.data.length < size) break
+    }
+  }
   for (let desde = 0; ; desde += size) {
     const r = await supabase.from('escuelas').select('clave,cue,codigo,numero,nombre,localidad').order('id').range(desde, desde + size - 1)
     if (r.error) throw r.error
@@ -37,21 +49,28 @@ async function cargar() {
     const escuela = porClave.get(r.clave)
     if (escuela) filas.push({ ...r, escuela })
   }
-  return { claves: porClave, filas }
+  return { claves: porClave, filas, inspectores }
 }
 
 export function Estadistica() {
   const { user } = useAuth()
-  const distrito = user?.role === 'distrital'
-  const { data, loading, error, reload } = useAsync(cargar)
+  return <EstadisticaVista key={`${user?.id}:${user?.role}`} distrito={user?.role === 'distrital'} />
+}
+
+function EstadisticaVista({ distrito }: { distrito: boolean }) {
+  const { data, loading, error, reload } = useAsync(() => cargar(distrito), [distrito])
   const [q, setQ] = useState('')
+  const [inspector, setInspector] = useState('')
   const [orden, setOrden] = useState('clave')
   const [pagina, setPagina] = useState(1)
   const [importando, setImportando] = useState(false)
   const [resultado, setResultado] = useState('')
   const filas = useMemo(() => {
     const buscar = q.trim().toLocaleLowerCase('es-AR')
+    const seleccion = inspector && distrito ? data?.inspectores.find((i) => String(i.id) === inspector) : undefined
+    const asignadas = inspector && distrito ? new Set(seleccion?.escuelas_asignadas ?? []) : null
     const lista = (data?.filas ?? []).filter((r) =>
+      (!asignadas || asignadas.has(r.clave)) &&
       [r.clave, r.escuela.cue, r.escuela.codigo, r.escuela.numero, r.escuela.nombre, r.escuela.localidad].join(' ').toLocaleLowerCase('es-AR').includes(buscar))
     const valor = (r: Fila) => orden === 'activa-desc' || orden === 'activa-asc' ? r.activa
       : orden === 'anterior' ? (diferencia(r.activa, r.anterior).valor === null ? null : Math.abs(diferencia(r.activa, r.anterior).valor!))
@@ -63,7 +82,7 @@ export function Estadistica() {
       if (y === null) return -1
       return (orden === 'activa-asc' || orden === 'disminucion' ? x - y : y - x) || a.clave.localeCompare(b.clave)
     })
-  }, [data, q, orden])
+  }, [data, q, orden, inspector, distrito])
 
   const importar = async (archivo: File) => {
     setImportando(true)
@@ -100,9 +119,22 @@ export function Estadistica() {
         XLSX.utils.book_append_sheet(libro, hoja, 'Matrícula PBA')
         descargar(new Uint8Array(XLSX.write(libro, { type: 'array', bookType: 'xlsx' })), 'matricula-pba.xlsx', XLSX_MIME)
       } else {
-        await descargarPdf({ title: 'Matrícula PBA', subtitle: `${filas.length} escuelas · datos filtrados · porcentajes en puntos`, headers,
-          widths: [14, 12, 20, 12, 8, 8, 8, 11, 10, 11, 10],
-          rows: datos.map((r) => r.map((v) => v === null ? '-' : typeof v === 'number' ? v.toLocaleString('es-AR', { maximumFractionDigits: 1 }) : v)) }, 'matricula-pba')
+        const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
+        if (!respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
+        const seleccionado = distrito && inspector ? data?.inspectores.find((i) => String(i.id) === inspector) : undefined
+        const pdf = await buildPdf({
+          title: 'Matrícula PBA',
+          subtitle: `${filas.length} escuelas · ${seleccionado ? `Inspector: ${seleccionado.nombre || seleccionado.cuil}` : 'datos filtrados'}`,
+          headers: ['Clave', 'CUE', 'Escuela', 'Fecha', 'Activa', 'Anterior', 'Inicial', 'Dif. inicial', 'Dif. anterior'],
+          widths: [13, 12, 18, 12, 8, 8, 8, 17, 17],
+          rows: filas.map((r) => [r.clave, r.escuela.cue, nombre(r.escuela), fechaPba(r.fecha),
+            numeroPba(r.activa), numeroPba(r.anterior), numeroPba(r.inicial),
+            diferenciaPba(r.activa, r.inicial), diferenciaPba(r.activa, r.anterior)]),
+        }, {
+          brand: { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) },
+          indicators: filas.map((r) => [null, null, null, null, null, null, null, diferencia(r.activa, r.inicial).valor, diferencia(r.activa, r.anterior).valor]),
+        })
+        descargar(pdf, 'matricula-pba.pdf', 'application/pdf')
       }
     } catch (e) { toast.error(`No se pudo descargar: ${mensaje(e)}`) }
   }
@@ -126,8 +158,12 @@ export function Estadistica() {
       </Card>
       {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
       {loading && !data ? <Spinner /> : data && <>
-        <div class="mt-4 grid gap-2 sm:grid-cols-2">
+        <div class={`mt-4 grid gap-2 ${distrito ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
           <input class={FIELD} type="search" aria-label="Buscar escuela" placeholder="Buscar por escuela, clave, CUE o localidad" value={q} onInput={(e) => { setQ(e.currentTarget.value); setPagina(1) }} />
+          {distrito && <select class={FIELD} aria-label="Filtrar por inspector" value={inspector} onChange={(e) => { setInspector(e.currentTarget.value); setPagina(1) }}>
+            <option value="">Todos los inspectores</option>
+            {data.inspectores.map((i) => <option key={i.id} value={i.id}>{i.nombre || i.cuil}</option>)}
+          </select>}
           <select class={FIELD} aria-label="Ordenar escuelas" value={orden} onChange={(e) => { setOrden(e.currentTarget.value); setPagina(1) }}>
             <option value="clave">Ordenar por clave</option><option value="activa-desc">Mayor matrícula activa</option><option value="activa-asc">Menor matrícula activa</option>
             <option value="incremento">Mayor incremento vs. inicial</option><option value="disminucion">Mayor disminución vs. inicial</option><option value="anterior">Mayor diferencia absoluta vs. año anterior</option>
@@ -138,7 +174,7 @@ export function Estadistica() {
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('xlsx')}>Excel</button>
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pdf')}>PDF</button>
         </div>}>
-          {!filas.length ? <EmptyState title="Sin datos" text={q ? 'Probá con otra búsqueda.' : distrito ? 'Importá un CSV de ABC para comenzar.' : 'Todavía no hay datos para tus escuelas asignadas.'} /> : <>
+          {!filas.length ? <EmptyState title="Sin datos" text={q || inspector ? 'Probá con otros filtros.' : distrito ? 'Importá un CSV de ABC para comenzar.' : 'Todavía no hay datos para tus escuelas asignadas.'} /> : <>
             <div class="-m-4 overflow-x-auto">
               <table class="w-full text-left text-sm">
                 <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr>
@@ -185,7 +221,7 @@ function Graficos({ filas }: { filas: Fila[] }) {
   const grafico = (titulo: string, dato: ReturnType<typeof pares>) => {
     const max = Math.max(dato.activa, dato.base, 1)
     return <Card title={titulo}>
-      <p class="mb-3 text-xs text-slate-500">{dato.cantidad} escuelas con ambos valores · según búsqueda</p>
+      <p class="mb-3 text-xs text-slate-500">{dato.cantidad} escuelas con ambos valores · según filtros</p>
       {([['Activa', dato.activa, 'bg-cyan-500'], ['Referencia', dato.base, 'bg-indigo-400']] as const).map(([label, valor, color]) => <div key={label} class="mb-2">
         <div class="flex justify-between text-xs text-slate-600"><span>{label}</span><strong>{numeroPba(valor)}</strong></div>
         <div class="mt-1 h-3 overflow-hidden rounded-full bg-slate-100"><div class={`h-full rounded-full ${color}`} style={{ width: `${valor * 100 / max}%` }} /></div>

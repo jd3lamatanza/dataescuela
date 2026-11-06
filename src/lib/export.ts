@@ -10,6 +10,11 @@ export interface Table {
   rows: string[][]
 }
 
+export interface PdfOptions {
+  brand?: { name: string; logo: Uint8Array }
+  indicators?: (number | null)[][]
+}
+
 // Quita caracteres de control que invalidan el XML
 const clean = (s: string) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '')
 const esc = (s: string) => clean(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -83,10 +88,11 @@ function wrap(text: string, font: PDFFont, size: number, width: number, maxLines
 }
 
 /** Genera un PDF A4 horizontal con la tabla, repitiendo el encabezado en cada página. */
-export async function buildPdf(t: Table): Promise<Uint8Array> {
+export async function buildPdf(t: Table, options: PdfOptions = {}): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
   const font = await doc.embedFont(StandardFonts.Helvetica)
   const bold = await doc.embedFont(StandardFonts.HelveticaBold)
+  const logo = options.brand ? await doc.embedPng(options.brand.logo) : null
   const W = 841.89, H = 595.28, M = 28, size = 8, lh = 10.5, pad = 4
   const total = t.widths.reduce((a, b) => a + b, 0)
   const cw = t.widths.map((w) => ((W - M * 2) * w) / total)
@@ -106,14 +112,20 @@ export async function buildPdf(t: Table): Promise<Uint8Array> {
     y -= h
   }
 
+  if (logo && options.brand) {
+    page.drawImage(logo, { x: M, y: y - 32, width: 32, height: 32 })
+    page.drawText(latin(options.brand.name), { x: M + 40, y: y - 21, size: 13, font: bold, color: rgb(0.06, 0.15, 0.35) })
+    y -= 42
+  }
   page.drawText(latin(t.title), { x: M, y: y - 14, size: 15, font: bold, color: rgb(0.06, 0.15, 0.35) })
   y -= 30
   page.drawText(latin(t.subtitle), { x: M, y: y - 2, size: 9, font, color: rgb(0.35, 0.4, 0.5) })
   y -= 18
   header()
 
-  for (const row of t.rows) {
-    const cells = row.map((v, i) => wrap(v, font, size, cw[i] - pad * 2, 3))
+  for (const [rowIndex, row] of t.rows.entries()) {
+    const indicators = options.indicators?.[rowIndex]
+    const cells = row.map((v, i) => wrap(v, font, size, cw[i] - pad * 2 - (indicators?.[i] != null ? 11 : 0), 3))
     const h = Math.max(...cells.map((l) => l.length)) * lh + pad * 2 - 2
     if (y - h < M + 14) {
       page = doc.addPage([W, H])
@@ -123,7 +135,20 @@ export async function buildPdf(t: Table): Promise<Uint8Array> {
     }
     let x = M
     cells.forEach((lines, i) => {
-      lines.forEach((l, li) => page.drawText(l, { x: x + pad, y: y - pad - 8 - li * lh, size, font, color: rgb(0.1, 0.12, 0.18) }))
+      const value = indicators?.[i]
+      const color = value == null ? rgb(0.1, 0.12, 0.18)
+        : value > 0 ? rgb(0.016, 0.47, 0.337) : value < 0 ? rgb(0.725, 0.11, 0.11) : rgb(0.392, 0.455, 0.545)
+      if (value != null) {
+        const cx = x + pad + 4, cy = y - pad - 4
+        if (value === 0) {
+          for (const dy of [-1.5, 1.5]) page.drawLine({ start: { x: cx - 3, y: cy + dy }, end: { x: cx + 3, y: cy + dy }, thickness: 1.2, color })
+        } else {
+          const direction = value > 0 ? 1 : -1
+          page.drawLine({ start: { x: cx, y: cy - 4 }, end: { x: cx, y: cy + 4 }, thickness: 1.2, color })
+          for (const dx of [-3, 3]) page.drawLine({ start: { x: cx, y: cy + direction * 4 }, end: { x: cx + dx, y: cy + direction }, thickness: 1.2, color })
+        }
+      }
+      lines.forEach((l, li) => page.drawText(l, { x: x + pad + (value != null ? 11 : 0), y: y - pad - 8 - li * lh, size, font, color }))
       x += cw[i]
     })
     y -= h
