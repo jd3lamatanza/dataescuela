@@ -1,29 +1,18 @@
 import { useMemo, useState } from 'preact/hooks'
 import type { ComponentChildren } from 'preact'
-import { supabase } from '../lib/supabase'
 import { useAsync } from '../lib/hooks'
 import { coincideAgrupamiento, fechaPba, numeroPba } from '../lib/estadisticaPba'
 import { CATEGORIAS_FICHA, porcentajeTexto } from '../lib/estadisticaFichas'
 import { TRAMOS_ASISTENCIA, ordenAnio } from '../lib/estadisticaAsistencia'
 import { CATEGORIAS_DESEMPENO, nombreTrimestre } from '../lib/estadisticaDesempeno'
-import { cargar, descargarTabla, mensaje, nombre } from './estadisticaDatos'
+import { cargar, cargarRegistros, descargarTabla, mensaje, nombre } from './estadisticaDatos'
 import { Alert, BTN_SECONDARY, Card, FIELD, Spinner, toast } from '../ui/kit'
 import { Apilada, Barras, Leyenda, Lineas, Torta, type Dato } from '../ui/charts'
 
 interface Pba { clave: string; fecha: string; activa: number | null; anterior: number | null; inicial: number | null }
 type Fila = { clave: string; fecha: string } & Record<string, number | string | null>
 
-async function traer(tabla: string, campos: string, orden: string[]) {
-  const filas: Fila[] = []
-  const size = 1000
-  for (let desde = 0; ; desde += size) {
-    const r = await orden.reduce((c, col) => c.order(col), supabase.from(tabla).select(campos)).range(desde, desde + size - 1)
-    if (r.error) throw r.error
-    filas.push(...(r.data as unknown as Fila[]))
-    if (r.data.length < size) break
-  }
-  return filas
-}
+const traer = (tabla: string, campos: string, orden: string[]) => cargarRegistros<Fila>(tabla, campos, orden)
 
 async function cargarTodo(distrito: boolean) {
   const base = await cargar<Pba>(distrito, 'estadistica_matricula_pba', 'clave,fecha,activa,anterior,inicial')

@@ -10,6 +10,18 @@ export interface CodigoGrupo { agrupamiento_id: number; codigo: string }
 export const nombre = (e: Escuela) => [e.codigo, e.numero].filter(Boolean).join(' ') || e.nombre || e.cue
 export const mensaje = (e: unknown) => e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e)
 
+export async function cargarRegistros<T>(tabla: string, campos: string, orden: string[]): Promise<T[]> {
+  const filas: T[] = []
+  const size = 1000
+  for (let desde = 0; ; desde += size) {
+    const r = await orden.reduce((c, col) => c.order(col), supabase.from(tabla).select(campos)).range(desde, desde + size - 1)
+    if (r.error) throw r.error
+    filas.push(...(r.data as unknown as T[]))
+    if (r.data.length < size) break
+  }
+  return filas
+}
+
 export async function cargar<T extends { clave: string; fecha: string }>(distrito: boolean, tabla: string, campos: string, desempate: string | string[] = []) {
   const escuelas: Escuela[] = []
   const registros: T[] = []
