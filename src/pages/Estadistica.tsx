@@ -10,6 +10,7 @@ import { cargar, mensaje, nombre, type Escuela } from './estadisticaDatos'
 import { FichasInscripcion } from './EstadisticaFichas'
 import { SalidasSinIngreso } from './EstadisticaSalidas'
 import { MatriculaSinCierre } from './EstadisticaSinCierre'
+import { BoletinDigital } from './EstadisticaBoletin'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, PAGE_SIZE, PageHeader, Pager, Spinner, TabBar, toast, type TabItem } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 
@@ -20,6 +21,7 @@ const TABS: TabItem[] = [
   { id: 'fichas', label: 'Fichas de Inscripción', icon: 'chart', color: 'indigo' },
   { id: 'salidas', label: 'Salidas sin ingreso', icon: 'chart', color: 'rose' },
   { id: 'sincierre', label: 'Matrícula sin cerrar', icon: 'chart', color: 'amber' },
+  { id: 'boletin', label: 'Carga de Boletín Digital', icon: 'chart', color: 'emerald' },
 ]
 export function Estadistica() {
   const { user } = useAuth()
@@ -28,7 +30,7 @@ export function Estadistica() {
   return <>
     <PageHeader title="Estadística" subtitle={distrito ? 'Información provincial de las escuelas del distrito' : 'Información provincial de tus escuelas asignadas'} />
     <TabBar label="Estadística" items={TABS} active={tab} onChange={setTab} />
-    {tab === 'pba' ? <EstadisticaVista key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'fichas' ? <FichasInscripcion key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'salidas' ? <SalidasSinIngreso key={`${user?.id}:${user?.role}`} distrito={distrito} /> : <MatriculaSinCierre key={`${user?.id}:${user?.role}`} distrito={distrito} />}
+    {tab === 'pba' ? <EstadisticaVista key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'fichas' ? <FichasInscripcion key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'salidas' ? <SalidasSinIngreso key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'sincierre' ? <MatriculaSinCierre key={`${user?.id}:${user?.role}`} distrito={distrito} /> : <BoletinDigital key={`${user?.id}:${user?.role}`} distrito={distrito} />}
   </>
 }
 
