@@ -12,6 +12,7 @@ import { SalidasSinIngreso } from './EstadisticaSalidas'
 import { MatriculaSinCierre } from './EstadisticaSinCierre'
 import { BoletinDigital } from './EstadisticaBoletin'
 import { AsistenciaEstadistica } from './EstadisticaAsistencia'
+import { DesempenoEstadistica } from './EstadisticaDesempeno'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, PAGE_SIZE, PageHeader, Pager, Spinner, TabBar, toast, type TabItem } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 
@@ -24,6 +25,7 @@ const TABS: TabItem[] = [
   { id: 'sincierre', label: 'Matrícula sin cerrar', icon: 'clock', color: 'amber' },
   { id: 'boletin', label: 'Carga de Boletín Digital', icon: 'book', color: 'emerald' },
   { id: 'asistencia', label: 'Asistencia', icon: 'calendar', color: 'violet' },
+  { id: 'desempeno', label: 'Desempeño', icon: 'shield', color: 'sky' },
 ]
 export function Estadistica() {
   const { user } = useAuth()
@@ -32,7 +34,7 @@ export function Estadistica() {
   return <>
     <PageHeader title="Estadística" subtitle={distrito ? 'Información provincial de las escuelas del distrito' : 'Información provincial de tus escuelas asignadas'} />
     <TabBar label="Estadística" items={TABS} active={tab} onChange={setTab} />
-    {tab === 'pba' ? <EstadisticaVista key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'fichas' ? <FichasInscripcion key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'salidas' ? <SalidasSinIngreso key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'sincierre' ? <MatriculaSinCierre key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'boletin' ? <BoletinDigital key={`${user?.id}:${user?.role}`} distrito={distrito} /> : <AsistenciaEstadistica key={`${user?.id}:${user?.role}`} distrito={distrito} />}
+    {tab === 'pba' ? <EstadisticaVista key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'fichas' ? <FichasInscripcion key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'salidas' ? <SalidasSinIngreso key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'sincierre' ? <MatriculaSinCierre key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'boletin' ? <BoletinDigital key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'asistencia' ? <AsistenciaEstadistica key={`${user?.id}:${user?.role}`} distrito={distrito} /> : <DesempenoEstadistica key={`${user?.id}:${user?.role}`} distrito={distrito} />}
   </>
 }
 

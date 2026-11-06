@@ -1,15 +1,13 @@
 import { useMemo, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAsync } from '../lib/hooks'
-import { descargar, XLSX_MIME } from '../lib/download'
-import { buildPdf } from '../lib/export'
 import { coincideAgrupamiento, fechaPba, numeroPba } from '../lib/estadisticaPba'
 import { leerAsistencia, ordenAnio, porcentajeAsistencia, TRAMOS_ASISTENCIA, type Asistencia } from '../lib/estadisticaAsistencia'
 import { porcentajeTexto } from '../lib/estadisticaFichas'
-import { BRAND } from '../modules'
-import { cargar, mensaje, nombre, type Escuela } from './estadisticaDatos'
+import { cargar, descargarTabla as descargarBase, type DescargaArgs, mensaje, nombre, type Escuela } from './estadisticaDatos'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Modal, PAGE_SIZE, Pager, Spinner, toast } from '../ui/kit'
 
+type DescargaResto = DescargaArgs extends [unknown, unknown, unknown, ...infer R] ? R : never
 type Fila = Asistencia & { fecha: string; ciclo: number | null; escuela: Escuela }
 type Totales = { matricula: number } & Record<typeof TRAMOS_ASISTENCIA[number]['key'], number>
 interface Resumen extends Totales { clave: string; escuela: Escuela; fecha: string; ciclo: number | null; anios: Fila[] }
@@ -19,28 +17,14 @@ const sumar = (t: Totales, f: Fila) => { t.matricula += f.matricula ?? 0; for (c
 const criticos = (t: Totales) => t.de_28_44 + t.mas_45
 const pct = (n: number, t: number) => porcentajeAsistencia(n, t)
 
+const descargarTabla = (tipo: 'xlsx' | 'pdf', archivo: string, ...resto: DescargaResto) => descargarBase(tipo, archivo, 'Asistencia', ...resto)
+
 function Barra({ t }: { t: Totales }) {
   const suma = TRAMOS_ASISTENCIA.reduce((s, x) => s + t[x.key], 0)
   return <div class="flex h-2.5 min-w-32 overflow-hidden rounded-full bg-slate-100" role="img"
     aria-label={TRAMOS_ASISTENCIA.map((x) => `${x.label}: ${t[x.key]}`).join(', ')}>
     {suma > 0 && TRAMOS_ASISTENCIA.map((x) => <div key={x.key} class={x.color} style={{ width: `${t[x.key] * 100 / suma}%` }} />)}
   </div>
-}
-
-async function descargarTabla(tipo: 'xlsx' | 'pdf', archivo: string, titulo: string, subtitulo: string, headers: string[], widths: number[], filas: (string | number | null)[][], pdfFilas: string[][]) {
-  if (tipo === 'xlsx') {
-    const XLSX = await import('xlsx')
-    const hoja = XLSX.utils.aoa_to_sheet([headers, ...filas])
-    hoja['!cols'] = widths.map((w) => ({ wch: Math.max(10, w) }))
-    const libro = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(libro, hoja, 'Asistencia')
-    descargar(new Uint8Array(XLSX.write(libro, { type: 'array', bookType: 'xlsx' })), `${archivo}.xlsx`, XLSX_MIME)
-    return
-  }
-  const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
-  if (!respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
-  const pdf = await buildPdf({ title: titulo, subtitle: subtitulo, headers, widths, rows: pdfFilas }, { brand: { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) } })
-  descargar(pdf, `${archivo}.pdf`, 'application/pdf')
 }
 
 export function AsistenciaEstadistica({ distrito }: { distrito: boolean }) {

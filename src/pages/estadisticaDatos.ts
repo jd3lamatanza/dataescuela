@@ -1,4 +1,7 @@
 import { supabase } from '../lib/supabase'
+import { descargar, XLSX_MIME } from '../lib/download'
+import { buildPdf } from '../lib/export'
+import { BRAND } from '../modules'
 
 export interface Escuela { clave: string | null; cue: string; codigo: string | null; numero: number | null; nombre: string | null; localidad: string | null }
 export interface Inspector { id: number; nombre: string | null; cuil: string; escuelas_asignadas: string[] }
@@ -7,7 +10,7 @@ export interface CodigoGrupo { agrupamiento_id: number; codigo: string }
 export const nombre = (e: Escuela) => [e.codigo, e.numero].filter(Boolean).join(' ') || e.nombre || e.cue
 export const mensaje = (e: unknown) => e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e)
 
-export async function cargar<T extends { clave: string; fecha: string }>(distrito: boolean, tabla: string, campos: string, desempate?: string) {
+export async function cargar<T extends { clave: string; fecha: string }>(distrito: boolean, tabla: string, campos: string, desempate: string | string[] = []) {
   const escuelas: Escuela[] = []
   const registros: T[] = []
   const inspectores: Inspector[] = []
@@ -42,7 +45,7 @@ export async function cargar<T extends { clave: string; fecha: string }>(distrit
   }
   for (let desde = 0; ; desde += size) {
     const consulta = supabase.from(tabla).select(campos).order('clave')
-    const r = await (desempate ? consulta.order(desempate) : consulta).range(desde, desde + size - 1)
+    const r = await [desempate].flat().reduce((c, col) => c.order(col), consulta).range(desde, desde + size - 1)
     if (r.error) throw r.error
     registros.push(...(r.data as unknown as T[]))
     if (r.data.length < size) break
@@ -63,4 +66,21 @@ export async function cargar<T extends { clave: string; fecha: string }>(distrit
     if (escuela) filas.push({ ...r, escuela })
   }
   return { claves: porClave, filas, inspectores, grupos, codigosGrupo, codigosPorClave }
+}
+
+export type DescargaArgs = Parameters<typeof descargarTabla>
+export async function descargarTabla(tipo: 'xlsx' | 'pdf', archivo: string, hojaNombre: string, titulo: string, subtitulo: string, headers: string[], widths: number[], filas: (string | number | null)[][], pdfFilas: string[][]) {
+  if (tipo === 'xlsx') {
+    const XLSX = await import('xlsx')
+    const hoja = XLSX.utils.aoa_to_sheet([headers, ...filas])
+    hoja['!cols'] = widths.map((w) => ({ wch: Math.max(10, w) }))
+    const libro = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(libro, hoja, hojaNombre)
+    descargar(new Uint8Array(XLSX.write(libro, { type: 'array', bookType: 'xlsx' })), `${archivo}.xlsx`, XLSX_MIME)
+    return
+  }
+  const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
+  if (!respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
+  const pdf = await buildPdf({ title: titulo, subtitle: subtitulo, headers, widths, rows: pdfFilas }, { brand: { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) } })
+  descargar(pdf, `${archivo}.pdf`, 'application/pdf')
 }
