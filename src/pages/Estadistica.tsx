@@ -5,6 +5,7 @@ import { useAsync } from '../lib/hooks'
 import { descargar, descargarPdf, XLSX_MIME } from '../lib/download'
 import { diferencia, diferenciaPba, fechaPba, leerMatriculaPba, numeroPba, type MatriculaPba } from '../lib/estadisticaPba'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, PAGE_SIZE, PageHeader, Pager, Spinner, TabBar, toast, type TabItem } from '../ui/kit'
+import { Icon } from '../ui/Icon'
 
 interface Escuela { clave: string | null; cue: string; codigo: string | null; numero: number | null; nombre: string | null; localidad: string | null }
 interface Registro extends MatriculaPba { fecha: string }
@@ -147,7 +148,8 @@ export function Estadistica() {
                   <td class="min-w-44 px-3 py-2.5"><span class="font-semibold">{nombre(r.escuela)}</span><span class="block font-mono text-xs text-slate-500">{r.clave} · {r.escuela.cue}</span></td>
                   <td class="whitespace-nowrap px-3 py-2.5">{fechaPba(r.fecha)}</td>
                   <td class="px-3 py-2.5 font-semibold">{numeroPba(r.activa)}</td><td class="px-3 py-2.5">{numeroPba(r.anterior)}</td><td class="px-3 py-2.5">{numeroPba(r.inicial)}</td>
-                  <td class="whitespace-nowrap px-3 py-2.5">{diferenciaPba(r.activa, r.inicial)}</td><td class="whitespace-nowrap px-3 py-2.5">{diferenciaPba(r.activa, r.anterior)}</td>
+                  <td class="whitespace-nowrap px-3 py-2.5"><Diferencia actual={r.activa} base={r.inicial} /></td>
+                  <td class="whitespace-nowrap px-3 py-2.5"><Diferencia actual={r.activa} base={r.anterior} /></td>
                 </tr>)}</tbody>
               </table>
             </div>
@@ -158,6 +160,20 @@ export function Estadistica() {
       </>}
     </>
   )
+}
+
+function Diferencia({ actual, base }: { actual: number | null; base: number | null }) {
+  const { valor } = diferencia(actual, base)
+  if (valor === null) return <span class="text-slate-500">Sin dato</span>
+  const estado = valor > 0
+    ? { icon: 'arrow-up', color: 'text-emerald-700', label: 'Incremento' } as const
+    : valor < 0
+      ? { icon: 'arrow-down', color: 'text-red-700', label: 'Descenso' } as const
+      : { icon: 'equals', color: 'text-slate-500', label: 'Sin cambios' } as const
+  return <span class={`inline-flex items-center gap-1 font-medium ${estado.color}`}>
+    <Icon name={estado.icon} class="size-4 shrink-0" />
+    <span class="sr-only">{estado.label}: </span>{diferenciaPba(actual, base)}
+  </span>
 }
 
 function Graficos({ filas }: { filas: Fila[] }) {
