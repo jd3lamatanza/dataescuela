@@ -8,6 +8,7 @@ import { coincideAgrupamiento, diferencia, diferenciaPba, fechaPba, leerMatricul
 import { BRAND } from '../modules'
 import { cargar, mensaje, nombre, type Escuela } from './estadisticaDatos'
 import { FichasInscripcion } from './EstadisticaFichas'
+import { SalidasSinIngreso } from './EstadisticaSalidas'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, PAGE_SIZE, PageHeader, Pager, Spinner, TabBar, toast, type TabItem } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 
@@ -16,6 +17,7 @@ interface Fila extends Registro { escuela: Escuela }
 const TABS: TabItem[] = [
   { id: 'pba', label: 'Matrícula PBA', icon: 'chart', color: 'cyan' },
   { id: 'fichas', label: 'Fichas de Inscripción', icon: 'chart', color: 'indigo' },
+  { id: 'salidas', label: 'Salidas sin ingreso', icon: 'chart', color: 'rose' },
 ]
 export function Estadistica() {
   const { user } = useAuth()
@@ -24,7 +26,7 @@ export function Estadistica() {
   return <>
     <PageHeader title="Estadística" subtitle={distrito ? 'Información provincial de las escuelas del distrito' : 'Información provincial de tus escuelas asignadas'} />
     <TabBar label="Estadística" items={TABS} active={tab} onChange={setTab} />
-    {tab === 'pba' ? <EstadisticaVista key={`${user?.id}:${user?.role}`} distrito={distrito} /> : <FichasInscripcion key={`${user?.id}:${user?.role}`} distrito={distrito} />}
+    {tab === 'pba' ? <EstadisticaVista key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'fichas' ? <FichasInscripcion key={`${user?.id}:${user?.role}`} distrito={distrito} /> : <SalidasSinIngreso key={`${user?.id}:${user?.role}`} distrito={distrito} />}
   </>
 }
 

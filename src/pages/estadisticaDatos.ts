@@ -7,7 +7,7 @@ export interface CodigoGrupo { agrupamiento_id: number; codigo: string }
 export const nombre = (e: Escuela) => [e.codigo, e.numero].filter(Boolean).join(' ') || e.nombre || e.cue
 export const mensaje = (e: unknown) => e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e)
 
-export async function cargar<T extends { clave: string; fecha: string }>(distrito: boolean, tabla: string, campos: string) {
+export async function cargar<T extends { clave: string; fecha: string }>(distrito: boolean, tabla: string, campos: string, desempate?: string) {
   const escuelas: Escuela[] = []
   const registros: T[] = []
   const inspectores: Inspector[] = []
@@ -41,7 +41,8 @@ export async function cargar<T extends { clave: string; fecha: string }>(distrit
     if (r.data.length < size) break
   }
   for (let desde = 0; ; desde += size) {
-    const r = await supabase.from(tabla).select(campos).order('clave').range(desde, desde + size - 1)
+    const consulta = supabase.from(tabla).select(campos).order('clave')
+    const r = await (desempate ? consulta.order(desempate) : consulta).range(desde, desde + size - 1)
     if (r.error) throw r.error
     registros.push(...(r.data as unknown as T[]))
     if (r.data.length < size) break
