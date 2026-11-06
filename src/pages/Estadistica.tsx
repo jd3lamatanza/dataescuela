@@ -34,10 +34,12 @@ export function Estadistica() {
   const { user } = useAuth()
   const [tab, setTab] = useState('resumen')
   const distrito = user?.role === 'distrital'
+  const escolar = user?.role === 'escolar'
+  const tituloResumen = distrito ? 'Reporte Distrital' : escolar ? 'Reporte Escolar' : 'Reporte Areal'
   return <>
-    <PageHeader title="Estadística" subtitle={distrito ? 'Información provincial de las escuelas del distrito' : 'Solo lectura · Información provincial de tus escuelas asignadas'} />
-    <TabBar label="Estadística" items={distrito ? TABS : TABS.map((item) => item.id === 'resumen' ? { ...item, label: 'Reporte Areal' } : item)} active={tab} onChange={setTab} />
-    {tab === 'resumen' ? <ReporteDistrital key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'pba' ? <EstadisticaVista key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'fichas' ? <FichasInscripcion key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'salidas' ? <SalidasSinIngreso key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'sincierre' ? <MatriculaSinCierre key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'boletin' ? <BoletinDigital key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'asistencia' ? <AsistenciaEstadistica key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'comparados' ? <IndicadoresComparados key={`${user?.id}:${user?.role}`} distrito={distrito} /> : <DesempenoEstadistica key={`${user?.id}:${user?.role}`} distrito={distrito} />}
+    <PageHeader title="Estadística" subtitle={distrito ? 'Información provincial de las escuelas del distrito' : escolar ? 'Solo lectura · Información provincial de tu escuela' : 'Solo lectura · Información provincial de tus escuelas asignadas'} />
+    <TabBar label="Estadística" items={TABS.map((item) => item.id === 'resumen' ? { ...item, label: tituloResumen } : item)} active={tab} onChange={setTab} />
+    {tab === 'resumen' ? <ReporteDistrital key={`${user?.id}:${user?.role}`} distrito={distrito} escolar={escolar} /> : tab === 'pba' ? <EstadisticaVista key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'fichas' ? <FichasInscripcion key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'salidas' ? <SalidasSinIngreso key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'sincierre' ? <MatriculaSinCierre key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'boletin' ? <BoletinDigital key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'asistencia' ? <AsistenciaEstadistica key={`${user?.id}:${user?.role}`} distrito={distrito} /> : tab === 'comparados' ? <IndicadoresComparados key={`${user?.id}:${user?.role}`} distrito={distrito} /> : <DesempenoEstadistica key={`${user?.id}:${user?.role}`} distrito={distrito} />}
   </>
 }
 
@@ -139,7 +141,7 @@ function EstadisticaVista({ distrito }: { distrito: boolean }) {
       </label> : undefined}>
         <p class="text-sm text-slate-600">{distrito
           ? 'Se actualizan solo las escuelas del padrón distrital. Los datos más recientes y las escuelas ausentes del archivo se conservan.'
-          : 'Vista de solo lectura de tus escuelas asignadas. El distrito actualiza los datos mediante la importación de ABC.'}</p>
+          : 'Vista de solo lectura de los datos disponibles para tu cuenta. El distrito actualiza los datos mediante la importación de ABC.'}</p>
         {resultado && <div class="mt-3"><Alert tone="success">{resultado}</Alert></div>}
       </Card>
       {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
@@ -165,7 +167,7 @@ function EstadisticaVista({ distrito }: { distrito: boolean }) {
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pdf')}>PDF</button>
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pptx')}>PPTX</button>
         </div>}>
-          {!filas.length ? <EmptyState title="Sin datos" text={q || inspector || grupo ? 'Probá con otros filtros.' : distrito ? 'Importá un CSV de ABC para comenzar.' : 'Todavía no hay datos para tus escuelas asignadas.'} /> : <>
+          {!filas.length ? <EmptyState title="Sin datos" text={q || inspector || grupo ? 'Probá con otros filtros.' : distrito ? 'Importá un CSV de ABC para comenzar.' : 'Todavía no hay datos disponibles para tu cuenta.'} /> : <>
             <div class="-m-4 overflow-x-auto">
               <table class="w-full text-left text-sm">
                 <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr>

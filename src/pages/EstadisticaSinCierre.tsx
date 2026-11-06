@@ -100,7 +100,7 @@ export function MatriculaSinCierre({ distrito }: { distrito: boolean }) {
       </label> : undefined}>
         <p class="text-sm text-slate-600">{distrito
           ? 'Estudiantes cuya inscripción quedó abierta en años anteriores. Se actualizan solo las escuelas del padrón distrital; los datos más recientes y las escuelas ausentes del archivo se conservan.'
-          : 'Vista de solo lectura de tus escuelas asignadas. El distrito actualiza los datos mediante la importación de ABC.'}</p>
+          : 'Vista de solo lectura de los datos disponibles para tu cuenta. El distrito actualiza los datos mediante la importación de ABC.'}</p>
         {resultado && <div class="mt-3"><Alert tone="success">{resultado}</Alert></div>}
       </Card>
       {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
@@ -128,7 +128,7 @@ export function MatriculaSinCierre({ distrito }: { distrito: boolean }) {
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pdf')}>PDF</button>
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportar('pptx')}>PPTX</button>
         </div>}>
-          {!filas.length ? <EmptyState title="Sin datos" text={q || inspector || grupo ? 'Probá con otros filtros.' : distrito ? 'Importá un CSV de ABC para comenzar.' : 'Todavía no hay datos para tus escuelas asignadas.'} /> : (
+          {!filas.length ? <EmptyState title="Sin datos" text={q || inspector || grupo ? 'Probá con otros filtros.' : distrito ? 'Importá un CSV de ABC para comenzar.' : 'Todavía no hay datos disponibles para tu cuenta.'} /> : (
             <div class="-m-4 overflow-x-auto">
               <table class="w-full text-left text-sm">
                 <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr>

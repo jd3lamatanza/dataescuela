@@ -135,7 +135,7 @@ export function SalidasSinIngreso({ distrito }: { distrito: boolean }) {
       </label> : undefined}>
         <p class="text-sm text-slate-600">{distrito
           ? 'Estudiantes que salieron de una escuela y no registran ingreso a otra. Cada importación reemplaza por completo el nivel indicado en el nombre del archivo (Inicial, Primario o Secundario).'
-          : 'Vista de solo lectura de tus escuelas asignadas. El distrito actualiza los datos mediante la importación de ABC.'}</p>
+          : 'Vista de solo lectura de los datos disponibles para tu cuenta. El distrito actualiza los datos mediante la importación de ABC.'}</p>
         {resultado && <div class="mt-3"><Alert tone="success">{resultado}</Alert></div>}
       </Card>
       {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
@@ -171,7 +171,7 @@ export function SalidasSinIngreso({ distrito }: { distrito: boolean }) {
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportarNominaCompleta('pdf')}>Nómina PDF</button>
           <button class={BTN_SECONDARY} disabled={!filas.length} onClick={() => void exportarNominaCompleta('pptx')}>Nómina PPTX</button>
         </div>}>
-          {!filas.length ? <EmptyState title="Sin datos" text={q || inspector || grupo || nivel ? 'Probá con otros filtros.' : distrito ? 'Importá un CSV de ABC para comenzar.' : 'Todavía no hay datos para tus escuelas asignadas.'} /> : (
+          {!filas.length ? <EmptyState title="Sin datos" text={q || inspector || grupo || nivel ? 'Probá con otros filtros.' : distrito ? 'Importá un CSV de ABC para comenzar.' : 'Todavía no hay datos disponibles para tu cuenta.'} /> : (
             <div class="-m-4 overflow-x-auto">
               <table class="w-full text-left text-sm">
                 <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr>
