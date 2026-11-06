@@ -6,83 +6,30 @@ import { descargar, XLSX_MIME } from '../lib/download'
 import { buildPdf } from '../lib/export'
 import { coincideAgrupamiento, diferencia, diferenciaPba, fechaPba, leerMatriculaPba, numeroPba, type MatriculaPba } from '../lib/estadisticaPba'
 import { BRAND } from '../modules'
+import { cargar, mensaje, nombre, type Escuela } from './estadisticaDatos'
+import { FichasInscripcion } from './EstadisticaFichas'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, PAGE_SIZE, PageHeader, Pager, Spinner, TabBar, toast, type TabItem } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 
-interface Escuela { clave: string | null; cue: string; codigo: string | null; numero: number | null; nombre: string | null; localidad: string | null }
 interface Registro extends MatriculaPba { fecha: string }
 interface Fila extends Registro { escuela: Escuela }
-interface Inspector { id: number; nombre: string | null; cuil: string; escuelas_asignadas: string[] }
-interface Grupo { id: number; nombre: string }
-interface CodigoGrupo { agrupamiento_id: number; codigo: string }
-const TABS: TabItem[] = [{ id: 'pba', label: 'Matrícula PBA', icon: 'chart', color: 'cyan' }]
-const nombre = (e: Escuela) => [e.codigo, e.numero].filter(Boolean).join(' ') || e.nombre || e.cue
-const mensaje = (e: unknown) => e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e)
-
-async function cargar(distrito: boolean) {
-  const escuelas: Escuela[] = []
-  const registros: Registro[] = []
-  const inspectores: Inspector[] = []
-  const grupos: Grupo[] = []
-  const codigosGrupo: CodigoGrupo[] = []
-  const size = 1000
-  for (let desde = 0; ; desde += size) {
-    const r = await supabase.from('agrupamientos_matricula').select('id,nombre').order('nombre').order('id').range(desde, desde + size - 1)
-    if (r.error) throw r.error
-    grupos.push(...(r.data as Grupo[]))
-    if (r.data.length < size) break
-  }
-  for (let desde = 0; ; desde += size) {
-    const r = await supabase.from('agrupamiento_codigos').select('agrupamiento_id,codigo').order('agrupamiento_id').order('codigo').range(desde, desde + size - 1)
-    if (r.error) throw r.error
-    codigosGrupo.push(...(r.data as CodigoGrupo[]))
-    if (r.data.length < size) break
-  }
-  if (distrito) {
-    for (let desde = 0; ; desde += size) {
-      const r = await supabase.from('inspectores').select('id,nombre,cuil,escuelas_asignadas').order('nombre').order('id').range(desde, desde + size - 1)
-      if (r.error) throw r.error
-      inspectores.push(...(r.data as Inspector[]))
-      if (r.data.length < size) break
-    }
-  }
-  for (let desde = 0; ; desde += size) {
-    const r = await supabase.from('escuelas').select('clave,cue,codigo,numero,nombre,localidad').order('id').range(desde, desde + size - 1)
-    if (r.error) throw r.error
-    escuelas.push(...(r.data as Escuela[]))
-    if (r.data.length < size) break
-  }
-  for (let desde = 0; ; desde += size) {
-    const r = await supabase.from('estadistica_matricula_pba').select('clave,fecha,activa,anterior,inicial').order('clave').range(desde, desde + size - 1)
-    if (r.error) throw r.error
-    registros.push(...(r.data as Registro[]))
-    if (r.data.length < size) break
-  }
-  const porClave = new Map<string, Escuela>()
-  const codigosPorClave = new Map<string, Set<string>>()
-  for (const e of escuelas) {
-    if (!e.clave) continue
-    if (!porClave.has(e.clave)) porClave.set(e.clave, e)
-    if (e.codigo) {
-      if (!codigosPorClave.has(e.clave)) codigosPorClave.set(e.clave, new Set())
-      codigosPorClave.get(e.clave)!.add(e.codigo)
-    }
-  }
-  const filas: Fila[] = []
-  for (const r of registros) {
-    const escuela = porClave.get(r.clave)
-    if (escuela) filas.push({ ...r, escuela })
-  }
-  return { claves: porClave, filas, inspectores, grupos, codigosGrupo, codigosPorClave }
-}
-
+const TABS: TabItem[] = [
+  { id: 'pba', label: 'Matrícula PBA', icon: 'chart', color: 'cyan' },
+  { id: 'fichas', label: 'Fichas de Inscripción', icon: 'chart', color: 'indigo' },
+]
 export function Estadistica() {
   const { user } = useAuth()
-  return <EstadisticaVista key={`${user?.id}:${user?.role}`} distrito={user?.role === 'distrital'} />
+  const [tab, setTab] = useState('pba')
+  const distrito = user?.role === 'distrital'
+  return <>
+    <PageHeader title="Estadística" subtitle={distrito ? 'Información provincial de las escuelas del distrito' : 'Información provincial de tus escuelas asignadas'} />
+    <TabBar label="Estadística" items={TABS} active={tab} onChange={setTab} />
+    {tab === 'pba' ? <EstadisticaVista key={`${user?.id}:${user?.role}`} distrito={distrito} /> : <FichasInscripcion key={`${user?.id}:${user?.role}`} distrito={distrito} />}
+  </>
 }
 
 function EstadisticaVista({ distrito }: { distrito: boolean }) {
-  const { data, loading, error, reload } = useAsync(() => cargar(distrito), [distrito])
+  const { data, loading, error, reload } = useAsync(() => cargar<Registro>(distrito, 'estadistica_matricula_pba', 'clave,fecha,activa,anterior,inicial'), [distrito])
   const [q, setQ] = useState('')
   const [inspector, setInspector] = useState('')
   const [grupo, setGrupo] = useState('')
@@ -169,8 +116,6 @@ function EstadisticaVista({ distrito }: { distrito: boolean }) {
 
   return (
     <>
-      <PageHeader title="Estadística" subtitle={distrito ? 'Información provincial de las escuelas del distrito' : 'Información provincial de tus escuelas asignadas'} />
-      <TabBar label="Estadística" items={TABS} active="pba" onChange={() => {}} />
       <Card title="Matrícula PBA" action={distrito ? <label class={`${BTN_PRIMARY} cursor-pointer focus-within:ring-2 focus-within:ring-sky-500 focus-within:ring-offset-2 ${importando || !data ? 'pointer-events-none opacity-50' : ''}`}>
         {importando ? 'Importando…' : 'Importar CSV de ABC'}
         <input type="file" accept=".csv,text/csv" class="sr-only" disabled={importando || !data} onChange={(e) => {
