@@ -107,7 +107,7 @@ function Formulario({ onClose, onDone }: { onClose(): void; onDone(id: number): 
         await subirArchivo(id!, file, (p) => setPaso(`Subiendo ${i + 1} de ${files.length}: ${file.name} (${p}%)`))
       }
       if (mail) {
-        setPaso('Enviando correo a JD3…')
+        setPaso('Enviando correo de la salida…')
         await enviarCorreo(id!)
       }
       toast.ok('Salida guardada')
@@ -147,7 +147,7 @@ function Formulario({ onClose, onDone }: { onClose(): void; onDone(id: number): 
             </ul>
           )}
         </div>
-        <Toggle checked={mail} onChange={setMail} label="Enviar por Email a JD3" />
+        <Toggle checked={mail} onChange={setMail} label="Enviar por email a la bandeja de salidas educativas" />
         {paso && <Alert tone="info">{paso}</Alert>}
         <div class="flex justify-end gap-2"><button type="button" class={BTN_SECONDARY} disabled={!!paso} onClick={onClose}>Cancelar</button><button class={BTN_PRIMARY} disabled={!!paso}>{paso ? 'Procesando…' : 'Guardar'}</button></div>
       </form>
@@ -215,7 +215,7 @@ function Detalle({ id, estados, onClose, onChange }: { id: number; estados: Esta
       {error && <Alert tone="error">{error}</Alert>}
       {loading && !data ? <Spinner /> : data && (
         <div class="space-y-5">
-          <div class="flex flex-wrap items-center gap-2"><EstadoChip e={estadoDe(data.s.estado_id)} />{data.s.mail_enviado_at && <span class="text-xs text-slate-500">Correo enviado a JD3 el {fechaHora(data.s.mail_enviado_at)}</span>}</div>
+          <div class="flex flex-wrap items-center gap-2"><EstadoChip e={estadoDe(data.s.estado_id)} />{data.s.mail_enviado_at && <span class="text-xs text-slate-500">Correo enviado el {fechaHora(data.s.mail_enviado_at)}</span>}</div>
           <dl class="grid gap-3 text-sm sm:grid-cols-2">
             <div><dt class="text-xs uppercase text-slate-500">Escuela</dt><dd>{data.s.escuela}{data.s.clave ? ` · ${data.s.clave}` : ''}</dd></div>
             <div><dt class="text-xs uppercase text-slate-500">Fecha</dt><dd>{fecha(data.s.fecha)}</dd></div>

@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts'
+import { remitente, validarConfiguracion, type ConfiguracionEmail } from '../_shared/configuracion-email.ts'
 
 const APP_ORIGIN = (() => { try { return new URL(Deno.env.get('APP_PUBLIC_URL') ?? '').origin } catch { return '' } })()
 const CORS = {
@@ -60,12 +61,12 @@ async function ensureFolder(admin: ReturnType<typeof createClient>, token: strin
   return id
 }
 
-async function sendMail(opts: { to: string; cc?: string; subject: string; content: string; attachments: { filename: string; content: Uint8Array; contentType: string }[] }) {
+async function sendMail(opts: { to: string; cc?: string; from: string; replyTo?: string; subject: string; content: string; attachments: { filename: string; content: Uint8Array; contentType: string }[] }) {
   const user = env('SMTP_USERNAME')
   const mailer = new SMTPClient({ connection: { hostname: 'smtp.gmail.com', port: 465, tls: true, auth: { username: user, password: env('SMTP_PASSWORD') } } })
   try {
     await mailer.send({
-      from: `DataEscuela <${user}>`, to: opts.to, ...(opts.cc ? { cc: opts.cc } : {}),
+      from: opts.from, to: opts.to, ...(opts.cc ? { cc: opts.cc } : {}), ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
       subject: opts.subject, content: opts.content,
       attachments: opts.attachments.map((a) => ({ filename: a.filename, content: a.content, encoding: 'binary', contentType: a.contentType })),
     })
@@ -188,7 +189,13 @@ Deno.serve(async (req) => {
         ...(links.length ? ['', 'Archivos que superan el límite de adjuntos (disponibles en Google Drive):', ...links] : []),
       ].join('\n')
 
-      await sendMail({ to: env('JD3_EMAIL'), cc, subject: `Salida Educativa ${clean(s.clave ?? s.cue)} a ${clean(s.destino)}`, content, attachments })
+      const { data: config, error: configError } = await admin.from('configuracion_email').select('salidas_destino,sistema_remitente,respuesta,nombre_remitente').eq('id', true).maybeSingle()
+      if (configError) { console.error('Email configuration lookup failed:', configError.message); throw new HttpError(503, 'No se pudo consultar la configuración de correo') }
+      const configuracion = config as ConfiguracionEmail | null
+      if (configuracion) validarConfiguracion(configuracion)
+      const destino = configuracion?.salidas_destino ?? env('JD3_EMAIL')
+      if (!/^[^\s\x00-\x1f\x7f@<>]+@[^\s\x00-\x1f\x7f@<>]+\.[^\s\x00-\x1f\x7f@<>]+$/.test(destino)) throw new HttpError(503, 'La bandeja de salidas educativas no está configurada')
+      await sendMail({ to: destino, cc, from: configuracion ? remitente(configuracion) : `DataEscuela <${env('SMTP_USERNAME')}>`, replyTo: configuracion?.respuesta, subject: `Salida Educativa ${clean(s.clave ?? s.cue)} a ${clean(s.destino)}`, content, attachments })
       await admin.from('salidas').update({ mail_enviado_at: new Date().toISOString() }).eq('id', salidaId)
       return json({ ok: true, adjuntos: attachments.length, enlaces: links.length })
     }

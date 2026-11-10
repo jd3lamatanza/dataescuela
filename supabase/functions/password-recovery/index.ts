@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts'
+import { remitente, validarConfiguracion, type ConfiguracionEmail } from '../_shared/configuracion-email.ts'
 
 const APP_URL = Deno.env.get('APP_PUBLIC_URL') ?? ''
 const APP_PARSED_URL = APP_URL ? new URL(APP_URL) : null
@@ -75,6 +76,13 @@ Deno.serve(async (req) => {
       return json({ error: 'El servicio de recuperación no está disponible.' }, 503)
     }
 
+    const { data: config, error: configError } = await admin.from('configuracion_email').select('salidas_destino,sistema_remitente,respuesta,nombre_remitente').eq('id', true).maybeSingle()
+    if (configError) {
+      console.error('Email configuration lookup failed:', configError.message)
+      return json({ error: 'El servicio de recuperación no está disponible.' }, 503)
+    }
+    const configuracion = config as ConfiguracionEmail | null
+    if (configuracion) validarConfiguracion(configuracion)
     const mailer = new SMTPClient({
       connection: {
         hostname: 'smtp.gmail.com',
@@ -85,7 +93,8 @@ Deno.serve(async (req) => {
     })
     try {
       await mailer.send({
-        from: `DataEscuela <${smtpUser}>`,
+        from: configuracion ? remitente(configuracion) : `DataEscuela <${smtpUser}>`,
+        ...(configuracion ? { replyTo: configuracion.respuesta } : {}),
         to: recipient.email,
         subject: 'Recuperación de acceso a DataEscuela',
         content: `Hola ${recipient.name},\n\nRecibimos una solicitud para recuperar el acceso a tu cuenta de DataEscuela. Para elegir una contraseña nueva, abrí este enlace:\n\n${data.properties.action_link}\n\nEl enlace es de un solo uso y vence pronto. Si no solicitaste esta recuperación, podés ignorar este mensaje; tu contraseña actual no cambiará.\n\nDataEscuela`,
