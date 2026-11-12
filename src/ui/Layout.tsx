@@ -8,6 +8,7 @@ import { href } from '../lib/router'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { Bandeja } from './Bandeja'
+import { AvisoSimulado } from './AvisoSimulado'
 import { agruparMenuDistrital, type CategoriaDistrital } from './sidebarDistrital'
 import { toast } from './kit'
 import type { AppModule } from '../modules'
@@ -85,12 +86,7 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
 
   return (
     <div class="min-h-full bg-white">
-      {user.simulador && (
-        <div class="fixed inset-x-3 bottom-4 z-[60] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-lg bg-amber-400 px-3 py-2 text-center text-sm font-medium text-amber-950 shadow-lg ring-1 ring-amber-600/40 lg:inset-x-auto lg:right-4 lg:max-w-md">
-          <span>Ingreso simulado como <strong>{user.name}</strong> (sesión de {user.simulador})</span>
-          <button class="rounded bg-amber-950 px-2.5 py-1 text-xs font-semibold text-white hover:bg-amber-900" onClick={async () => { await supabase.rpc('simular_salir'); await refresh(); location.hash = '#/simulado' }}>Volver a mi cuenta</button>
-        </div>
-      )}
+      {user.simulador && <AvisoSimulado user={user} onVolver={async () => { await supabase.rpc('simular_salir'); await refresh(); location.hash = '#/simulado' }} />}
       {drawer && <div class="fixed inset-0 z-30 bg-slate-900/40 lg:hidden" onClick={() => setDrawer(false)} />}
       <header class="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-slate-200 bg-slate-50 px-2 sm:px-4">
         <button type="button" class="flex size-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-100 lg:hidden" aria-label="Menú" onClick={() => setDrawer(true)}><Icon name="menu" /></button>
