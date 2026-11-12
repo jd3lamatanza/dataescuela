@@ -23,31 +23,50 @@ export function Bandeja() {
   const [correoNoLeido, setCorreoNoLeido] = useState(0)
   const correoNuevo = user?.role === 'distrital' || user?.role === 'areal' || user?.role === 'escolar'
 
-  const load = async () => {
-    const [n, m] = await Promise.all([
-      supabase.from('notifications').select('*').order('id', { ascending: false }).limit(30),
-      correoNuevo ? supabase.rpc('correo_contar_no_leidos') : supabase.rpc('mensajes_bandeja'),
-    ])
-    setNotifs((n.data as Notif[]) ?? [])
-    if (m.error) { console.error('Error al consultar mensajes:', m.error.message); return }
-    if (correoNuevo) setCorreoNoLeido(Number(m.data))
-    else setMsgs((m.data as Msg[]) ?? [])
+  const loadNotificaciones = async () => {
+    const { data, error } = await supabase.from('notifications').select('*').order('id', { ascending: false }).limit(30)
+    if (error) { console.error('Error al consultar notificaciones:', error.message); return }
+    setNotifs((data as Notif[]) ?? [])
   }
-  useEffect(() => { addEventListener('notifs-changed', load); return () => removeEventListener('notifs-changed', load) }, [])
-  useEffect(() => { addEventListener('correo-changed', load); return () => removeEventListener('correo-changed', load) }, [correoNuevo])
-  useEffect(() => { load(); const t = setInterval(load, 60000); return () => clearInterval(t) }, [user?.id])
+  useEffect(() => {
+    let vivo = true
+    let secuencia = 0
+    const cargarCorreo = async (periodico = false) => {
+      const actual = ++secuencia
+      const { data, error } = await (correoNuevo ? supabase.rpc('correo_contar_no_leidos') : supabase.rpc('mensajes_bandeja'))
+      if (!vivo || actual !== secuencia) return
+      if (error) { console.error('Error al consultar mensajes:', error.message); return }
+      if (correoNuevo) {
+        setCorreoNoLeido(Number(data))
+        if (periodico) dispatchEvent(new Event('correo-refrescar'))
+      } else setMsgs((data as Msg[]) ?? [])
+    }
+    const cambio = () => { void cargarCorreo() }
+    setCorreoNoLeido(0); setMsgs([])
+    void cargarCorreo()
+    addEventListener('correo-changed', cambio)
+    const intervalo = setInterval(() => { void cargarCorreo(true) }, 5 * 60 * 1000)
+    return () => { vivo = false; removeEventListener('correo-changed', cambio); clearInterval(intervalo) }
+  }, [user?.id, user?.role, correoNuevo])
+  useEffect(() => {
+    const cambio = () => { void loadNotificaciones() }
+    cambio()
+    addEventListener('notifs-changed', cambio)
+    const intervalo = setInterval(cambio, 60000)
+    return () => { removeEventListener('notifs-changed', cambio); clearInterval(intervalo) }
+  }, [user?.id])
 
   const nUnread = notifs.filter((n) => !n.read_at).length
   const mUnread = correoNuevo ? correoNoLeido : msgs.filter((m) => !m.read_at).length
-  const markNotifs = async () => { await supabase.from('notifications').update({ read_at: new Date().toISOString() }).is('read_at', null); load() }
+  const markNotifs = async () => { await supabase.from('notifications').update({ read_at: new Date().toISOString() }).is('read_at', null); void loadNotificaciones() }
   const readMsg = async (m: Msg) => {
-    if (!m.read_at) { await supabase.from('messages').update({ read_at: new Date().toISOString() }).eq('id', m.id); load() }
+    if (!m.read_at) { await supabase.from('messages').update({ read_at: new Date().toISOString() }).eq('id', m.id); dispatchEvent(new Event('correo-changed')) }
     toast.info(`${m.subject}: ${m.body}`)
   }
   const abrir = async (n: Notif) => {
     if (!n.url) return
     await supabase.from('notifications').delete().eq('id', n.id)
-    setOpen(null); load(); go(n.url)
+    setOpen(null); void loadNotificaciones(); go(n.url)
   }
   const badge = (n: number) => n > 0 && <span class="absolute -right-1.5 -top-1.5 min-w-5 rounded-full bg-blue-600 px-1 text-center text-[11px] font-semibold leading-5 text-white ring-2 ring-slate-50">{n}</span>
   const toggle = (k: 'notif' | 'msg') => setOpen(open === k ? null : k)
@@ -55,7 +74,7 @@ export function Bandeja() {
   return (
     <>
       <button type="button" class={btn} aria-label="Notificaciones" onClick={() => toggle('notif')}><Icon name="bell" class="size-5" />{badge(nUnread)}</button>
-      <button type="button" class={btn} aria-label="Mensajes" onClick={() => correoNuevo ? (setOpen(null), go('/mensajes')) : toggle('msg')}><Icon name="mail" class="size-5" />{badge(mUnread)}</button>
+      <button type="button" class={btn} aria-label={mUnread ? `Mensajes, ${mUnread} sin leer` : 'Mensajes'} onClick={() => correoNuevo ? (setOpen(null), go('/mensajes')) : toggle('msg')}><Icon name="mail" class="size-5" />{badge(mUnread)}</button>
       {open && <div class="fixed inset-0 z-40" onClick={() => setOpen(null)} />}
       {open === 'notif' && (
         <div class={panel}>
