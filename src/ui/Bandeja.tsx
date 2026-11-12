@@ -20,20 +20,25 @@ export function Bandeja() {
   const [notifs, setNotifs] = useState<Notif[]>([])
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [compose, setCompose] = useState(false)
+  const [correoNoLeido, setCorreoNoLeido] = useState(0)
+  const correoNuevo = user?.role === 'distrital' || user?.role === 'areal' || user?.role === 'escolar'
 
   const load = async () => {
     const [n, m] = await Promise.all([
       supabase.from('notifications').select('*').order('id', { ascending: false }).limit(30),
-      supabase.rpc('mensajes_bandeja'),
+      correoNuevo ? supabase.rpc('correo_contar_no_leidos') : supabase.rpc('mensajes_bandeja'),
     ])
     setNotifs((n.data as Notif[]) ?? [])
-    setMsgs((m.data as Msg[]) ?? [])
+    if (m.error) { console.error('Error al consultar mensajes:', m.error.message); return }
+    if (correoNuevo) setCorreoNoLeido(Number(m.data))
+    else setMsgs((m.data as Msg[]) ?? [])
   }
   useEffect(() => { addEventListener('notifs-changed', load); return () => removeEventListener('notifs-changed', load) }, [])
+  useEffect(() => { addEventListener('correo-changed', load); return () => removeEventListener('correo-changed', load) }, [correoNuevo])
   useEffect(() => { load(); const t = setInterval(load, 60000); return () => clearInterval(t) }, [user?.id])
 
   const nUnread = notifs.filter((n) => !n.read_at).length
-  const mUnread = msgs.filter((m) => !m.read_at).length
+  const mUnread = correoNuevo ? correoNoLeido : msgs.filter((m) => !m.read_at).length
   const markNotifs = async () => { await supabase.from('notifications').update({ read_at: new Date().toISOString() }).is('read_at', null); load() }
   const readMsg = async (m: Msg) => {
     if (!m.read_at) { await supabase.from('messages').update({ read_at: new Date().toISOString() }).eq('id', m.id); load() }
@@ -50,7 +55,7 @@ export function Bandeja() {
   return (
     <>
       <button type="button" class={btn} aria-label="Notificaciones" onClick={() => toggle('notif')}><Icon name="bell" class="size-5" />{badge(nUnread)}</button>
-      <button type="button" class={btn} aria-label="Mensajes" onClick={() => toggle('msg')}><Icon name="mail" class="size-5" />{badge(mUnread)}</button>
+      <button type="button" class={btn} aria-label="Mensajes" onClick={() => correoNuevo ? (setOpen(null), go('/mensajes')) : toggle('msg')}><Icon name="mail" class="size-5" />{badge(mUnread)}</button>
       {open && <div class="fixed inset-0 z-40" onClick={() => setOpen(null)} />}
       {open === 'notif' && (
         <div class={panel}>

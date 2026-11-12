@@ -23,6 +23,7 @@ const CATEGORIA_POR_MODULO: Record<string, CategoriaDistrital> = {
   simulado: 'sistema',
   'usuarios-distrito': 'sistema',
   configuracion: 'sistema',
+  mensajes: 'sistema',
 }
 
 export function agruparMenuDistrital(modulos: readonly AppModule[]) {

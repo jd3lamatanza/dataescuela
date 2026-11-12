@@ -11,7 +11,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const BRAND = { name: 'DataEscuela v2', org: 'Jefatura Distrital 3 - La Matanza' } as const
 
-export type IconName = 'home' | 'users' | 'school' | 'map' | 'chart' | 'building' | 'settings' | 'bell' | 'search' | 'check' | 'alert' | 'shield' | 'transfer' | 'login' | 'route' | 'list' | 'clock' | 'book' | 'layers' | 'clipboard' | 'org' | 'bus' | 'calendar' | 'sun'
+export type IconName = 'home' | 'users' | 'school' | 'map' | 'chart' | 'building' | 'settings' | 'bell' | 'mail' | 'search' | 'check' | 'alert' | 'shield' | 'transfer' | 'login' | 'route' | 'list' | 'clock' | 'book' | 'layers' | 'clipboard' | 'org' | 'bus' | 'calendar' | 'sun'
 
 export interface AppModule {
   id: string
@@ -29,6 +29,7 @@ export interface AppModule {
 // Registro único de módulos. Agregar un módulo = una línea aquí + su página en src/pages/registry.ts
 export const MODULES: readonly AppModule[] = [
   { id: 'inicio', label: 'Home', path: '/', icon: 'home', roles: ROLES, primary: true },
+  { id: 'mensajes', label: 'Mensajes', path: '/mensajes', icon: 'mail', roles: ['escolar', 'areal', 'distrital'] },
   { id: 'articulacion', label: 'Articulación', path: '/articulacion', icon: 'transfer', roles: ['escolar'], primary: true },
   { id: 'areal', label: 'Articulación', path: '/areal', icon: 'transfer', roles: ['areal'], primary: true },
   { id: 'matricula-areal', label: 'Matrícula', path: '/matricula-areal', icon: 'chart', roles: ['areal'], primary: true },
