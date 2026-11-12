@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { Bandeja } from './Bandeja'
 import { agruparMenuDistrital, type CategoriaDistrital } from './sidebarDistrital'
+import { toast } from './kit'
 import type { AppModule } from '../modules'
 
 export const Logo = ({ class: cls = 'size-10' }: { class?: string }) => (
@@ -41,11 +42,22 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
   )
 }
 
-/** Shell estilo GitHub claro: topbar, sidebar (riel colapsable en escritorio, drawer en móvil). */
+/** Topbar y sidebar (riel colapsable en escritorio, drawer en móvil). */
 export function AppShell({ user, path, onLogout, children }: { user: Profile; path: string; onLogout(): void; children?: ComponentChildren }) {
   const { refresh } = useAuth()
   const [drawer, setDrawer] = useState(false)
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('dw-sb') === '1')
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
+  useEffect(() => {
+    const sync = (e: StorageEvent) => {
+      if (e.key !== 'dw-theme' && e.key !== null) return
+      const next = e.key === 'dw-theme' && e.newValue === 'dark'
+      document.documentElement.classList.toggle('dark', next)
+      setDark(next)
+    }
+    addEventListener('storage', sync)
+    return () => removeEventListener('storage', sync)
+  }, [])
   const mods = modulesFor(user.role)
   const active = (p: string) => (p === '/' ? path === '/' : path.startsWith(p))
   const categorias = user.role === 'distrital' ? agruparMenuDistrital(mods) : []
@@ -56,6 +68,13 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
   }, [categoriaActiva, path, user.id, user.role])
   const initials = user.name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()
   const toggle = () => { const v = !collapsed; setCollapsed(v); localStorage.setItem('dw-sb', v ? '1' : '0') }
+  const cambiarTema = () => {
+    const next = !dark
+    document.documentElement.classList.toggle('dark', next)
+    setDark(next)
+    try { localStorage.setItem('dw-theme', next ? 'dark' : 'light') }
+    catch { toast.error('No se pudo guardar la preferencia de apariencia en este dispositivo.') }
+  }
   const enlace = (m: AppModule) => (
     <a href={href(m.path)} title={m.label} onClick={() => setDrawer(false)} aria-current={active(m.path) ? 'page' : undefined}
       class={`relative flex min-h-11 items-center gap-2.5 rounded-md px-3 text-sm ${collapsed ? 'lg:justify-center lg:px-0' : ''} ${active(m.path) ? 'bg-sky-50 font-semibold text-slate-900 before:absolute before:-left-2 before:bottom-2 before:top-2 before:w-1 before:rounded-full before:bg-cyan-500' : 'text-slate-700 hover:bg-slate-200/60'}`}>
@@ -104,6 +123,16 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
           </div>
           {collapsed && <ul class="hidden space-y-0.5 lg:block">{mods.map((m) => <li key={m.id}>{enlace(m)}</li>)}</ul>}
         </>}
+        <div class="mt-4 border-t border-slate-200 pt-2">
+          <button type="button" role="switch" aria-label="Modo oscuro" aria-checked={dark} title="Modo oscuro" onClick={cambiarTema}
+            class={`flex min-h-11 w-full items-center gap-2.5 rounded-md px-3 text-left text-sm text-slate-700 hover:bg-slate-200/60 ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
+            <Icon name={dark ? 'sun' : 'moon'} class="size-[18px] shrink-0 text-slate-500" />
+            <span class={`flex-1 ${collapsed ? 'lg:hidden' : ''}`}>Modo oscuro</span>
+            <span aria-hidden="true" class={`relative h-5 w-9 shrink-0 rounded-full ${dark ? 'bg-sky-600' : 'bg-slate-300'} ${collapsed ? 'lg:hidden' : ''}`}>
+              <span class={`theme-thumb absolute top-0.5 size-4 rounded-full bg-white transition-transform ${dark ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+            </span>
+          </button>
+        </div>
       </nav>
 
       <main class={`px-3 py-5 sm:px-6 ${collapsed ? 'lg:pl-24' : 'lg:pl-72'}`}>

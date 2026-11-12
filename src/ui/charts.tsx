@@ -20,14 +20,14 @@ export function Torta({ datos, centro, etiqueta }: { datos: Dato[]; centro?: str
   let acumulado = 0
   return <div class="flex flex-col items-center gap-3 sm:flex-row">
     <svg viewBox="0 0 42 42" class="h-36 w-36 shrink-0" role="img" aria-label={etiqueta ?? 'Gráfico de torta'}>
-      <circle cx="21" cy="21" r={r} fill="none" stroke="#e2e8f0" stroke-width="6" />
+      <circle cx="21" cy="21" r={r} fill="none" stroke="var(--chart-grid, #e2e8f0)" stroke-width="6" />
       {total > 0 && datos.filter((d) => d.value > 0).map((d) => {
         const largo = d.value * 100 / total
         const el = <circle key={d.label} cx="21" cy="21" r={r} fill="none" stroke={d.color} stroke-width="6" stroke-dasharray={`${largo} ${100 - largo}`} stroke-dashoffset={25 - acumulado} />
         acumulado += largo
         return el
       })}
-      {centro && <text x="21" y="22.5" text-anchor="middle" font-size="5.5" font-weight="700" fill="#0f172a">{centro}</text>}
+      {centro && <text x="21" y="22.5" text-anchor="middle" font-size="5.5" font-weight="700" fill="var(--chart-text, #0f172a)">{centro}</text>}
     </svg>
     <div class="w-full min-w-0 flex-1"><Leyenda datos={datos} total={total} /></div>
   </div>
@@ -64,14 +64,14 @@ export function Lineas({ etiquetas, series, sufijo = '%' }: { etiquetas: string[
   const y = (v: number) => T + (H - T - B) * (1 - v / techo)
   return <div>
     <svg viewBox={`0 0 ${W} ${H}`} class="w-full" role="img" aria-label="Gráfico de líneas">
-      {[0, 0.5, 1].map((f) => <g key={f}><line x1={L} x2={W} y1={y(techo * f)} y2={y(techo * f)} stroke="#e2e8f0" /><text x={L - 4} y={y(techo * f) + 3} text-anchor="end" font-size="8" fill="#64748b">{Math.round(techo * f)}{sufijo}</text></g>)}
-      {etiquetas.map((e, i) => <text key={e} x={x(i)} y={H - 6} text-anchor="middle" font-size="8" fill="#64748b">{e}</text>)}
+      {[0, 0.5, 1].map((f) => <g key={f}><line x1={L} x2={W} y1={y(techo * f)} y2={y(techo * f)} stroke="var(--chart-grid, #e2e8f0)" /><text x={L - 4} y={y(techo * f) + 3} text-anchor="end" font-size="8" fill="var(--chart-muted, #64748b)">{Math.round(techo * f)}{sufijo}</text></g>)}
+      {etiquetas.map((e, i) => <text key={e} x={x(i)} y={H - 6} text-anchor="middle" font-size="8" fill="var(--chart-muted, #64748b)">{e}</text>)}
       {series.map((s) => {
         const pts = s.puntos.map((v, i) => v === null ? null : [x(i), y(v), v] as const)
         const trazo = pts.filter((p) => p !== null).map((p) => `${p![0]},${p![1]}`).join(' ')
         return <g key={s.label}>
           <polyline points={trazo} fill="none" stroke={s.color} stroke-width="2" stroke-linejoin="round" />
-          {pts.map((p, i) => p && <g key={i}><circle cx={p[0]} cy={p[1]} r="3" fill={s.color} /><text x={p[0]} y={p[1] - 6} text-anchor="middle" font-size="8" font-weight="600" fill="#0f172a">{p[2].toLocaleString('es-AR', { maximumFractionDigits: 1 })}</text></g>)}
+          {pts.map((p, i) => p && <g key={i}><circle cx={p[0]} cy={p[1]} r="3" fill={s.color} /><text x={p[0]} y={p[1] - 6} text-anchor="middle" font-size="8" font-weight="600" fill="var(--chart-text, #0f172a)">{p[2].toLocaleString('es-AR', { maximumFractionDigits: 1 })}</text></g>)}
         </g>
       })}
     </svg>
