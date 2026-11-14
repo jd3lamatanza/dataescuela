@@ -31,8 +31,7 @@ function Listado() {
   const [q, setQ] = useState(params.get('q') ?? '')
   const dq = useDebounced(q)
   const nivel = params.get('nivel') ?? ''
-  const areal = user?.role === 'areal'
-  const localidad = areal ? params.get('localidad') ?? '' : ''
+  const localidad = params.get('localidad') ?? ''
   const orden = params.get('orden') && ORDEN[params.get('orden')!] ? params.get('orden')! : 'clave'
   const desc = params.get('dir') === 'desc'
   const page = Math.max(1, Number(params.get('page')) || 1)
@@ -44,7 +43,6 @@ function Listado() {
     return [...new Set((r.data ?? []).map((x) => x.nivel).filter(Boolean) as string[])].sort()
   }, [user?.id, user?.role])
   const localidades = useAsync(async () => {
-    if (!areal) return [] as string[]
     const resultado: string[] = []
     for (let offset = 0; ; offset += 500) {
       const { data, error } = await supabase.from('escuelas').select('localidad').order('id').range(offset, offset + 499)
@@ -123,20 +121,20 @@ function Listado() {
   return (
     <>
       <PageHeader title="Escuelas" subtitle={`Padrón de escuelas · ${data?.total ?? 0} en el listado`} />
-      <div class={`grid gap-2 sm:grid-cols-2 ${areal ? 'lg:grid-cols-[1fr_auto_auto_auto_auto_auto]' : 'lg:grid-cols-[1fr_auto_auto_auto_auto]'}`}>
+      <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto_auto_auto]">
         <input type="search" class={FIELD} placeholder="Clave, CUE, código, número, nivel o localidad" value={q} maxLength={80} aria-label="Buscar"
           onInput={(e) => { setQ(e.currentTarget.value); setParams({ q: e.currentTarget.value, page: null }) }} />
         <select class={FIELD} value={nivel} aria-label="Nivel" onChange={(e) => setParams({ nivel: e.currentTarget.value, page: null })}><option value="">Todos los niveles</option>{niveles.data?.map((n) => <option key={n} value={n}>{n}</option>)}</select>
-        {areal && <select class={FIELD} value={localidad} aria-label="Localidad" onChange={(e) => setParams({ localidad: e.currentTarget.value, page: null })}><option value="">Todas las localidades</option>{localidades.data?.map((l) => <option key={l} value={l}>{l}</option>)}</select>}
+        <select class={FIELD} value={localidad} aria-label="Localidad" onChange={(e) => setParams({ localidad: e.currentTarget.value, page: null })}><option value="">Todas las localidades</option>{localidades.data?.map((l) => <option key={l} value={l}>{l}</option>)}</select>
         <select class={FIELD} value={orden} aria-label="Ordenar por" onChange={(e) => setParams({ orden: e.currentTarget.value, page: null })}>{Object.entries(ORDEN).map(([k, [l]]) => <option key={k} value={k}>Orden: {l}</option>)}</select>
         <select class={FIELD} value={desc ? 'desc' : 'asc'} aria-label="Dirección" onChange={(e) => setParams({ dir: e.currentTarget.value === 'desc' ? 'desc' : null, page: null })}><option value="asc">Ascendente</option><option value="desc">Descendente</option></select>
         <button class={BTN_SECONDARY} onClick={() => { setQ(''); setParams({ q: null, nivel: null, localidad: null, orden: null, dir: null, page: null }) }}>Limpiar</button>
       </div>
-      {areal && <div class="mt-3 flex flex-wrap gap-2">
+      <div class="mt-3 flex flex-wrap gap-2">
         <button type="button" class={BTN_SECONDARY} disabled={exportando || loading || !data?.total} onClick={() => void exportar('xlsx')}><Icon name="download" class="size-4" />Excel</button>
         <button type="button" class={BTN_SECONDARY} disabled={exportando || loading || !data?.total} onClick={() => void exportar('pdf')}><Icon name="download" class="size-4" />PDF</button>
-      </div>}
-      {localidades.error && areal && <div class="mt-3"><Alert tone="error">No se pudieron cargar las localidades: {localidades.error}</Alert></div>}
+      </div>
+      {localidades.error && <div class="mt-3"><Alert tone="error">No se pudieron cargar las localidades: {localidades.error}</Alert></div>}
       {niveles.error && <div class="mt-3"><Alert tone="error">No se pudieron cargar los niveles: {niveles.error}</Alert></div>}
       {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
       <Card class="mt-3">
@@ -144,7 +142,7 @@ function Listado() {
           <>
             <div class="-m-4 hidden overflow-x-auto md:block">
               <table class="w-full text-left text-sm">
-                <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr>{['Clave', 'CUE', 'Código', 'Número', 'Nivel', 'Modalidad', 'Localidad', ...(areal ? ['Dirección', 'Teléfono'] : []), ''].map((h) => <th key={h} class="px-3 py-2">{h}</th>)}</tr></thead>
+                <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr>{['Clave', 'CUE', 'Código', 'Número', 'Nivel', 'Modalidad', 'Localidad', 'Dirección', 'Teléfono', ''].map((h) => <th key={h} class="px-3 py-2">{h}</th>)}</tr></thead>
                 <tbody class="divide-y divide-slate-100">
                   {data.rows.map((e) => (
                     <tr key={e.id} class="hover:bg-slate-50">
@@ -152,7 +150,7 @@ function Listado() {
                       <td class="whitespace-nowrap px-3 py-2.5 font-mono text-xs">{e.cue}</td>
                       <td class="px-3 py-2.5 text-xs">{e.codigo}</td><td class="px-3 py-2.5 text-xs">{e.numero}</td>
                       <td class="px-3 py-2.5 text-xs">{e.nivel}</td><td class="px-3 py-2.5 text-xs">{e.modalidad}</td><td class="px-3 py-2.5 text-xs">{e.localidad}</td>
-                      {areal && <><td class="px-3 py-2.5 text-xs">{direccionEscuela(e) || '—'}</td><td class="px-3 py-2.5 text-xs">{e.te || '—'}</td></>}
+                      <td class="px-3 py-2.5 text-xs">{direccionEscuela(e) || '—'}</td><td class="px-3 py-2.5 text-xs">{e.te || '—'}</td>
                       <td class="px-3 py-2.5"><Menu e={e} /></td>
                     </tr>
                   ))}
@@ -167,7 +165,7 @@ function Listado() {
                     <p class="font-mono text-xs text-slate-500">{e.clave} · CUE {e.cue}</p>
                     <p class="text-xs text-slate-600">{[e.nivel, e.modalidad].filter(Boolean).join(' · ')}</p>
                     <p class="text-xs text-slate-500">{e.localidad}</p>
-                    {areal && <><p class="text-xs text-slate-600">Dirección: {direccionEscuela(e) || '—'}</p><p class="text-xs text-slate-600">Teléfono: {e.te || '—'}</p></>}
+                    <p class="text-xs text-slate-600">Dirección: {direccionEscuela(e) || '—'}</p><p class="text-xs text-slate-600">Teléfono: {e.te || '—'}</p>
                   </div>
                   <Menu e={e} />
                 </li>
