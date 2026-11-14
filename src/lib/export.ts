@@ -13,6 +13,7 @@ export interface Table {
 export interface PdfOptions {
   brand?: { name: string; logo: Uint8Array }
   indicators?: (number | null)[][]
+  maxCellLines?: number
 }
 
 // Quita caracteres de control que invalidan el XML
@@ -126,7 +127,7 @@ export async function buildPdf(t: Table, options: PdfOptions = {}): Promise<Uint
 
   for (const [rowIndex, row] of t.rows.entries()) {
     const indicators = options.indicators?.[rowIndex]
-    const cells = row.map((v, i) => wrap(v, font, size, cw[i] - pad * 2 - (indicators?.[i] != null ? 11 : 0), 3))
+    const cells = row.map((v, i) => wrap(v, font, size, cw[i] - pad * 2 - (indicators?.[i] != null ? 11 : 0), options.maxCellLines ?? 3))
     const h = Math.max(...cells.map((l) => l.length)) * lh + pad * 2 - 2
     if (y - h < M + 14) {
       page = doc.addPage([W, H])
