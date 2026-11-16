@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'npm:pdf-lib@1.17.1'
 
 export type EventoConstancia = { nombre: string; lugar: string; fecha: string; hora_inicio: string; hora_fin: string }
-export type PersonaConstancia = { nombre: string; email: string }
+export type PersonaConstancia = { nombre: string; cargo: string; escuela: string }
 export type FirmaConstancia = { mime: string; base64: string }
 
 function lineas(texto: string, font: PDFFont, size: number, width: number) {
@@ -36,7 +36,7 @@ export async function generarConstancia(evento: EventoConstancia, persona: Perso
   const hoy = new Intl.DateTimeFormat('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: 'numeric', month: 'long', year: 'numeric' }).formatToParts(new Date())
   const parte = (tipo: string) => hoy.find((p) => p.type === tipo)?.value ?? ''
   const textos = [
-    `Se deja constancia que ${persona.nombre} ha participado de ${evento.nombre} realizada el día ${fecha[2]}/${fecha[1]}/${fecha[0]} en el horario de ${evento.hora_inicio.slice(0, 5)} a ${evento.hora_fin.slice(0, 5)} en ${evento.lugar} a los efectos de ser presentada ante quien corresponda.`,
+    `Se deja constancia que ${persona.nombre} con cargo ${persona.cargo} en ${persona.escuela} ha participado de ${evento.nombre} realizada el día ${fecha[2]}/${fecha[1]}/${fecha[0]} en el horario de ${evento.hora_inicio.slice(0, 5)} a ${evento.hora_fin.slice(0, 5)} en ${evento.lugar} a los efectos de ser presentada ante quien corresponda.`,
     `Se extiende la presente a los ${parte('day')} del mes de ${parte('month')} de ${parte('year')}.`,
   ]
   let size = 11
@@ -47,17 +47,19 @@ export async function generarConstancia(evento: EventoConstancia, persona: Perso
   }
   if (bloques.reduce((n, bloque) => n + bloque.length, 0) * (size + 7) + 40 > 240) throw new Error('Los datos son demasiado extensos para la constancia A5.')
   let y = 410
-  for (const bloque of bloques) {
+  for (const [indice, bloque] of bloques.entries()) {
     for (const linea of bloque) { page.drawText(linea, { x: 45, y, font: regular, size }); y -= size + 7 }
-    y -= 20
+    if (indice < bloques.length - 1) y -= 20
   }
   if (firmas.length > 6) throw new Error('Se admiten hasta seis imágenes de firmas.')
   const espacio = (width - 100) / Math.max(firmas.length, 1)
+  const parteSuperior = y - 8
+  const alturaDisponible = Math.min(140, parteSuperior - 35)
   for (let i = 0; i < firmas.length; i++) {
     const bytes = Uint8Array.from(atob(firmas[i].base64.replace(/\s/g, '')), (c) => c.charCodeAt(0))
     const image = firmas[i].mime === 'image/png' ? await doc.embedPng(bytes) : await doc.embedJpg(bytes)
-    const scale = Math.min((espacio - 8) / image.width, 75 / image.height)
-    page.drawImage(image, { x: 50 + i * espacio + (espacio - image.width * scale) / 2, y: 65, width: image.width * scale, height: image.height * scale })
+    const scale = Math.min((espacio - 8) / image.width, alturaDisponible / image.height)
+    page.drawImage(image, { x: 50 + i * espacio + (espacio - image.width * scale) / 2, y: parteSuperior - image.height * scale, width: image.width * scale, height: image.height * scale })
   }
   return await doc.save()
 }
