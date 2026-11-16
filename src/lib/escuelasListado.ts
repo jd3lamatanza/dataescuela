@@ -17,7 +17,7 @@ export interface EscuelaListado {
 export const direccionEscuela = (e: Pick<EscuelaListado, 'calle' | 'nu_calle'>) =>
   [e.calle?.trim(), e.nu_calle == null ? '' : String(e.nu_calle)].filter(Boolean).join(' ')
 
-export function tablaEscuelas(rows: EscuelaListado[], filtros: { localidad: string; nivel: string; busqueda: string }, organizacion: string): Table {
+export function tablaEscuelas(rows: EscuelaListado[], filtros: { localidad: string; nivel: string; busqueda: string }, organizacion: string, cupos?: Record<number, number>): Table {
   const detalles = [
     filtros.localidad && `Localidad: ${filtros.localidad}`,
     filtros.nivel && `Nivel: ${filtros.nivel}`,
@@ -27,9 +27,9 @@ export function tablaEscuelas(rows: EscuelaListado[], filtros: { localidad: stri
   return {
     title: 'Listado de escuelas',
     subtitle: `${organizacion} · ${detalles}`,
-    headers: ['Clave', 'CUE', 'Código', 'Número', 'Nivel', 'Modalidad', 'Localidad', 'Dirección', 'Teléfono'],
-    widths: [15, 15, 10, 8, 15, 17, 15, 28, 17],
-    rows: rows.map((e) => [e.clave, e.cue, e.codigo, e.numero, e.nivel, e.modalidad, e.localidad, direccionEscuela(e), e.te].map((v) => v == null ? '' : String(v))),
+    headers: ['Clave', 'CUE', 'Código', 'Número', 'Nivel', 'Modalidad', 'Localidad', 'Dirección', 'Teléfono', ...(cupos ? ['Cupos EAV'] : [])],
+    widths: [15, 15, 10, 8, 15, 17, 15, 28, 17, ...(cupos ? [14] : [])],
+    rows: rows.map((e) => [e.clave, e.cue, e.codigo, e.numero, e.nivel, e.modalidad, e.localidad, direccionEscuela(e), e.te, ...(cupos ? [cupos[e.id] ?? 'Sin asignar'] : [])].map((v) => v == null ? '' : String(v))),
   }
 }
 

@@ -36,6 +36,16 @@ test('Excel incluye encabezados, filtros y todas las escuelas como texto', async
   assert.deepEqual(datos[5].slice(-2), ['San Martín 123', '011 1234-5678'])
 })
 
+test('el listado distrital exporta cupos, distingue cero y mantiene sin asignar', async () => {
+  const rows = [escuela, { ...escuela, id: 2 }, { ...escuela, id: 3 }]
+  const tabla = tablaEscuelas(rows, { localidad: '', nivel: '', busqueda: '' }, 'Jefatura Distrital 3', { 1: 0, 2: 25 })
+  assert.equal(tabla.headers.at(-1), 'Cupos EAV')
+  assert.deepEqual(tabla.rows.map((r) => r.at(-1)), ['0', '25', 'Sin asignar'])
+  const libro = XLSX.read(await buildEscuelasXlsx(tabla, 'DataEscuela v2'), { type: 'array' })
+  const datos = XLSX.utils.sheet_to_json(libro.Sheets.Escuelas, { header: 1, defval: '' })
+  assert.deepEqual(datos.slice(5).map((r) => r.at(-1)), ['0', '25', 'Sin asignar'])
+})
+
 test('PDF incluye marca, datos de contacto y encabezados en páginas posteriores', async () => {
   const tabla = tablaEscuelas(Array.from({ length: 80 }, (_, i) => ({ ...escuela, id: i + 1 })), { localidad: 'Ramos Mejía', nivel: '', busqueda: '' }, 'Jefatura Distrital 3')
   const logo = new Uint8Array(await readFile(new URL('../public/icon-192.png', import.meta.url)))

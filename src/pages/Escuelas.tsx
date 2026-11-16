@@ -12,6 +12,7 @@ import { buildPdf } from '../lib/export'
 import { descargar, XLSX_MIME } from '../lib/download'
 import { BRAND } from '../modules'
 import { Icon } from '../ui/Icon'
+import { cargarCuposEav, CuposEav } from '../ui/CuposEav'
 
 const ORDEN: Record<string, [string, string[]]> = {
   clave: ['Clave', ['clave', 'numero']], cue: ['CUE', ['cue']], codigo: ['Código', ['codigo', 'numero']], numero: ['Número', ['numero', 'clave']],
@@ -36,6 +37,7 @@ function Listado() {
   const desc = params.get('dir') === 'desc'
   const page = Math.max(1, Number(params.get('page')) || 1)
   const [exportando, setExportando] = useState(false)
+  const [editarCupos, setEditarCupos] = useState<{ id: number; nombre: string; cupos: number | null } | null>(null)
 
   const niveles = useAsync(async () => {
     const r = await supabase.from('escuelas').select('nivel')
@@ -61,24 +63,27 @@ function Listado() {
     ORDEN[orden][1].forEach((c, i) => { s = s.order(c, { ascending: i === 0 ? !desc : true, nullsFirst: false }) })
     return s.order('id')
   }
-  const { data, loading, error } = useAsync(async () => {
+  const { data, loading, error, reload } = useAsync(async () => {
     const r = await consulta(dq).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
     if (r.error) throw r.error
-    return { rows: r.data, total: r.count ?? 0 }
+    const cupos = user?.role === 'distrital' ? await cargarCuposEav(r.data.map((e) => e.id)) : {}
+    return { rows: r.data, total: r.count ?? 0, cupos }
   }, [dq, nivel, localidad, orden, desc, page, user?.id, user?.role])
 
   const exportar = async (tipo: 'xlsx' | 'pdf') => {
     setExportando(true)
     try {
       const rows: EscuelaListado[] = []
+      const cupos: Record<number, number> = {}
       for (let offset = 0; ; offset += 500) {
         const r = await consulta(q).range(offset, offset + 499)
         if (r.error) throw r.error
         rows.push(...r.data)
+        if (user?.role === 'distrital') Object.assign(cupos, await cargarCuposEav(r.data.map((e) => e.id)))
         if (r.data.length < 500) break
       }
       if (!rows.length) { toast.info('No hay escuelas para exportar con estos filtros.'); return }
-      const tabla = tablaEscuelas(rows, { localidad, nivel, busqueda: q.trim() }, BRAND.org)
+      const tabla = tablaEscuelas(rows, { localidad, nivel, busqueda: q.trim() }, BRAND.org, user?.role === 'distrital' ? cupos : undefined)
       if (tipo === 'xlsx') descargar(await buildEscuelasXlsx(tabla, BRAND.name), 'listado-escuelas.xlsx', XLSX_MIME)
       else {
         const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
@@ -113,6 +118,7 @@ function Listado() {
       { label: 'Equipo Directivo', onClick: () => ver(e.id, 'directivo') },
       { label: 'Equipo de Orientación', onClick: () => ver(e.id, 'orientacion') },
       { label: 'Referentes ESI', onClick: () => ver(e.id, 'esi') },
+      { label: 'Asignar cupos EAV', hidden: !jefatura, onClick: () => setEditarCupos({ id: e.id, nombre: [e.codigo, e.numero, e.clave].filter(Boolean).join(' · ') || e.cue, cupos: data?.cupos[e.id] ?? null }) },
       { label: 'Habilitar/Deshabilitar carga de matrícula', icon: 'unlock', sep: true, hidden: !jefatura, onClick: () => habilitarMatricula(e) },
       { label: 'Restablecer contraseña', danger: true, hidden: !jefatura, onClick: () => reset(e) },
     ]} />
@@ -142,7 +148,7 @@ function Listado() {
           <>
             <div class="-m-4 hidden overflow-x-auto md:block">
               <table class="w-full text-left text-sm">
-                <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr>{['Clave', 'CUE', 'Código', 'Número', 'Nivel', 'Modalidad', 'Localidad', 'Dirección', 'Teléfono', ''].map((h) => <th key={h} class="px-3 py-2">{h}</th>)}</tr></thead>
+                <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><tr>{['Clave', 'CUE', 'Código', 'Número', 'Nivel', 'Modalidad', 'Localidad', 'Dirección', 'Teléfono', ...(jefatura ? ['Cupos EAV'] : []), ''].map((h) => <th key={h} class="px-3 py-2">{h}</th>)}</tr></thead>
                 <tbody class="divide-y divide-slate-100">
                   {data.rows.map((e) => (
                     <tr key={e.id} class="hover:bg-slate-50">
@@ -151,6 +157,7 @@ function Listado() {
                       <td class="px-3 py-2.5 text-xs">{e.codigo}</td><td class="px-3 py-2.5 text-xs">{e.numero}</td>
                       <td class="px-3 py-2.5 text-xs">{e.nivel}</td><td class="px-3 py-2.5 text-xs">{e.modalidad}</td><td class="px-3 py-2.5 text-xs">{e.localidad}</td>
                       <td class="px-3 py-2.5 text-xs">{direccionEscuela(e) || '—'}</td><td class="px-3 py-2.5 text-xs">{e.te || '—'}</td>
+                      {jefatura && <td class="px-3 py-2.5 text-xs">{data.cupos[e.id] ?? 'Sin asignar'}</td>}
                       <td class="px-3 py-2.5"><Menu e={e} /></td>
                     </tr>
                   ))}
@@ -166,6 +173,7 @@ function Listado() {
                     <p class="text-xs text-slate-600">{[e.nivel, e.modalidad].filter(Boolean).join(' · ')}</p>
                     <p class="text-xs text-slate-500">{e.localidad}</p>
                     <p class="text-xs text-slate-600">Dirección: {direccionEscuela(e) || '—'}</p><p class="text-xs text-slate-600">Teléfono: {e.te || '—'}</p>
+                    {jefatura && <p class="text-xs text-slate-600">Cupos EAV: {data.cupos[e.id] ?? 'Sin asignar'}</p>}
                   </div>
                   <Menu e={e} />
                 </li>
@@ -175,6 +183,7 @@ function Listado() {
         )}
       </Card>
       <Pager page={page} total={data?.total ?? 0} onPage={(p) => setParams({ page: p > 1 ? p : null })} />
+      {editarCupos && <CuposEav escuela={editarCupos} cupos={editarCupos.cupos} onClose={() => setEditarCupos(null)} onDone={() => { setEditarCupos(null); reload() }} />}
     </>
   )
 }

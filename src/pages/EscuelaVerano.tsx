@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAsync, useDebounced } from '../lib/hooks'
 import { go, setParams, useRoute } from '../lib/router'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Modal, PAGE_SIZE, PageHeader, Pager, RowMenu, Spinner, TabBar, Toggle, confirmar, toast, type TabItem } from '../ui/kit'
+import { cargarCuposEav, CuposEav } from '../ui/CuposEav'
 
 const TABS = [
   { id: 'escuelas', label: 'Escuelas', icon: 'school', color: 'amber' },
@@ -41,12 +42,15 @@ function Escuelas() {
   const dq = useDebounced(q)
   const page = Math.max(1, Number(params.get('page')) || 1)
   const [agregar, setAgregar] = useState(false)
+  const [editarCupos, setEditarCupos] = useState<Esc | null>(null)
   const { data, loading, error, reload } = useAsync(async () => {
     let s = supabase.from('escuelas').select(COLS, { count: 'exact' }).eq('eav', 'Sí')
     s = buscar(s, dq).order('clave').order('numero')
     const r = await s.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
     if (r.error) throw r.error
-    return { rows: r.data as Esc[], total: r.count ?? 0 }
+    const rows = r.data as Esc[]
+    const cupos = await cargarCuposEav(rows.map((e) => e.id))
+    return { rows, cupos, total: r.count ?? 0 }
   }, [dq, page])
 
   const quitar = async (e: Esc) => {
@@ -72,11 +76,13 @@ function Escuelas() {
                   <p class="font-semibold">{nombre(e)}</p>
                   <p class="font-mono text-xs text-slate-500">{e.clave} · CUE {e.cue}</p>
                   <p class="text-xs text-slate-600">{[e.nivel, e.modalidad, e.localidad].filter(Boolean).join(' · ')}</p>
+                  <p class="mt-1 text-xs font-semibold text-slate-700">Cupos: {data.cupos[e.id] ?? 'Sin asignar'}</p>
                 </div>
                 <div class="flex shrink-0 items-center gap-2">
                   <Toggle checked onChange={() => quitar(e)} label="Escuela de verano" />
                   <RowMenu items={[
                     { label: 'Ficha de Escuela', onClick: () => go(`/escuelas?e=${e.id}&from=eav`) },
+                    { label: 'Asignar cupos', onClick: () => setEditarCupos(e) },
                     { label: 'Cargos', onClick: () => toast.info('La lista de cargos todavía no está implementada.') },
                     { label: 'Inscriptos', onClick: () => toast.info('La lista de inscriptos todavía no está implementada.') },
                   ]} />
@@ -88,6 +94,7 @@ function Escuelas() {
       </Card>
       <Pager page={page} total={data?.total ?? 0} onPage={(p) => setParams({ page: p > 1 ? p : null })} />
       {agregar && <Agregar onClose={() => { setAgregar(false); reload() }} />}
+      {editarCupos && <CuposEav escuela={{ id: editarCupos.id, nombre: nombre(editarCupos) }} cupos={data?.cupos[editarCupos.id] ?? null} onClose={() => setEditarCupos(null)} onDone={() => { setEditarCupos(null); reload() }} />}
     </>
   )
 }
