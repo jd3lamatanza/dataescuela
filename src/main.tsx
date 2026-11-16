@@ -6,11 +6,13 @@ import { AppShell } from './ui/Layout'
 import { EmptyState, Overlays, Spinner } from './ui/kit'
 import { Login, CambiarClave } from './pages/Login'
 import { pageFor } from './pages/registry'
+import { PreinscripcionEav } from './pages/PreinscripcionEav'
 import './index.css'
 
 function Router() {
   const { loading, user, signOut, recoveryPending } = useAuth()
   const { path } = useRoute()
+  if (path === '/preinscripcion-eav') return <PreinscripcionEav />
   if (loading) return <Spinner />
   if (!user) return <Login />
   if (user.must_change || recoveryPending) return <CambiarClave forced recovery={recoveryPending} />

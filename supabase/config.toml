@@ -12,3 +12,6 @@ verify_jwt = false
 
 [functions.correo-drive]
 verify_jwt = false
+
+[functions.eav-preinscripcion]
+verify_jwt = false

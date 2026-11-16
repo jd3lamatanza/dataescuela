@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAsync, useDebounced } from '../lib/hooks'
 import { go, setParams, useRoute } from '../lib/router'
@@ -42,6 +42,7 @@ function Escuelas() {
   const dq = useDebounced(q)
   const page = Math.max(1, Number(params.get('page')) || 1)
   const [agregar, setAgregar] = useState(false)
+  const [mostrarQr, setMostrarQr] = useState(false)
   const [editarCupos, setEditarCupos] = useState<Esc | null>(null)
   const { data, loading, error, reload } = useAsync(async () => {
     let s = supabase.from('escuelas').select(COLS, { count: 'exact' }).eq('eav', 'Sí')
@@ -60,10 +61,11 @@ function Escuelas() {
 
   return (
     <>
-      <div class="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+      <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto]">
         <input type="search" class={FIELD} placeholder="Clave, CUE, código, número, nivel o localidad" value={q} maxLength={80} aria-label="Buscar"
           onInput={(e) => { setQ(e.currentTarget.value); setParams({ q: e.currentTarget.value, page: null }) }} />
         <button class={BTN_SECONDARY} onClick={() => { setQ(''); setParams({ q: null, page: null }) }}>Limpiar</button>
+        <button class={BTN_SECONDARY} onClick={() => setMostrarQr(true)}>Compartir preinscripción</button>
         <button class={BTN_PRIMARY} onClick={() => setAgregar(true)}>Agregar escuela</button>
       </div>
       {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
@@ -94,9 +96,30 @@ function Escuelas() {
       </Card>
       <Pager page={page} total={data?.total ?? 0} onPage={(p) => setParams({ page: p > 1 ? p : null })} />
       {agregar && <Agregar onClose={() => { setAgregar(false); reload() }} />}
+      {mostrarQr && <QrPreinscripcion onClose={() => setMostrarQr(false)} />}
       {editarCupos && <CuposEav escuela={{ id: editarCupos.id, nombre: nombre(editarCupos) }} cupos={data?.cupos[editarCupos.id] ?? null} onClose={() => setEditarCupos(null)} onDone={() => { setEditarCupos(null); reload() }} />}
     </>
   )
+}
+
+function QrPreinscripcion({ onClose }: { onClose(): void }) {
+  const [qr, setQr] = useState('')
+  const [error, setError] = useState('')
+  const link = `${location.origin}${import.meta.env.BASE_URL}#/preinscripcion-eav`
+  useEffect(() => {
+    let vivo = true
+    import('qrcode').then(({ default: qr }) => qr.toDataURL(link, { width: 512, margin: 2 })).then((v) => { if (vivo) setQr(v) }).catch((e) => { if (vivo) setError(e instanceof Error ? e.message : String(e)) })
+    return () => { vivo = false }
+  }, [link])
+  return <Modal title="Compartir preinscripción" onClose={onClose}>
+    <div class="space-y-4 text-center">
+      <p class="text-sm text-slate-600">Compartí este código o enlace con la comunidad.</p>
+      {error && <Alert tone="error">No se pudo generar el QR: {error}</Alert>}
+      {qr ? <img src={qr} alt="Código QR de preinscripción" class="mx-auto w-64 max-w-full" /> : !error && <Spinner />}
+      <a class="block break-all text-sm text-sky-700 underline" href={link}>{link}</a>
+      {qr && <a class={BTN_PRIMARY} href={qr} download="qr-preinscripcion-eav.png">Descargar QR</a>}
+    </div>
+  </Modal>
 }
 
 /** Buscador de todas las escuelas; el toggle de cada una la marca o desmarca como EAV. */
