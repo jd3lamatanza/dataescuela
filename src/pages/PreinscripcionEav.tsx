@@ -5,8 +5,8 @@ import { Icon } from '../ui/Icon'
 import { fechaNacimientoISO, formatearFechaNacimiento } from '../lib/fechaPreinscripcion'
 import './preinscripcionEav.css'
 
-interface Escuela { id: number; nombre: string | null; tipo: string | null; numero: number | null; codigo: string | null; localidad: string | null; eav: string | null }
-const etiqueta = (e: Escuela) => [e.tipo || e.codigo, e.numero, e.nombre, e.localidad ? `(${e.localidad})` : ''].filter(Boolean).join(' ')
+export interface Escuela { id: number; nombre: string | null; tipo: string | null; numero: number | null; codigo: string | null; localidad: string | null; eav: string | null }
+export const etiquetaEscuela = (e: Escuela) => [e.tipo || e.codigo, e.numero, e.nombre, e.localidad ? `(${e.localidad})` : ''].filter(Boolean).join(' ')
 const vacio = () => ({ escuela: '', dni: '', nombre: '', nacimiento: '', genero: '', actual: '', otra: '', domicilio: '', responsable: '', vinculo: '', telefono: '', email: '' })
 const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/eav-preinscripcion`
 const FIELD = 'eav-field'
@@ -25,15 +25,15 @@ async function solicitar(body: unknown) {
   return datos
 }
 
-function SelectorEscuela({ id, label, escuelas, value, onChange, otra = false }: { id: string; label: string; escuelas: Escuela[]; value: string; onChange(v: string): void; otra?: boolean }) {
+export function SelectorEscuela({ id, label, escuelas, value, onChange, otra = false }: { id: string; label: string; escuelas: Escuela[]; value: string; onChange(v: string): void; otra?: boolean }) {
   const [buscar, setBuscar] = useState('')
   const [abierto, setAbierto] = useState(false)
   const [activo, setActivo] = useState(-1)
   const inputRef = useRef<HTMLInputElement>(null)
   const omitirApertura = useRef(false)
   const seleccion = value === 'otra' ? 'Otra escuela' : escuelas.find((e) => String(e.id) === value)
-  const texto = typeof seleccion === 'string' ? seleccion : seleccion ? etiqueta(seleccion) : ''
-  const opciones = [...escuelas.map((e) => ({ value: String(e.id), texto: etiqueta(e) })), ...(otra ? [{ value: 'otra', texto: 'Otra escuela' }] : [])]
+  const texto = typeof seleccion === 'string' ? seleccion : seleccion ? etiquetaEscuela(seleccion) : ''
+  const opciones = [...escuelas.map((e) => ({ value: String(e.id), texto: etiquetaEscuela(e) })), ...(otra ? [{ value: 'otra', texto: 'Otra escuela' }] : [])]
     .filter((e) => e.texto.toLocaleLowerCase('es-AR').includes(buscar.trim().toLocaleLowerCase('es-AR')))
   useEffect(() => { inputRef.current?.setCustomValidity(value ? '' : 'Seleccioná una escuela de la lista.') }, [value])
   useEffect(() => {
@@ -93,7 +93,7 @@ export function PreinscripcionEav() {
   const formRef = useRef<HTMLFormElement>(null)
   const nombreEscuela = (id: string) => {
     const escuela = escuelas?.find((e) => String(e.id) === id)
-    return escuela ? etiqueta(escuela) : ''
+    return escuela ? etiquetaEscuela(escuela) : ''
   }
   useEffect(() => {
     let vivo = true

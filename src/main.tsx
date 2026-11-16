@@ -7,12 +7,14 @@ import { EmptyState, Overlays, Spinner } from './ui/kit'
 import { Login, CambiarClave } from './pages/Login'
 import { pageFor } from './pages/registry'
 import { PreinscripcionEav } from './pages/PreinscripcionEav'
+import { RegistroAcreditacion } from './pages/RegistroAcreditacion'
 import './index.css'
 
 function Router() {
   const { loading, user, signOut, recoveryPending } = useAuth()
-  const { path } = useRoute()
+  const { path, params } = useRoute()
   if (path === '/preinscripcion-eav') return <PreinscripcionEav />
+  if (path === '/registro-acreditacion') return <RegistroAcreditacion id={params.get('id') ?? ''} />
   if (loading) return <Spinner />
   if (!user) return <Login />
   if (user.must_change || recoveryPending) return <CambiarClave forced recovery={recoveryPending} />

@@ -15,3 +15,9 @@ verify_jwt = false
 
 [functions.eav-preinscripcion]
 verify_jwt = false
+
+[functions.acreditacion-publica]
+verify_jwt = false
+
+[functions.acreditacion-constancia]
+verify_jwt = false

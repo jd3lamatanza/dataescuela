@@ -1,11 +1,12 @@
 import type { AppModule, IconName } from '../modules'
 
-export type CategoriaDistrital = 'escuelas' | 'inspectores' | 'estadistica' | 'sistema'
+export type CategoriaDistrital = 'escuelas' | 'inspectores' | 'estadistica' | 'utilidades' | 'sistema'
 
 export const CATEGORIAS_DISTRITALES: readonly { id: CategoriaDistrital; label: string; icon: IconName }[] = [
   { id: 'escuelas', label: 'Escuelas', icon: 'building' },
   { id: 'inspectores', label: 'Inspectores', icon: 'shield' },
   { id: 'estadistica', label: 'Estadística', icon: 'chart' },
+  { id: 'utilidades', label: 'Utilidades', icon: 'clipboard' },
   { id: 'sistema', label: 'Sistema', icon: 'settings' },
 ]
 
@@ -20,6 +21,7 @@ const CATEGORIA_POR_MODULO: Record<string, CategoriaDistrital> = {
   'agenda-distrito': 'inspectores',
   'labores-distrito': 'inspectores',
   estadistica: 'estadistica',
+  acreditacion: 'utilidades',
   simulado: 'sistema',
   'usuarios-distrito': 'sistema',
   configuracion: 'sistema',
