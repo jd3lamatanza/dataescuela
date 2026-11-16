@@ -3,10 +3,10 @@ import type { ComponentChildren } from 'preact'
 import { Alert, Lbl, Spinner } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 import { fechaNacimientoISO, formatearFechaNacimiento } from '../lib/fechaPreinscripcion'
+import { etiquetaEscuela, type Escuela } from '../lib/escuelaEtiqueta'
 import './preinscripcionEav.css'
 
-export interface Escuela { id: number; nombre: string | null; tipo: string | null; numero: number | null; codigo: string | null; localidad: string | null; eav: string | null }
-export const etiquetaEscuela = (e: Escuela) => [e.tipo || e.codigo, e.numero, e.nombre, e.localidad ? `(${e.localidad})` : ''].filter(Boolean).join(' ')
+export { etiquetaEscuela, type Escuela } from '../lib/escuelaEtiqueta'
 const vacio = () => ({ escuela: '', dni: '', nombre: '', nacimiento: '', genero: '', actual: '', otra: '', domicilio: '', responsable: '', vinculo: '', telefono: '', email: '' })
 const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/eav-preinscripcion`
 const FIELD = 'eav-field'

@@ -1,19 +1,8 @@
 import { supabase } from './supabase'
-import type { Escuela } from '../pages/PreinscripcionEav'
+import type { Escuela } from './escuelaEtiqueta'
+import type { DatosPersona, Evento } from './acreditacionTipos'
+export type { DatosPersona, Evento, Persona, Progreso } from './acreditacionTipos'
 
-export interface Evento {
-  id: string
-  nombre: string
-  lugar: string
-  fecha: string
-  hora_inicio: string
-  hora_fin: string
-  descripcion: string
-  estado: 'pendiente' | 'activo' | 'finalizado'
-}
-export interface DatosPersona { nombre: string; dni: string; cargo: string; escuela: string; email: string }
-export interface Persona { id: number; nombre: string; dni: string; cargo: string; escuela_id: number; escuela: Escuela | null; email: string; constancia_enviada_en: string | null; envio_estado: string }
-export interface Progreso { total: number; enviados: number; pendientes: number; en_curso: number; inciertos: number }
 export const personaVacia = (): DatosPersona => ({ nombre: '', dni: '', cargo: '', escuela: '', email: '' })
 export const linkEvento = (id: string) => `https://jd3lamatanza.github.io/dataescuela/#/registro-acreditacion?id=${encodeURIComponent(id)}`
 export const fechaEvento = (evento: Evento) => `${evento.fecha.split('-').reverse().join('/')} · ${evento.hora_inicio.slice(0, 5)} a ${evento.hora_fin.slice(0, 5)}`

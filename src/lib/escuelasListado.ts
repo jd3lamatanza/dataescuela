@@ -33,11 +33,13 @@ export function tablaEscuelas(rows: EscuelaListado[], filtros: { localidad: stri
   }
 }
 
-export async function buildEscuelasXlsx(tabla: Table, marca: string): Promise<Uint8Array> {
+export async function buildListadoXlsx(tabla: Table, marca: string, nombreHoja: string): Promise<Uint8Array> {
   const XLSX = await import('xlsx')
   const hoja = XLSX.utils.aoa_to_sheet([[marca], [tabla.title], [tabla.subtitle], [], tabla.headers, ...tabla.rows])
   hoja['!cols'] = tabla.widths.map((w) => ({ wch: Math.max(10, w) }))
   const libro = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(libro, hoja, 'Escuelas')
+  XLSX.utils.book_append_sheet(libro, hoja, nombreHoja)
   return new Uint8Array(XLSX.write(libro, { type: 'array', bookType: 'xlsx' }))
 }
+
+export const buildEscuelasXlsx = (tabla: Table, marca: string) => buildListadoXlsx(tabla, marca, 'Escuelas')
