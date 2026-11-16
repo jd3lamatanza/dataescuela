@@ -3,14 +3,14 @@ import type { Escuela } from './escuelaEtiqueta'
 import type { DatosPersona, Evento } from './acreditacionTipos'
 export type { DatosPersona, Evento, Persona, Progreso } from './acreditacionTipos'
 
-export const personaVacia = (): DatosPersona => ({ nombre: '', dni: '', cargo: '', escuela: '', email: '' })
+export const personaVacia = (): DatosPersona => ({ nombre: '', dni: '', cargo: '', escuela: '', externa: false, escuelaExterna: '', email: '' })
 export const linkEvento = (id: string) => `https://jd3lamatanza.github.io/dataescuela/#/registro-acreditacion?id=${encodeURIComponent(id)}`
 export const fechaEvento = (evento: Evento) => `${evento.fecha.split('-').reverse().join('/')} · ${evento.hora_inicio.slice(0, 5)} a ${evento.hora_fin.slice(0, 5)}`
 
 export async function invocarPublico(action: string, evento: string, form?: DatosPersona): Promise<{ evento?: Evento; escuelas?: Escuela[] }> {
   const respuesta = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/acreditacion-publica`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', apikey: import.meta.env.VITE_SUPABASE_KEY },
-    body: JSON.stringify({ action, evento, ...(form ? { form: { ...form, escuela: Number(form.escuela) } } : {}) }),
+    body: JSON.stringify({ action, evento, ...(form ? { form: { ...form, escuela: form.externa ? null : Number(form.escuela) } } : {}) }),
   })
   const datos = await respuesta.json()
   if (!respuesta.ok) throw new Error(datos.error || 'No se pudo completar la solicitud.')

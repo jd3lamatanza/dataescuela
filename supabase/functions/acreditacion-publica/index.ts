@@ -39,7 +39,9 @@ Deno.serve(async (req) => {
     if (limit.error) throw limit.error
     if (!limit.data) return json({ error: 'Demasiados intentos. Intentá nuevamente más tarde.' }, 429)
     const f = body.form
-    const result = await db.rpc('acreditacion_registrar', { p_evento: body.evento, p_nombre: f.nombre, p_dni: f.dni, p_cargo: f.cargo, p_escuela: f.escuela, p_email: f.email, p_publico: true })
+    const result = f.externa === true
+      ? await db.rpc('acreditacion_registrar_externa', { p_evento: body.evento, p_nombre: f.nombre, p_dni: f.dni, p_cargo: f.cargo, p_escuela_externa: f.escuelaExterna, p_email: f.email })
+      : await db.rpc('acreditacion_registrar', { p_evento: body.evento, p_nombre: f.nombre, p_dni: f.dni, p_cargo: f.cargo, p_escuela: f.escuela, p_email: f.email, p_publico: true })
     if (result.error) throw result.error
     if (result.data === 'duplicado') return json({ error: 'El DNI ya se encuentra acreditado en este evento.' }, 409)
     if (result.data === 'cerrado') return json({ error: 'La acreditación no está habilitada para este evento.' }, 409)

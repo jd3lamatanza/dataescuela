@@ -1,5 +1,5 @@
 import type { Evento, Persona } from './acreditacionTipos'
-import { etiquetaEscuela } from './escuelaEtiqueta'
+import { escuelaProvincial } from './escuelaEtiqueta'
 import type { Table } from './export'
 
 export function estadoConstancia(p: Persona): { texto: string; detalle: string; icon: 'check' | 'alert' | 'clock' | 'send'; tone: 'green' | 'amber' | 'blue' | 'slate' } {
@@ -7,6 +7,9 @@ export function estadoConstancia(p: Persona): { texto: string; detalle: string; 
   if (p.envio_estado === 'incierto') return { texto: 'Envío sin confirmar', detalle: 'Pendiente de reintento', icon: 'alert', tone: 'amber' }
   if (p.envio_estado === 'enviando') return { texto: 'Envío en curso', detalle: '', icon: 'send', tone: 'blue' }
   return { texto: 'Pendiente', detalle: '', icon: 'clock', tone: 'slate' }
+}
+export function escuelaAcreditado(p: Persona): string {
+  return p.escuela_externa || (p.escuela ? escuelaProvincial(p.escuela) : p.escuela_id != null ? `Escuela ${p.escuela_id}` : 'Escuela no disponible')
 }
 
 export function tablaAcreditados(evento: Evento, personas: Persona[], busqueda: string, organizacion: string): Table {
@@ -23,7 +26,7 @@ export function tablaAcreditados(evento: Evento, personas: Persona[], busqueda: 
     widths: [23, 10, 17, 26, 24, 20],
     rows: personas.map((p) => {
       const estado = estadoConstancia(p)
-      return [p.nombre, p.dni, p.cargo, p.escuela ? etiquetaEscuela(p.escuela) : `Escuela ${p.escuela_id}`, p.email, [estado.texto, estado.detalle].filter(Boolean).join(' · ')]
+      return [p.nombre, p.dni, p.cargo, escuelaAcreditado(p), p.email, [estado.texto, estado.detalle].filter(Boolean).join(' · ')]
     }),
   }
 }

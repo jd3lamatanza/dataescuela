@@ -6,13 +6,16 @@ import { Icon } from '../ui/Icon'
 import { SelectorEscuela, etiquetaEscuela, type Escuela } from './PreinscripcionEav'
 import './preinscripcionEav.css'
 
-export function CamposAcreditacion({ form, setForm, escuelas }: { form: DatosPersona; setForm(v: DatosPersona): void; escuelas: Escuela[] }) {
-  const cambiar = (k: keyof DatosPersona) => (e: Event) => setForm({ ...form, [k]: (e.currentTarget as HTMLInputElement).value })
+export function CamposAcreditacion({ form, setForm, escuelas, permitirExterna = false }: { form: DatosPersona; setForm(v: DatosPersona): void; escuelas: Escuela[]; permitirExterna?: boolean }) {
+  const cambiar = (k: 'nombre' | 'dni' | 'cargo' | 'email' | 'escuelaExterna') => (e: Event) => setForm({ ...form, [k]: (e.currentTarget as HTMLInputElement).value })
   return <div class="eav-fields">
     <label>Nombre completo<input class="eav-field" required minLength={3} maxLength={200} value={form.nombre} onInput={cambiar('nombre')} /></label>
     <label>DNI<input class="eav-field" required inputMode="numeric" pattern="[0-9]{7,8}" maxLength={8} placeholder="Sin puntos ni espacios" value={form.dni} onInput={cambiar('dni')} /></label>
     <label>Cargo<input class="eav-field" required minLength={2} maxLength={200} value={form.cargo} onInput={cambiar('cargo')} /></label>
-    <SelectorEscuela id="acreditacion-escuela" label="Escuela" escuelas={escuelas} value={form.escuela} onChange={(v) => setForm({ ...form, escuela: v })} />
+    {permitirExterna && <label class="flex items-center gap-2"><input type="checkbox" checked={form.externa} onChange={(e) => setForm({ ...form, externa: e.currentTarget.checked })} />Mi escuela está fuera de JD3</label>}
+    {permitirExterna && form.externa
+      ? <label key="externa">Escuela fuera de JD3<input class="eav-field" required minLength={2} maxLength={200} value={form.escuelaExterna} onInput={cambiar('escuelaExterna')} /></label>
+      : <SelectorEscuela key="interna" id="acreditacion-escuela" label="Escuela" escuelas={escuelas} value={form.escuela} onChange={(v) => setForm({ ...form, escuela: v })} />}
     <label>Correo Oficial ABC<input class="eav-field" type="email" required maxLength={254} pattern="[a-zA-Z0-9._%+\-]+@abc[.]gob[.]ar" placeholder="nombre@abc.gob.ar" value={form.email} onInput={cambiar('email')} /></label>
   </div>
 }
@@ -45,9 +48,9 @@ export function RegistroAcreditacion({ id }: { id: string }) {
       <form onSubmit={enviar}>
         <div class="eav-progress"><div class="eav-progress-label">Paso {paso} de 2 · {paso === 1 ? 'Tus datos' : 'Confirmación'}</div><div class="eav-progress-track"><span class="eav-progress-filled" /><span class={paso === 2 ? 'eav-progress-filled' : ''} /></div></div>
         <section class="eav-section"><div class="eav-section-heading"><span class="eav-step">{paso}</span><div><h2>{paso === 1 ? '¡Bienvenido! Completá tus datos' : '¡Ya casi terminamos!'}</h2><p>{paso === 1 ? 'Todos los campos son obligatorios.' : 'Revisá los datos antes de confirmar.'}</p></div></div>
-          {paso === 1 ? <CamposAcreditacion form={form} setForm={setForm} escuelas={escuelas} /> : <dl class="eav-summary">{[
+          {paso === 1 ? <CamposAcreditacion form={form} setForm={setForm} escuelas={escuelas} permitirExterna /> : <dl class="eav-summary">{[
             ['Nombre completo', form.nombre], ['DNI', form.dni], ['Cargo', form.cargo],
-            ['Escuela', escuelas.find((e) => String(e.id) === form.escuela) ? etiquetaEscuela(escuelas.find((e) => String(e.id) === form.escuela)!) : ''], ['Correo Oficial ABC', form.email],
+            ['Escuela', form.externa ? form.escuelaExterna : escuelas.find((e) => String(e.id) === form.escuela) ? etiquetaEscuela(escuelas.find((e) => String(e.id) === form.escuela)!) : ''], ['Correo Oficial ABC', form.email],
           ].map(([label, valor]) => <div key={label}><dt>{label}</dt><dd>{valor}</dd></div>)}</dl>}
         </section>
         <div class="eav-footer">{mensaje && <Alert tone="error">{mensaje}</Alert>}<div class="eav-actions">

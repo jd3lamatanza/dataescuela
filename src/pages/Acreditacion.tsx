@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAsync, useDebounced } from '../lib/hooks'
 import { cargarEscuelas, fechaEvento, linkEvento, personaVacia, registrarManual, type Evento, type Persona, type Progreso } from '../lib/acreditacion'
-import { estadoConstancia, tablaAcreditados } from '../lib/acreditacionListado'
+import { escuelaAcreditado, estadoConstancia, tablaAcreditados } from '../lib/acreditacionListado'
 import { buildListadoXlsx } from '../lib/escuelasListado'
 import { buildPdf } from '../lib/export'
 import { descargar, XLSX_MIME } from '../lib/download'
@@ -10,7 +10,6 @@ import { BRAND } from '../modules'
 import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, Spinner, TabBar, confirmar, toast, type TabItem } from '../ui/kit'
 import { Icon, type IconKey } from '../ui/Icon'
 import { CamposAcreditacion } from './RegistroAcreditacion'
-import { etiquetaEscuela } from './PreinscripcionEav'
 
 const TABS: TabItem[] = [
   { id: 'evento', label: 'Evento', icon: 'calendar', color: 'sky' },
@@ -114,11 +113,10 @@ function EventoQr({ evento, onClose }: { evento: Evento; onClose(): void }) {
 }
 
 function Listado({ eventos: lista }: { eventos: Evento[] }) {
-  const activos = lista.filter((e) => e.estado === 'activo')
   const [id, setId] = useState('')
-  const evento = activos.find((e) => e.id === id)
+  const evento = lista.find((e) => e.id === id)
   return <>
-    <Lbl label="Evento activo"><select class={FIELD} value={id} onChange={(e) => setId(e.currentTarget.value)}><option value="">Seleccioná un evento</option>{activos.map((e) => <option value={e.id}>{e.nombre} · {fechaEvento(e)}</option>)}</select></Lbl>
+    <Lbl label="Evento"><select class={FIELD} value={id} onChange={(e) => setId(e.currentTarget.value)}><option value="">Seleccioná un evento</option>{lista.map((e) => <option key={e.id} value={e.id}>{e.nombre} · {fechaEvento(e)} · {e.estado === 'activo' ? 'Activo' : e.estado === 'finalizado' ? 'Finalizado' : 'Sin iniciar'}</option>)}</select></Lbl>
     {evento && <Personas key={id} evento={evento} manual />}
   </>
 }
@@ -129,7 +127,7 @@ function Personas({ evento, manual, refreshKey = 0 }: { evento: Evento; manual?:
   const filtro = q.trim().replace(/[,()%*\\]/g, ' ').slice(0, 80)
   const query = useDebounced(filtro)
   const consulta = (busqueda: string) => {
-    let request = supabase.from('acreditacion_personas').select('id,nombre,dni,cargo,escuela_id,email,constancia_enviada_en,envio_estado,escuela:escuelas(id,nombre,tipo,numero,codigo,localidad,eav)', { count: 'exact' }).eq('evento_id', evento.id)
+    let request = supabase.from('acreditacion_personas').select('id,nombre,dni,cargo,escuela_id,escuela_externa,email,constancia_enviada_en,envio_estado,escuela:escuelas(id,nombre,tipo,numero,codigo,localidad,eav,clave)', { count: 'exact' }).eq('evento_id', evento.id)
     if (busqueda) request = request.or(`nombre.ilike.%${busqueda}%,dni.ilike.%${busqueda}%,cargo.ilike.%${busqueda}%,email.ilike.%${busqueda}%`)
     return request.order('id', { ascending: false })
   }
@@ -169,7 +167,7 @@ function Personas({ evento, manual, refreshKey = 0 }: { evento: Evento; manual?:
     <p class="mb-3 text-xs text-slate-500">{exportando ? 'Preparando exportación…' : 'Las exportaciones incluyen todos los resultados de la búsqueda, no solo esta página.'}</p>
     {error && <Alert tone="error">{error}</Alert>}{loading && !data ? <Spinner /> : !data?.personas.length ? <EmptyState title="Sin acreditados" text={query ? 'No hay resultados para esta búsqueda.' : 'Todavía no hay personas acreditadas en este evento.'} /> : <div class="space-y-2">{data.personas.map((p) => { const estado = estadoConstancia(p); return <article key={p.id} class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div class="flex flex-wrap items-start justify-between gap-2"><div class="flex min-w-0 gap-3"><span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-700"><Icon name="users" /></span><div class="min-w-0"><h3 class="break-words font-semibold text-slate-900">{p.nombre}</h3><p class="text-sm text-slate-500">DNI {p.dni} · {p.cargo}</p></div></div><Badge tone={estado.tone}><Icon name={estado.icon} class="mr-1 size-4" />Constancia {estado.texto.toLowerCase()}</Badge></div>
-      <div class="mt-3 grid gap-1.5 text-sm text-slate-600 sm:ml-13"><p class="flex items-start gap-2"><Icon name="school" class="mt-0.5 size-4 shrink-0" /><span class="break-words">{p.escuela ? etiquetaEscuela(p.escuela) : `Escuela ${p.escuela_id}`}</span></p><p class="flex items-start gap-2"><Icon name="mail" class="mt-0.5 size-4 shrink-0" /><span class="break-all">{p.email}</span></p>{estado.detalle && <p class="flex items-start gap-2 text-xs"><Icon name={estado.icon} class="size-4 shrink-0" />{estado.detalle}</p>}</div>
+      <div class="mt-3 grid gap-1.5 text-sm text-slate-600 sm:ml-13"><p class="flex items-start gap-2"><Icon name="school" class="mt-0.5 size-4 shrink-0" /><span class="break-words">{escuelaAcreditado(p)}</span></p><p class="flex items-start gap-2"><Icon name="mail" class="mt-0.5 size-4 shrink-0" /><span class="break-all">{p.email}</span></p>{estado.detalle && <p class="flex items-start gap-2 text-xs"><Icon name={estado.icon} class="size-4 shrink-0" />{estado.detalle}</p>}</div>
     </article> })}</div>}
     <Pager page={page} total={data?.total ?? 0} onPage={setPage} />
     {abrir && <RegistroManual evento={evento.id} onClose={() => setAbrir(false)} onDone={() => { setAbrir(false); reload() }} />}

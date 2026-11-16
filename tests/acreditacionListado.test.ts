@@ -6,7 +6,7 @@ import { buildPdf } from '../src/lib/export.ts'
 import type { Evento, Persona } from '../src/lib/acreditacionTipos.ts'
 
 const evento: Evento = { id: 'abc', nombre: 'Encuentro docente', lugar: 'Escuela central', fecha: '2026-11-16', hora_inicio: '10:00:00', hora_fin: '12:00:00', descripcion: 'Jornada distrital', estado: 'finalizado' }
-const persona: Persona = { id: 1, nombre: '=Ana Pérez', dni: '01234567', cargo: 'Directora', escuela_id: 1, escuela: { id: 1, tipo: 'EP', numero: 10, nombre: 'Escuela del Sol', localidad: 'Catán', codigo: null, eav: null }, email: 'ana@abc.gob.ar', envio_estado: 'pendiente', constancia_enviada_en: null }
+const persona: Persona = { id: 1, nombre: '=Ana Pérez', dni: '01234567', cargo: 'Directora', escuela_id: 1, escuela_externa: null, escuela: { id: 1, tipo: 'EP', numero: 10, nombre: 'Escuela del Sol', localidad: 'Catán', codigo: null, eav: null, clave: '0123EP0010' }, email: 'ana@abc.gob.ar', envio_estado: 'pendiente', constancia_enviada_en: null }
 const comprobar = (condicion: boolean, mensaje: string) => { if (!condicion) throw new Error(mensaje) }
 
 Deno.test('listado incluye datos del evento, filtros, escuela y estados precisos', () => {
@@ -15,7 +15,9 @@ Deno.test('listado incluye datos del evento, filtros, escuela y estados precisos
   const enCurso = { ...persona, envio_estado: 'enviando' }
   const tabla = tablaAcreditados(evento, [persona, enviados, incierto, enCurso], 'Pérez', 'Jefatura Distrital 3')
   for (const dato of ['Encuentro docente', '16/11/2026', '10:00 a 12:00', 'Escuela central', 'Jornada distrital', 'Pérez', '4 acreditado']) comprobar(tabla.subtitle.includes(dato), `Falta ${dato}`)
-  comprobar(tabla.rows[0][3] === 'EP 10 Escuela del Sol (Catán)', 'Falta la identificación de escuela')
+  comprobar(tabla.rows[0][3] === '0123EP0010', 'Falta la clave provincial de la escuela')
+  const externa = tablaAcreditados(evento, [{ ...persona, escuela_id: null, escuela: null, escuela_externa: 'Escuela externa' }], '', 'Distrito')
+  comprobar(externa.rows[0][3] === 'Escuela externa', 'Falta la escuela externa')
   comprobar(tabla.rows[0][1] === '01234567', 'El DNI debe conservar sus ceros')
   comprobar(tabla.rows[1][5].startsWith('Enviada ·'), 'Falta fecha de envío')
   comprobar(estadoConstancia(incierto).texto === 'Envío sin confirmar', 'Falta estado incierto')

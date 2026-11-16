@@ -31,15 +31,18 @@ Deno.serve(async (req) => {
     token = claim.data as string
     const [ev, person, imgs, config] = await Promise.all([
       admin.from('acreditacion_eventos').select('nombre,lugar,fecha,hora_inicio,hora_fin').eq('id', body.evento).single(),
-      admin.from('acreditacion_personas').select('nombre,email,cargo,escuela_id').eq('id', personaId).eq('evento_id', body.evento).single(),
+      admin.from('acreditacion_personas').select('nombre,email,cargo,escuela_id,escuela_externa').eq('id', personaId).eq('evento_id', body.evento).single(),
       admin.rpc('acreditacion_imagenes'),
       admin.from('configuracion_email').select('salidas_destino,sistema_remitente,respuesta,nombre_remitente').eq('id', true).maybeSingle(),
     ])
     if (ev.error || person.error || imgs.error || config.error) throw new Error('No se pudieron cargar los datos de la constancia.')
     if (!imgs.data?.length) throw new Error('Configurá al menos una imagen de firma antes de enviar constancias.')
-    const { data: escuela, error: errorEscuela } = await admin.from('escuelas').select('tipo,numero,nombre,codigo,localidad').eq('id', person.data.escuela_id).single()
-    if (errorEscuela || !escuela) throw new Error('No se pudo cargar la escuela del acreditado.')
-    const nombreEscuela = [escuela.tipo || escuela.codigo, escuela.numero, escuela.nombre, escuela.localidad ? `(${escuela.localidad})` : ''].filter(Boolean).join(' ')
+    let nombreEscuela = person.data.escuela_externa
+    if (person.data.escuela_id != null) {
+      const { data: escuela, error: errorEscuela } = await admin.from('escuelas').select('id,clave,tipo,numero,nombre,codigo,localidad').eq('id', person.data.escuela_id).single()
+      if (errorEscuela || !escuela) throw new Error('No se pudo cargar la escuela del acreditado.')
+      nombreEscuela = escuela.clave?.trim() || [escuela.tipo || escuela.codigo, escuela.numero, escuela.nombre, escuela.localidad ? `(${escuela.localidad})` : ''].filter(Boolean).join(' ') || `Escuela ${escuela.id}`
+    }
     if (!nombreEscuela) throw new Error('La escuela del acreditado no tiene identificación.')
     const persona: PersonaConstancia = { nombre: person.data.nombre, cargo: person.data.cargo, escuela: nombreEscuela }
     const contenido = await generarConstancia(ev.data as EventoConstancia, persona, imgs.data as FirmaConstancia[])
