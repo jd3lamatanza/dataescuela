@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAsync, useDebounced } from '../lib/hooks'
+import { PREINSCRIPCION_EAV_URL } from '../lib/preinscripcionEavUrl'
 import { go, setParams, useRoute } from '../lib/router'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Modal, PAGE_SIZE, PageHeader, Pager, RowMenu, Spinner, TabBar, Toggle, confirmar, toast, type TabItem } from '../ui/kit'
 import { cargarCuposEav, CuposEav } from '../ui/CuposEav'
@@ -105,7 +106,7 @@ function Escuelas() {
 function QrPreinscripcion({ onClose }: { onClose(): void }) {
   const [qr, setQr] = useState('')
   const [error, setError] = useState('')
-  const link = `${location.origin}${import.meta.env.BASE_URL}#/preinscripcion-eav`
+  const link = PREINSCRIPCION_EAV_URL
   useEffect(() => {
     let vivo = true
     import('qrcode').then(({ default: qr }) => qr.toDataURL(link, { width: 512, margin: 2 })).then((v) => { if (vivo) setQr(v) }).catch((e) => { if (vivo) setError(e instanceof Error ? e.message : String(e)) })
