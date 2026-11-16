@@ -1,5 +1,9 @@
 export const LOCALIDADES_MAPA = ['González Catán', '20 de Junio', 'Virrey del Pino'] as const
 
+export function rectangulosSolapados(a: Pick<DOMRect, 'left' | 'right' | 'top' | 'bottom'>, b: Pick<DOMRect, 'left' | 'right' | 'top' | 'bottom'>) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+}
+
 export interface EscuelaMapa {
   id: number
   clave: string | null

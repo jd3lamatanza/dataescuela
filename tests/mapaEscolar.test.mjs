@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { colorNivel, coordenadasValidas, filtrarMapa, LOCALIDADES_MAPA } from '../src/lib/mapaEscolar.ts'
+import { colorNivel, coordenadasValidas, filtrarMapa, LOCALIDADES_MAPA, rectangulosSolapados } from '../src/lib/mapaEscolar.ts'
 import { MODULES, canAccess } from '../src/modules.ts'
 import { agruparMenuDistrital } from '../src/ui/sidebarDistrital.ts'
 
@@ -30,4 +30,11 @@ test('el módulo es exclusivo distrital y aparece en Utilidades', () => {
   assert.equal(canAccess(m, 'escolar'), false)
   assert.equal(canAccess(m, 'areal'), false)
   assert.ok(agruparMenuDistrital([m]).find((c) => c.id === 'utilidades')?.modulos.includes(m))
+})
+
+test('detecta etiquetas superpuestas pero permite bordes contiguos', () => {
+  const a = { left: 0, right: 20, top: 0, bottom: 10 }
+  assert.equal(rectangulosSolapados(a, { left: 19, right: 30, top: 2, bottom: 12 }), true)
+  assert.equal(rectangulosSolapados(a, { left: 20, right: 30, top: 2, bottom: 12 }), false)
+  assert.equal(rectangulosSolapados(a, { left: 0, right: 20, top: 10, bottom: 20 }), false)
 })
