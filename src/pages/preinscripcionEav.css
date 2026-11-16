@@ -1,0 +1,78 @@
+.eav-public {
+  min-height: 100vh;
+  padding: 28px 16px 56px;
+  background: linear-gradient(160deg, #e2f6f7 0%, #f6fbfb 43%, #fff8ec 100%);
+  color: #173144;
+}
+
+.eav-page { max-width: 680px; margin: 0 auto; }
+.eav-header { text-align: center; }
+.eav-logos {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: clamp(24px, 8vw, 64px);
+  padding: 14px 20px;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 8px 30px rgb(22 83 105 / 7%);
+}
+.eav-logos img:first-child { width: min(37%, 165px); max-height: 85px; object-fit: contain; }
+.eav-logos img:last-child { width: min(48%, 225px); max-height: 65px; object-fit: contain; }
+.eav-header-copy { padding: 32px 4px 26px; }
+.eav-kicker {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #d3f0e9;
+  color: #176f65;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.eav-header h1 { margin: 14px auto 8px; max-width: 580px; color: #173b51; font-size: clamp(27px, 5vw, 38px); line-height: 1.15; font-weight: 800; letter-spacing: -.025em; }
+.eav-subtitle { color: #087c91; font-weight: 700; font-size: 16px; }
+.eav-area { margin-top: 10px; color: #506777; font-size: 13px; line-height: 1.5; }
+.eav-card { background: #fff; border: 1px solid #e3eef0; border-radius: 24px; box-shadow: 0 16px 50px rgb(22 83 105 / 9%); }
+.eav-form { padding: clamp(20px, 5vw, 36px); }
+.eav-intro { display: flex; align-items: flex-start; gap: 14px; padding: 16px; border-radius: 16px; background: #effaf8; }
+.eav-intro-icon, .eav-step, .eav-success-icon { display: grid; flex: none; place-items: center; }
+.eav-intro-icon { width: 40px; height: 40px; border-radius: 13px; background: #d2f2eb; color: #087c73; }
+.eav-intro h2 { color: #174e50; font-size: 17px; font-weight: 750; }
+.eav-intro p, .eav-section-heading p { margin-top: 3px; color: #526e77; font-size: 14px; line-height: 1.5; }
+.eav-section { margin-top: 30px; }
+.eav-section + .eav-section { padding-top: 27px; border-top: 1px solid #e8f0f2; }
+.eav-section-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 20px; }
+.eav-step { width: 36px; height: 36px; border-radius: 12px; background: #e2f3f8; color: #08788e; font-weight: 800; }
+.eav-section-heading h2 { color: #183e52; font-size: 18px; font-weight: 750; line-height: 1.3; }
+.eav-fields, .eav-selector { display: grid; gap: 16px; }
+.eav-public label, .dark .eav-public label { color: #304c5d; font-weight: 650; }
+.eav-public label > span { margin-bottom: 7px; }
+.eav-field {
+  display: block;
+  width: 100%;
+  min-height: 50px;
+  padding: 11px 14px;
+  border: 1px solid #c9dade;
+  border-radius: 12px;
+  background: #fff;
+  color: #173144;
+  font-size: 16px;
+  line-height: 1.4;
+  outline: none;
+}
+.eav-field::placeholder { color: #81939d; }
+.eav-field:focus { border-color: #1595a5; box-shadow: 0 0 0 3px rgb(21 149 165 / 16%); }
+.eav-field[aria-invalid="true"] { border-color: #d55757; }
+.eav-help { margin-top: -8px; color: #536c79; font-size: 13px; line-height: 1.5; }
+.eav-footer { display: grid; gap: 16px; margin-top: 30px; }
+.eav-footer > p { padding: 14px 16px; border-radius: 12px; background: #fff8e9; color: #725b2d; font-size: 13px; line-height: 1.5; }
+.eav-submit { display: flex; width: 100%; min-height: 54px; justify-content: center; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 14px; background: #087f8c; color: #fff; font-weight: 700; box-shadow: 0 7px 16px rgb(8 127 140 / 20%); cursor: pointer; }
+.eav-submit:hover { background: #066b77; }
+.eav-submit:focus-visible { outline: 3px solid #54bdc5; outline-offset: 3px; }
+.eav-submit:disabled { opacity: .6; cursor: wait; }
+.eav-success { padding: 36px 24px; text-align: center; }
+.eav-success-icon { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: #d8f4e9; color: #16835d; }
+.eav-success h2 { color: #175c4c; font-size: 24px; font-weight: 800; }
+.eav-success p { margin: 10px 0 24px; color: #526e77; line-height: 1.5; }
