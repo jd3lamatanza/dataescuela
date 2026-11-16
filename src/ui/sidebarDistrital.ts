@@ -22,6 +22,7 @@ const CATEGORIA_POR_MODULO: Record<string, CategoriaDistrital> = {
   'labores-distrito': 'inspectores',
   estadistica: 'estadistica',
   acreditacion: 'utilidades',
+  'mapa-escolar': 'utilidades',
   simulado: 'sistema',
   'usuarios-distrito': 'sistema',
   configuracion: 'sistema',

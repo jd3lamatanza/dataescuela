@@ -1,0 +1,23 @@
+.mapa-escolar-lienzo {
+  width: 100%;
+  height: min(65vh, 700px);
+  min-height: 360px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  z-index: 0;
+  background: #e2e8f0;
+}
+.mapa-escolar-etiqueta {
+  color: #0f172a;
+  font-weight: 700;
+}
+.mapa-escolar-encabezado { display: none; }
+@media print {
+  @page { size: landscape; margin: 10mm; }
+  body * { visibility: hidden !important; }
+  .mapa-escolar-impresion, .mapa-escolar-impresion * { visibility: visible !important; }
+  .mapa-escolar-impresion { position: absolute; inset: 0; width: 100%; }
+  .mapa-escolar-encabezado { display: block; color: black; font-size: 11pt; margin-bottom: 5mm; }
+  .mapa-escolar-lienzo { height: 85vh; min-height: 0; border-radius: 0; }
+  .mapa-escolar-lienzo .leaflet-control-zoom { display: none; }
+}
