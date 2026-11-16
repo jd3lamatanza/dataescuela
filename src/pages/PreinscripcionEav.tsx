@@ -30,7 +30,9 @@ export function SelectorEscuela({ id, label, escuelas, value, onChange, otra = f
   const [abierto, setAbierto] = useState(false)
   const [activo, setActivo] = useState(-1)
   const inputRef = useRef<HTMLInputElement>(null)
+  const selectorRef = useRef<HTMLDivElement>(null)
   const omitirApertura = useRef(false)
+  const apuntandoOpciones = useRef(false)
   const seleccion = value === 'otra' ? 'Otra escuela' : escuelas.find((e) => String(e.id) === value)
   const texto = typeof seleccion === 'string' ? seleccion : seleccion ? etiquetaEscuela(seleccion) : ''
   const opciones = [...escuelas.map((e) => ({ value: String(e.id), texto: etiquetaEscuela(e) })), ...(otra ? [{ value: 'otra', texto: 'Otra escuela' }] : [])]
@@ -39,7 +41,19 @@ export function SelectorEscuela({ id, label, escuelas, value, onChange, otra = f
   useEffect(() => {
     if (abierto && activo >= 0 && opciones[activo]) document.getElementById(`${id}-opcion-${opciones[activo].value}`)?.scrollIntoView({ block: 'nearest' })
   }, [activo, abierto, buscar, id])
+  useEffect(() => {
+    if (!abierto) return
+    const cerrarFuera = (e: PointerEvent) => {
+      if (e.target instanceof Node && !selectorRef.current?.contains(e.target)) {
+        apuntandoOpciones.current = false
+        setAbierto(false); setBuscar(''); setActivo(-1)
+      }
+    }
+    document.addEventListener('pointerdown', cerrarFuera)
+    return () => document.removeEventListener('pointerdown', cerrarFuera)
+  }, [abierto])
   const elegir = (opcion: { value: string }) => {
+    apuntandoOpciones.current = false
     inputRef.current?.setCustomValidity('')
     onChange(opcion.value)
     setBuscar(''); setAbierto(false); setActivo(-1)
@@ -53,14 +67,18 @@ export function SelectorEscuela({ id, label, escuelas, value, onChange, otra = f
     inputRef.current?.setCustomValidity('Seleccioná una escuela de la lista.')
     inputRef.current?.focus()
   }
-  return <div class="eav-selector">
+  return <div class="eav-selector" ref={selectorRef}>
     <label class="eav-selector-label" for={id}>{label}</label>
     <div class="eav-combobox">
       <input id={id} ref={inputRef} class={FIELD} role="combobox" aria-expanded={abierto} aria-controls={`${id}-opciones`} aria-autocomplete="list" aria-activedescendant={abierto && activo >= 0 && opciones[activo] ? `${id}-opcion-${opciones[activo].value}` : undefined}
         required autoComplete="off" placeholder="Buscá por nombre o número" value={abierto ? buscar : texto}
         onFocus={() => { if (!omitirApertura.current) { setBuscar(''); setAbierto(true); setActivo(-1) } }}
         onClick={() => { if (!abierto) { setBuscar(''); setAbierto(true) } }}
-        onBlur={() => { setAbierto(false); setBuscar(''); setActivo(-1) }}
+        onBlur={(e) => {
+          const conservar = apuntandoOpciones.current && !e.relatedTarget
+          apuntandoOpciones.current = false
+          if (!conservar) { setAbierto(false); setBuscar(''); setActivo(-1) }
+        }}
         onInput={(e) => { setBuscar(e.currentTarget.value); setAbierto(true); setActivo(-1); onChange(''); e.currentTarget.setCustomValidity('Seleccioná una escuela de la lista.') }}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -72,9 +90,11 @@ export function SelectorEscuela({ id, label, escuelas, value, onChange, otra = f
           } else if (e.key === 'Escape' && abierto) { e.preventDefault(); setAbierto(false); setBuscar(''); setActivo(-1) }
         }} />
       {value || buscar ? <button type="button" class="eav-combobox-clear" aria-label={`Limpiar ${label.toLocaleLowerCase('es-AR')}`} onPointerDown={(e) => e.preventDefault()} onClick={limpiar}><Icon name="x" class="size-5" /></button> : <Icon name="search" class="eav-combobox-icon" />}
-      {abierto && <ul id={`${id}-opciones`} class="eav-options" role="listbox" aria-label={label}>
+      {abierto && <ul id={`${id}-opciones`} class="eav-options" role="listbox" aria-label={label}
+        onPointerDown={(e) => { apuntandoOpciones.current = true; if (e.pointerType === 'mouse') e.preventDefault() }}
+        onPointerCancel={() => { apuntandoOpciones.current = false }}>
         {opciones.map((opcion, i) => <li id={`${id}-opcion-${opcion.value}`} key={opcion.value} role="option" aria-selected={value === opcion.value}
-          class={i === activo ? 'eav-option-active' : ''} onPointerDown={(e) => e.preventDefault()} onClick={() => elegir(opcion)}>{opcion.texto}</li>)}
+          class={i === activo ? 'eav-option-active' : ''} onClick={() => elegir(opcion)}>{opcion.texto}</li>)}
         {!opciones.length && <li class="eav-no-options" role="presentation">No encontramos escuelas con esa búsqueda.</li>}
       </ul>}
     </div>

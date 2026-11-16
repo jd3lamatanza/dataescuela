@@ -13,7 +13,7 @@ export function CamposAcreditacion({ form, setForm, escuelas }: { form: DatosPer
     <label>DNI<input class="eav-field" required inputMode="numeric" pattern="[0-9]{7,8}" maxLength={8} placeholder="Sin puntos ni espacios" value={form.dni} onInput={cambiar('dni')} /></label>
     <label>Cargo<input class="eav-field" required minLength={2} maxLength={200} value={form.cargo} onInput={cambiar('cargo')} /></label>
     <SelectorEscuela id="acreditacion-escuela" label="Escuela" escuelas={escuelas} value={form.escuela} onChange={(v) => setForm({ ...form, escuela: v })} />
-    <label>Correo institucional<input class="eav-field" type="email" required maxLength={254} pattern="[a-zA-Z0-9._%+\-]+@abc[.]gob[.]ar" placeholder="nombre@abc.gob.ar" value={form.email} onInput={cambiar('email')} /></label>
+    <label>Correo Oficial ABC<input class="eav-field" type="email" required maxLength={254} pattern="[a-zA-Z0-9._%+\-]+@abc[.]gob[.]ar" placeholder="nombre@abc.gob.ar" value={form.email} onInput={cambiar('email')} /></label>
   </div>
 }
 
@@ -47,7 +47,7 @@ export function RegistroAcreditacion({ id }: { id: string }) {
         <section class="eav-section"><div class="eav-section-heading"><span class="eav-step">{paso}</span><div><h2>{paso === 1 ? '¡Bienvenido! Completá tus datos' : '¡Ya casi terminamos!'}</h2><p>{paso === 1 ? 'Todos los campos son obligatorios.' : 'Revisá los datos antes de confirmar.'}</p></div></div>
           {paso === 1 ? <CamposAcreditacion form={form} setForm={setForm} escuelas={escuelas} /> : <dl class="eav-summary">{[
             ['Nombre completo', form.nombre], ['DNI', form.dni], ['Cargo', form.cargo],
-            ['Escuela', escuelas.find((e) => String(e.id) === form.escuela) ? etiquetaEscuela(escuelas.find((e) => String(e.id) === form.escuela)!) : ''], ['Correo institucional', form.email],
+            ['Escuela', escuelas.find((e) => String(e.id) === form.escuela) ? etiquetaEscuela(escuelas.find((e) => String(e.id) === form.escuela)!) : ''], ['Correo Oficial ABC', form.email],
           ].map(([label, valor]) => <div key={label}><dt>{label}</dt><dd>{valor}</dd></div>)}</dl>}
         </section>
         <div class="eav-footer">{mensaje && <Alert tone="error">{mensaje}</Alert>}<div class="eav-actions">
