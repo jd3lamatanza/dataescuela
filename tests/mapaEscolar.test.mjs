@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { colorNivel, coordenadasValidas, filtrarMapa, LOCALIDADES_MAPA, rectangulosSolapados } from '../src/lib/mapaEscolar.ts'
-import { MODULES, canAccess } from '../src/modules.ts'
+import { MODULES, ROLES, canAccess, modulesFor } from '../src/modules.ts'
 import { agruparMenuDistrital } from '../src/ui/sidebarDistrital.ts'
 
 const escuela = { id: 1, clave: '0069EP0001', nombre: 'Escuela Sol', tipo: 'EP', numero: 1, nivel: 'Primario', modalidad: 'Común', localidad: 'González Catán', calle: 'San Martín', nu_calle: 10, te: null, latitud: -34.78, longitud: -58.64 }
@@ -23,12 +23,13 @@ test('reconoce coordenadas válidas sin confundir ceros con ausencia', () => {
   assert.notEqual(colorNivel('Primario'), colorNivel('Inicial'))
 })
 
-test('el módulo es exclusivo distrital y aparece en Utilidades', () => {
+test('el módulo está disponible en todos los roles y aparece en Utilidades distritales', () => {
   const m = MODULES.find((m) => m.id === 'mapa-escolar')
   assert.ok(m)
-  assert.equal(canAccess(m, 'distrital'), true)
-  assert.equal(canAccess(m, 'escolar'), false)
-  assert.equal(canAccess(m, 'areal'), false)
+  for (const role of ROLES) {
+    assert.equal(canAccess(m, role), true, role)
+    assert.ok(modulesFor(role).includes(m), role)
+  }
   assert.ok(agruparMenuDistrital([m]).find((c) => c.id === 'utilidades')?.modulos.includes(m))
 })
 

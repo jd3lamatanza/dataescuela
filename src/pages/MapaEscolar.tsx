@@ -13,8 +13,7 @@ import './mapaEscolar.css'
 async function cargarEscuelas(): Promise<EscuelaMapa[]> {
   const resultado: EscuelaMapa[] = []
   for (let offset = 0; ; offset += 500) {
-    const r = await supabase.from('escuelas').select('id,clave,nombre,tipo,numero,nivel,modalidad,localidad,calle,nu_calle,te,latitud,longitud')
-      .in('localidad', [...LOCALIDADES_MAPA]).order('id').range(offset, offset + 499)
+    const r = await supabase.rpc('mapa_escolar_escuelas').order('id').range(offset, offset + 499)
     if (r.error) throw r.error
     resultado.push(...r.data)
     if (r.data.length < 500) return resultado
