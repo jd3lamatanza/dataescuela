@@ -15,6 +15,7 @@ const TABS: TabItem[] = [
   { id: 'evento', label: 'Evento', icon: 'calendar', color: 'sky' },
   { id: 'acreditacion', label: 'Acreditación', icon: 'check', color: 'emerald' },
   { id: 'constancias', label: 'Constancias', icon: 'note', color: 'indigo' },
+  { id: 'firmas', label: 'Firma Digital', icon: 'edit', color: 'sky' },
 ]
 const errorText = (e: unknown) => e instanceof Error ? e.message : typeof e === 'object' && e !== null && 'message' in e ? String(e.message) : 'No se pudo completar la operación.'
 const datosEvento = () => ({ nombre: '', lugar: '', fecha: '', hora_inicio: '', hora_fin: '', descripcion: '' })
@@ -41,6 +42,7 @@ export function Acreditacion() {
       {tab === 'evento' && <Eventos eventos={data} reload={reload} />}
       {tab === 'acreditacion' && <Listado eventos={data} />}
       {tab === 'constancias' && <Constancias eventos={data} reloadEventos={reload} />}
+      {tab === 'firmas' && <Firmas />}
     </>}
   </>
 }
@@ -188,30 +190,66 @@ function RegistroManual({ evento, onClose, onDone }: { evento: string; onClose()
   </div></Modal>
 }
 
+type Firma = { id: number; nombre: string; mime: string }
+
+async function gestionarFirmas(body: Record<string, unknown>) {
+  const r = await supabase.functions.invoke('acreditacion-firmas', { body })
+  if (r.error) {
+    let mensaje = r.error.message
+    if (r.error.context instanceof Response) {
+      const detalle = await r.error.context.json().catch(() => null)
+      if (typeof detalle?.error === 'string') mensaje = detalle.error
+    }
+    throw new Error(mensaje)
+  }
+  return r.data
+}
+
+async function listarFirmas(): Promise<Firma[]> {
+  const data = await gestionarFirmas({ action: 'listar' })
+  if (!Array.isArray(data?.firmas)) throw new Error('No se pudo leer la biblioteca de firmas.')
+  return data.firmas
+}
+
 function Constancias({ eventos: lista, reloadEventos }: { eventos: Evento[]; reloadEventos(): void }) {
-  const [id, setId] = useState('')
+  const [id, setId] = useState(''), [seleccion, setSeleccion] = useState<number[]>([])
+  const [enviando, setEnviando] = useState(false)
+  const { data: firmas, error, loading } = useAsync(listarFirmas, [])
   const evento = lista.find((e) => e.id === id)
   return <div class="space-y-4">
-    <Firmas />
-    <Lbl label="Evento"><select class={FIELD} value={id} onChange={(e) => setId(e.currentTarget.value)}><option value="">Seleccioná un evento</option>{lista.map((e) => <option value={e.id}>{e.nombre} · {fechaEvento(e)}</option>)}</select></Lbl>
-    {evento && <Envios key={evento.id} evento={evento} reloadEventos={reloadEventos} />}
+    <Card title="Firmas para las constancias">
+      <p class="mb-3 text-sm text-slate-600">Seleccioná entre una y seis firmas para esta tanda. Se colocan una junto a otra; al continuar más tarde, volvé a seleccionarlas.</p>
+      {error && <Alert tone="error">{error}</Alert>}
+      {loading && !firmas && <Spinner />}
+      {firmas && !firmas.length && <Alert tone="info">Cargá firmas en la pestaña Firma Digital para enviar constancias.</Alert>}
+      {firmas && firmas.length > 0 && <details class="rounded-md border border-slate-300 bg-white">
+        <summary class="flex min-h-11 cursor-pointer items-center justify-between gap-2 px-3 text-sm font-medium text-slate-700">
+          <span>{seleccion.length ? `${seleccion.length} firma(s) seleccionada(s)` : 'Seleccioná las firmas'}</span><Icon name="chevr" class="size-4 rotate-90" />
+        </summary>
+        <fieldset disabled={enviando} class="max-h-64 space-y-1 overflow-y-auto border-t border-slate-200 p-2">
+          <legend class="sr-only">Seleccionar firmas</legend>
+          {firmas.map((firma) => <label key={firma.id} class="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm hover:bg-slate-50">
+            <input type="checkbox" class="size-4 accent-sky-600" checked={seleccion.includes(firma.id)}
+              disabled={!seleccion.includes(firma.id) && seleccion.length >= 6}
+              onChange={(e) => { const checked = e.currentTarget.checked; setSeleccion((actual) => checked ? [...actual, firma.id] : actual.filter((x) => x !== firma.id)) }} />
+            <span>{firma.nombre}</span>
+          </label>)}
+        </fieldset>
+      </details>}
+    </Card>
+    <Lbl label="Evento"><select class={FIELD} disabled={enviando} value={id} onChange={(e) => setId(e.currentTarget.value)}><option value="">Seleccioná un evento</option>{lista.map((e) => <option value={e.id}>{e.nombre} · {fechaEvento(e)}</option>)}</select></Lbl>
+    {evento && <Envios key={evento.id} evento={evento} reloadEventos={reloadEventos} firmas={seleccion} onBusyChange={setEnviando} />}
   </div>
 }
 
 function Firmas() {
-  const { data, error, reload } = useAsync(async () => {
-    const r = await supabase.from('acreditacion_firmas').select('id,nombre,mime').order('id')
-    if (r.error) throw r.error
-    return r.data as { id: number; nombre: string; mime: string }[]
-  }, [])
+  const { data, error, loading, reload } = useAsync(listarFirmas, [])
   const [busy, setBusy] = useState(false)
+  const [nombre, setNombre] = useState(''), [file, setFile] = useState<File | null>(null), [fileVersion, setFileVersion] = useState(0)
   const cargar = async (e: Event) => {
-    const input = e.currentTarget as HTMLInputElement
-    const file = input.files?.[0]
-    input.value = ''
-    if (!file) return
+    e.preventDefault()
+    if (!file || !nombre.trim()) { toast.error('Ingresá un nombre y elegí una imagen.'); return }
     if (!['image/png', 'image/jpeg'].includes(file.type) || file.size > 2 * 1024 * 1024 || !file.size) { toast.error('Elegí una imagen PNG o JPEG de hasta 2 MB.'); return }
-    if ((data?.length ?? 0) >= 6) { toast.error('Se admiten hasta seis imágenes.'); return }
     setBusy(true)
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
@@ -220,25 +258,31 @@ function Firmas() {
         reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result.split(',')[1]) : reject(new Error('No se pudo leer la imagen.'))
         reader.readAsDataURL(file)
       })
-      const r = await supabase.rpc('acreditacion_guardar_firma', { p_nombre: file.name.slice(0, 150), p_mime: file.type, p_base64: base64 })
-      if (r.error) throw r.error
-      toast.ok('Imagen guardada'); reload()
+      await gestionarFirmas({ action: 'cargar', nombre: nombre.trim(), mime: file.type, base64 })
+      setNombre(''); setFile(null); setFileVersion((v) => v + 1)
+      toast.ok('Firma guardada'); reload()
     } catch (e) { toast.error(errorText(e)) } finally { setBusy(false) }
   }
   const eliminar = async (id: number) => {
     if (!(await confirmar('Eliminar imagen de firma', { text: 'Las próximas constancias dejarán de incluir esta imagen.', danger: true }))) return
-    const r = await supabase.rpc('acreditacion_eliminar_firma', { p_id: id })
-    if (r.error) toast.error(r.error.message); else reload()
+    setBusy(true)
+    try { await gestionarFirmas({ action: 'eliminar', id }); toast.ok('Firma eliminada'); reload() }
+    catch (e) { toast.error(errorText(e)) } finally { setBusy(false) }
   }
-  return <Card title="Sellos y firmas">
-    <p class="mb-3 text-sm text-slate-600">Cargá hasta seis imágenes PNG o JPEG de hasta 2 MB. Se colocan una junto a otra en la constancia.</p>
+  return <Card title="Biblioteca de firmas digitales">
+    <p class="mb-3 text-sm text-slate-600">Guardá imágenes PNG o JPEG de hasta 2 MB en Google Drive y elegí cuáles usar en cada tanda de constancias.</p>
     {error && <Alert tone="error">{error}</Alert>}
-    <ul class="mb-3 space-y-2">{data?.map((f) => <li key={f.id} class="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-sm"><span class="flex min-w-0 items-center gap-2 break-all"><Icon name="attachment" class="size-4 shrink-0 text-sky-600" />{f.nombre}</span><AccionIcono icon="trash" label={`Quitar imagen ${f.nombre}`} danger onClick={() => eliminar(f.id)} /></li>)}</ul>
-    <label class={BTN_SECONDARY}><Icon name="plus" />{busy ? 'Cargando…' : 'Cargar imagen'}<input type="file" accept="image/png,image/jpeg" class="sr-only" disabled={busy} onChange={cargar} /></label>
+    {loading && !data && <Spinner />}
+    <ul class="mb-3 space-y-2">{data?.map((f) => <li key={f.id} class="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-sm"><span class="flex min-w-0 items-center gap-2 break-all"><Icon name="attachment" class="size-4 shrink-0 text-sky-600" />{f.nombre}</span><AccionIcono icon="trash" label={`Quitar imagen ${f.nombre}`} danger disabled={busy} onClick={() => eliminar(f.id)} /></li>)}</ul>
+    <form class="space-y-3" onSubmit={cargar}>
+      <Lbl label="Nombre de la firma"><input class={FIELD} value={nombre} maxLength={150} required disabled={busy} onInput={(e) => setNombre(e.currentTarget.value)} /></Lbl>
+      <Lbl label="Imagen PNG o JPEG"><input key={fileVersion} type="file" accept="image/png,image/jpeg" class={FIELD} required disabled={busy} onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)} /></Lbl>
+      <button class={BTN_PRIMARY} type="submit" disabled={busy}><Icon name="plus" />{busy ? 'Guardando…' : 'Guardar firma'}</button>
+    </form>
   </Card>
 }
 
-function Envios({ evento, reloadEventos }: { evento: Evento; reloadEventos(): void }) {
+function Envios({ evento, reloadEventos, firmas, onBusyChange }: { evento: Evento; reloadEventos(): void; firmas: number[]; onBusyChange(busy: boolean): void }) {
   const [version, setVersion] = useState(0), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [parcial, setParcial] = useState<Progreso | null>(null)
   const vivo = useRef(true)
@@ -256,8 +300,9 @@ function Envios({ evento, reloadEventos }: { evento: Evento; reloadEventos(): vo
   }
   const enviar = async () => {
     if (evento.estado !== 'finalizado') { setError('Debés confirmar la finalización del evento antes de enviar constancias.'); return }
+    if (!firmas.length || firmas.length > 6) { setError('Seleccioná entre una y seis firmas antes de enviar.'); return }
     if (!(await confirmar('Enviar constancias', { text: 'Se enviarán hasta 100 constancias pendientes, una a la vez. Un reintento de un envío sin confirmar podría duplicar el correo.', ok: 'Iniciar envío' }))) return
-    setError(''); setBusy(true)
+    setError(''); setBusy(true); onBusyChange(true)
     try {
       const fechaLimite = new Date(Date.now() - 10 * 60 * 1000).toISOString()
       const candidatos = await supabase.from('acreditacion_personas').select('id').eq('evento_id', evento.id)
@@ -266,7 +311,7 @@ function Envios({ evento, reloadEventos }: { evento: Evento; reloadEventos(): vo
       if (candidatos.error) throw candidatos.error
       for (const persona of candidatos.data) {
         if (!vivo.current) break
-        const r = await supabase.functions.invoke('acreditacion-constancia', { body: { evento: evento.id, persona: persona.id } })
+        const r = await supabase.functions.invoke('acreditacion-constancia', { body: { evento: evento.id, persona: persona.id, firmas } })
         if (r.error) {
           let detalle = r.error.message
           if (r.error.context instanceof Response) {
@@ -281,7 +326,7 @@ function Envios({ evento, reloadEventos }: { evento: Evento; reloadEventos(): vo
       }
       if (vivo.current) toast.ok(candidatos.data.length === 100 ? 'Tanda de 100 constancias completada.' : 'Tanda de constancias completada.')
     } catch (e) { if (vivo.current) setError(errorText(e)) }
-    finally { if (vivo.current) { setBusy(false); setParcial(null); setVersion((v) => v + 1) } }
+    finally { if (vivo.current) { setBusy(false); onBusyChange(false); setParcial(null); setVersion((v) => v + 1) } }
   }
   return <div class="space-y-4">
     <Card title="Envío de constancias">
@@ -295,7 +340,7 @@ function Envios({ evento, reloadEventos }: { evento: Evento; reloadEventos(): vo
       </div>}
       <div class="mt-4 flex flex-wrap gap-2">
         {evento.estado === 'activo' && <button class={BTN_SECONDARY} disabled={busy} onClick={finalizar}><Icon name="lock" />Confirmar finalización</button>}
-        <button class={BTN_PRIMARY} disabled={busy || evento.estado !== 'finalizado' || !valor || !valor.pendientes || !!valor.en_curso} onClick={enviar}><Icon name="send" />{busy ? 'Enviando…' : `Continuar envío: ${valor?.enviados ?? 0} de ${valor?.total ?? 0}`}</button>
+        <button class={BTN_PRIMARY} disabled={busy || !firmas.length || evento.estado !== 'finalizado' || !valor || !valor.pendientes || !!valor.en_curso} onClick={enviar}><Icon name="send" />{busy ? 'Enviando…' : `Continuar envío: ${valor?.enviados ?? 0} de ${valor?.total ?? 0}`}</button>
       </div>
       {busy && <p class="mt-2 text-sm text-slate-600">No cierres esta pantalla hasta completar la tanda. Si salís, podrás continuar luego.</p>}
     </Card>
