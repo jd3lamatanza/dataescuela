@@ -22,6 +22,7 @@ export function FichaEscuela({ id, onCancel }: { id: number; onCancel?: () => vo
     ])
     if (e.error) throw e.error
     if (!e.data) throw new Error('Escuela no encontrada')
+    if (nud.error) throw nud.error
     const locs = (loc.data ?? []).map((x) => x.nombre as string)
     if (e.data.localidad && !locs.includes(e.data.localidad)) locs.push(e.data.localidad)
     return { e: e.data as Record<string, any>, locs, cir: cir.data ?? [], nud: nud.data ?? [] }

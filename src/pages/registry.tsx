@@ -26,6 +26,7 @@ import { Configuracion } from './Configuracion'
 import { Mensajes } from './Mensajes'
 import { Acreditacion } from './Acreditacion'
 import { MapaEscolar } from './MapaEscolar'
+import { Nudos } from './Nudos'
 
 const Pendiente = (titulo: string) => () => (
   <>
@@ -55,6 +56,7 @@ export const PAGES: Record<string, ComponentType> = {
   planes: Planes,
   agrupamientos: Agrupamientos,
   escuelas: Escuelas,
+  nudos: Nudos,
   fichas: Fichas,
   planta: Planta,
   plantas: Plantas,

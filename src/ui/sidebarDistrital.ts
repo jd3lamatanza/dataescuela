@@ -13,6 +13,7 @@ export const CATEGORIAS_DISTRITALES: readonly { id: CategoriaDistrital; label: s
 const CATEGORIA_POR_MODULO: Record<string, CategoriaDistrital> = {
   distrito: 'escuelas',
   escuelas: 'escuelas',
+  nudos: 'escuelas',
   plantas: 'escuelas',
   matriculas: 'escuelas',
   'salidas-distrito': 'escuelas',
