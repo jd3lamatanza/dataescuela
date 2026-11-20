@@ -41,3 +41,14 @@ test('la exportación incluye todos los resultados filtrados y nudos vacíos', (
   const vacio = tablaNudos(filtrarNudos(nudos, [], { ...base, nudo: '3' }), { ...base, nudo: '3' }, 'Distrito')
   assert.deepEqual(vacio.rows, [['Nudo Norte', '', 'Sin escuelas asociadas', '']])
 })
+
+test('los circuitos cuentan la opción provisional y exportan sus propios nombres', () => {
+  const circuitos = [{ id: 1, nombre: 'Sin Circuito', activo: true }, { id: 2, nombre: 'Circuito 36', activo: true }]
+  assert.equal(contarSinNudo(circuitos, escuelas, 'circuito'), 2)
+  const filtros = { ...base, nudo: 'sin-asignar' }
+  const grupos = filtrarNudos(circuitos, escuelas, filtros, 'circuito')
+  assert.deepEqual(grupos.flatMap((g) => g.escuelas.map((e) => e.id)).sort(), [1, 2])
+  const tabla = tablaNudos(grupos, filtros, 'Distrito', 'circuito')
+  assert.equal(tabla.title, 'Escuelas por circuito')
+  assert.equal(tabla.headers[0], 'Circuito')
+})

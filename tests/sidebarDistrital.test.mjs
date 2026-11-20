@@ -23,6 +23,12 @@ test('Nudos está en Escuelas para Distrital y disponible también para Areal', 
   assert.ok(modulesFor('areal').includes(m))
 })
 
+test('Circuitos Electorales está disponible únicamente para Administrador', () => {
+  const m = modulesFor('admin').find((m) => m.id === 'circuitos-electorales')
+  assert.ok(m)
+  for (const role of ROLES) assert.equal(canAccess(m, role), role === 'admin')
+})
+
 test('un módulo distrital nuevo no desaparece del menú', () => {
   const extra = { id: 'nuevo', label: 'Nuevo', path: '/nuevo', icon: 'home', roles: ['distrital'] }
   const grupos = agruparMenuDistrital([...modulesFor('distrital'), extra])
