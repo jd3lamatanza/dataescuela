@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks'
 import type { ComponentChildren } from 'preact'
-import { BRAND, MODULES, ROLE_LABELS, canAccess, modulesFor } from '../modules'
+import { BRAND, MODULES, ROLE_LABELS, canAccess, modulesForUser } from '../modules'
 import type { Profile } from '../lib/auth'
 import { BarraServidor } from './BarraServidor'
 import { Icon } from './Icon'
@@ -59,7 +59,7 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
     addEventListener('storage', sync)
     return () => removeEventListener('storage', sync)
   }, [])
-  const mods = modulesFor(user.role)
+  const mods = modulesForUser(user)
   const active = (p: string) => (p === '/' ? path === '/' : path.startsWith(p))
   const categorias = user.role === 'distrital' ? agruparMenuDistrital(mods) : []
   const categoriaActiva = categorias.find((c) => c.modulos.some((m) => active(m.path)))?.id
@@ -101,7 +101,7 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
       <nav class={`fixed inset-y-0 left-0 z-40 w-64 -translate-x-full overflow-y-auto border-r border-slate-200 bg-slate-50 p-2 pt-16 transition-transform lg:z-10 lg:translate-x-0 lg:pt-16 ${drawer ? '!translate-x-0' : ''} ${collapsed ? 'lg:w-16' : ''}`}>
         {user.role !== 'distrital' ? <ul class="space-y-0.5">{mods.map((m) => <li key={m.id}>{enlace(m)}</li>)}</ul> : <>
           <div class={collapsed ? 'lg:hidden' : ''}>
-            {mods.filter((m) => m.id === 'inicio').map((m) => <div key={m.id}>{enlace(m)}</div>)}
+            {mods.filter((m) => m.id === 'inicio' || m.id === 'mensajes').map((m) => <div key={m.id}>{enlace(m)}</div>)}
             <div class="mt-2 space-y-1">
               {categorias.map((categoria) => <section key={categoria.id}>
                 <button type="button" aria-expanded={!!abiertas[categoria.id]} aria-controls={`menu-distrital-${categoria.id}`}

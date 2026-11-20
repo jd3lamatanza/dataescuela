@@ -3,9 +3,9 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useAsync, useDebounced } from '../lib/hooks'
 import { ROLE_LABELS, ROLES, type Role } from '../modules'
-import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PAGE_SIZE, PageHeader, Pager, RowMenu, Spinner, confirmar, toast } from '../ui/kit'
+import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PAGE_SIZE, PageHeader, Pager, RowMenu, Spinner, Toggle, confirmar, toast } from '../ui/kit'
 
-interface Row { id: string; login: string; name: string; role: Role; active: boolean; must_change: boolean; email: string | null; total: number }
+interface Row { id: string; login: string; name: string; role: Role; active: boolean; must_change: boolean; email: string | null; permiso_avanzado: boolean; total: number }
 
 /** Un único módulo para admin (todos los roles) y distrital (solo cuentas distritales). */
 export function Usuarios() {
@@ -55,6 +55,7 @@ export function Usuarios() {
     <span class="inline-flex flex-wrap gap-1">
       <Badge tone={u.active ? 'green' : 'red'}>{u.active ? 'Activo' : 'Bloqueado'}</Badge>
       {u.must_change && <Badge tone="amber">Clave pendiente</Badge>}
+      {u.role === 'distrital' && u.permiso_avanzado && <Badge tone="blue">Permiso avanzado</Badge>}
     </span>
   )
   const setF = (f: () => void) => { f(); setPage(1) }
@@ -110,22 +111,29 @@ export function Usuarios() {
         )}
       </Card>
       <Pager page={page} total={Number(total)} onPage={setPage} />
-      {edit && <EditarUsuario u={edit} onClose={() => setEdit(null)} onDone={() => { setEdit(null); reload() }} />}
+      {edit && <EditarUsuario u={edit} propio={edit.id === user?.id} onClose={() => setEdit(null)} onDone={() => { setEdit(null); reload() }} />}
       {nuevo && <NuevoUsuario roles={roles} onClose={() => setNuevo(false)} onDone={() => { setNuevo(false); reload() }} />}
     </>
   )
 }
 
-function EditarUsuario({ u, onClose, onDone }: { u: Row; onClose(): void; onDone(): void }) {
+function EditarUsuario({ u, propio, onClose, onDone }: { u: Row; propio: boolean; onClose(): void; onDone(): void }) {
   const [name, setName] = useState(u.name)
   const [login, setLogin] = useState(u.login)
   const [email, setEmail] = useState(u.email ?? '')
   const [err, setErr] = useState<string | null>(null)
+  const [permiso, setPermiso] = useState(u.permiso_avanzado)
+  const [busy, setBusy] = useState(false)
   const submit = async (e: Event) => {
     e.preventDefault()
+    setBusy(true); setErr(null)
     const { error } = await supabase.rpc('usuario_editar', { p_id: u.id, p_name: name, p_login: login, p_email: email })
-    if (error) setErr(error.message)
-    else { toast.ok('Usuario actualizado'); onDone() }
+    if (error) { setBusy(false); setErr(error.message); return }
+    if (u.role === 'distrital' && !propio && permiso !== u.permiso_avanzado) {
+      const resultado = await supabase.rpc('usuario_permiso_avanzado', { p_id: u.id, p_valor: permiso })
+      if (resultado.error) { setBusy(false); setErr(`Datos actualizados, pero no se pudo modificar el permiso: ${resultado.error.message}`); return }
+    }
+    setBusy(false); toast.ok('Usuario actualizado'); onDone()
   }
   return (
     <Modal title="Editar usuario" onClose={onClose}>
@@ -134,8 +142,9 @@ function EditarUsuario({ u, onClose, onDone }: { u: Row; onClose(): void; onDone
         <Lbl label="Nombre"><input class={FIELD} value={name} onInput={(e) => setName(e.currentTarget.value)} required maxLength={200} /></Lbl>
         <Lbl label="Usuario (CUE, CUIL o correo)"><input class={FIELD} value={login} onInput={(e) => setLogin(e.currentTarget.value)} required maxLength={120} /></Lbl>
         <Lbl label="Correo de recuperación"><input class={FIELD} type="email" value={email} onInput={(e) => setEmail(e.currentTarget.value)} maxLength={254} autocomplete="email" /></Lbl>
+        {u.role === 'distrital' && <div><Toggle label="Permiso avanzado" checked={permiso} disabled={propio || busy} onChange={setPermiso} />{propio && <p class="mt-1 text-xs text-slate-500">No podés modificar tu propio permiso.</p>}</div>}
         <p class="text-xs text-slate-500">Para escuelas e inspectores se prioriza el correo de su ficha; este correo sirve como alternativa y es el principal para los demás roles.</p>
-        <div class="flex justify-end gap-2"><button type="button" class={BTN_SECONDARY} onClick={onClose}>Cancelar</button><button class={BTN_PRIMARY}>Guardar</button></div>
+        <div class="flex justify-end gap-2"><button type="button" class={BTN_SECONDARY} disabled={busy} onClick={onClose}>Cancelar</button><button class={BTN_PRIMARY} disabled={busy}>{busy ? 'Guardando…' : 'Guardar'}</button></div>
       </form>
     </Modal>
   )

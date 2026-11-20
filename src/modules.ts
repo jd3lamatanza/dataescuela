@@ -68,3 +68,9 @@ export const MODULES: readonly AppModule[] = [
 
 export const canAccess = (m: AppModule, role: Role) => m.roles.includes(role)
 export const modulesFor = (role: Role) => MODULES.filter((m) => canAccess(m, role) && !m.userMenu)
+
+const SISTEMA_DISTRITAL = new Set(['simulado', 'usuarios-distrito', 'configuracion'])
+export const canAccessUser = (m: AppModule, user: { role: Role; permiso_avanzado?: boolean }) =>
+  canAccess(m, user.role) && (user.role !== 'distrital' || !SISTEMA_DISTRITAL.has(m.id) || user.permiso_avanzado === true)
+export const modulesForUser = (user: { role: Role; permiso_avanzado?: boolean }) =>
+  MODULES.filter((m) => !m.userMenu && canAccessUser(m, user))

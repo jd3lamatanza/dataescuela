@@ -10,6 +10,7 @@ export interface Profile {
   name: string
   role: Role
   active: boolean
+  permiso_avanzado: boolean
   cue: string | null
   must_change: boolean
   email?: string | null

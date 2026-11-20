@@ -1,5 +1,5 @@
 import { useAuth } from '../lib/auth'
-import { ROLE_LABELS, modulesFor } from '../modules'
+import { ROLE_LABELS, modulesForUser } from '../modules'
 import { Card, PageHeader } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 import { href } from '../lib/router'
@@ -8,7 +8,7 @@ import { Calendario } from '../ui/Calendario'
 export function Inicio() {
   const { user } = useAuth()
   if (!user) return null
-  const mods = modulesFor(user.role).filter((m) => m.id !== 'inicio')
+  const mods = modulesForUser(user).filter((m) => m.id !== 'inicio')
   return (
     <>
       <PageHeader title={`Hola, ${user.name}`} subtitle={`Rol: ${ROLE_LABELS[user.role]}`} />

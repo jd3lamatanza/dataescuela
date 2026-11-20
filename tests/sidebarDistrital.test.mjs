@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { canAccess, modulesFor, ROLES } from '../src/modules.ts'
+import { canAccess, canAccessUser, modulesFor, modulesForUser, ROLES } from '../src/modules.ts'
 import { agruparMenuDistrital } from '../src/ui/sidebarDistrital.ts'
 
 test('el menú distrital agrupa todos los módulos una sola vez', () => {
@@ -8,11 +8,26 @@ test('el menú distrital agrupa todos los módulos una sola vez', () => {
   const grupos = agruparMenuDistrital(modulos)
   assert.deepEqual(grupos.map((g) => g.label), ['Escuelas', 'Inspectores', 'Estadística', 'Utilidades', 'Sistema'])
   const agrupados = grupos.flatMap((g) => g.modulos.map((m) => m.id))
-  assert.deepEqual([...agrupados].sort(), modulos.filter((m) => m.id !== 'inicio').map((m) => m.id).sort())
+  assert.deepEqual([...agrupados].sort(), modulos.filter((m) => m.id !== 'inicio' && m.id !== 'mensajes').map((m) => m.id).sort())
   assert.equal(new Set(agrupados).size, agrupados.length)
   assert.ok(grupos.find((g) => g.id === 'inspectores').modulos.some((m) => m.id === 'labores-distrito'))
   assert.ok(grupos.find((g) => g.id === 'sistema').modulos.some((m) => m.id === 'usuarios-distrito'))
   assert.ok(grupos.find((g) => g.id === 'utilidades').modulos.some((m) => m.id === 'acreditacion'))
+})
+
+test('Sistema requiere permiso avanzado y Mensajes permanece accesible fuera de categorías', () => {
+  const normal = { role: 'distrital', permiso_avanzado: false }
+  const avanzado = { role: 'distrital', permiso_avanzado: true }
+  for (const id of ['usuarios-distrito', 'simulado', 'configuracion']) {
+    const m = modulesFor('distrital').find((m) => m.id === id)
+    assert.equal(canAccessUser(m, normal), false)
+    assert.equal(canAccessUser(m, avanzado), true)
+  }
+  assert.ok(!agruparMenuDistrital(modulesForUser(normal)).some((g) => g.id === 'sistema'))
+  assert.ok(agruparMenuDistrital(modulesForUser(avanzado)).some((g) => g.id === 'sistema'))
+  assert.ok(modulesForUser(normal).some((m) => m.id === 'mensajes'))
+  assert.ok(!agruparMenuDistrital(modulesForUser(avanzado)).some((g) => g.modulos.some((m) => m.id === 'mensajes')))
+  assert.ok(modulesForUser({ role: 'admin', permiso_avanzado: false }).some((m) => m.id === 'usuarios'))
 })
 
 test('Nudos está en Escuelas para Distrital y disponible también para Areal', () => {

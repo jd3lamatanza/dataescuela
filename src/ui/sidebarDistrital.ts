@@ -28,12 +28,11 @@ const CATEGORIA_POR_MODULO: Record<string, CategoriaDistrital> = {
   simulado: 'sistema',
   'usuarios-distrito': 'sistema',
   configuracion: 'sistema',
-  mensajes: 'sistema',
 }
 
 export function agruparMenuDistrital(modulos: readonly AppModule[]) {
   return CATEGORIAS_DISTRITALES.map((categoria) => ({
     ...categoria,
-    modulos: modulos.filter((modulo) => modulo.id !== 'inicio' && (CATEGORIA_POR_MODULO[modulo.id] ?? 'sistema') === categoria.id),
+    modulos: modulos.filter((modulo) => modulo.id !== 'inicio' && modulo.id !== 'mensajes' && (CATEGORIA_POR_MODULO[modulo.id] ?? 'sistema') === categoria.id),
   })).filter((categoria) => categoria.modulos.length > 0)
 }
