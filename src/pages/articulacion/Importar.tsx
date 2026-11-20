@@ -6,7 +6,7 @@ import { Alert, BTN_PRIMARY, BTN_SECONDARY, Modal, toast } from '../../ui/kit'
 type Clase = 'ok' | 'dni' | 'propio' | 'otra' | 'repetido'
 const ETIQ: Record<Clase, string> = { ok: 'Para importar', dni: 'DNI inválido', propio: 'Ya cargado en tu escuela', otra: 'Cargado en otra escuela', repetido: 'Repetido en el archivo' }
 
-export function ImportarNomina({ o, ciclo, onClose, onDone }: { o: { cue: string; clave: string }; ciclo: number; onClose(): void; onDone(): void }) {
+export function ImportarNomina({ o, ciclo, onClose, onDone }: { o: { cue: string; clave: string; codigo: string }; ciclo: number; onClose(): void; onDone(): void }) {
   const [nom, setNom] = useState<Nomina | null>(null)
   const [cls, setCls] = useState<{ dni: string; nombre: string; curso: string; c: Clase; donde?: string }[]>([])
   const [err, setErr] = useState('')
@@ -16,7 +16,7 @@ export function ImportarNomina({ o, ciclo, onClose, onDone }: { o: { cue: string
   const leer = async (file: File) => {
     setErr(''); setNom(null); setBusy(true)
     try {
-      const n = await parseNomina(await file.arrayBuffer())
+      const n = await parseNomina(await file.arrayBuffer(), o.codigo)
       if (n.clave && n.clave !== o.clave && n.cue !== o.cue) throw new Error('El archivo corresponde a otra escuela')
       if (n.ciclo && n.ciclo !== ciclo) throw new Error(`El archivo es del ciclo ${n.ciclo} y estás cargando el ciclo ${ciclo}`)
       if (n.rows.length > 1500) throw new Error('El archivo supera las 1500 filas')

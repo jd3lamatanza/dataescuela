@@ -12,7 +12,7 @@ export interface Nomina {
 const MAX_BYTES = 2 * 1024 * 1024
 
 // Lee el reporte nominal de estudiantes (una sola hoja, bloques por sección). Lanza Error con un mensaje apto para el usuario.
-export async function parseNomina(buf: ArrayBuffer): Promise<Nomina> {
+export async function parseNomina(buf: ArrayBuffer, codigo: string): Promise<Nomina> {
   const XLSX = await import("xlsx")
   if (buf.byteLength > MAX_BYTES) throw new Error('El archivo supera los 2 MB')
   let wb: XLSXT.WorkBook
@@ -33,6 +33,7 @@ export async function parseNomina(buf: ArrayBuffer): Promise<Nomina> {
   const year = /(20\d\d)/.exec(val('E', 6) + ' ' + wb.SheetNames[0])?.[1]
 
   const rows: NominaRow[] = []
+  const inicial = ['JI', 'JV', 'JU'].includes(codigo)
   let bajas = 0
   let curso = ''
   let secciones = 0
@@ -41,12 +42,12 @@ export async function parseNomina(buf: ArrayBuffer): Promise<Nomina> {
     if (!d) continue
     if (/tipo de secci/i.test(d)) {
       const seccion = d[0].toUpperCase()
-      if (!curso) throw new Error(`Falta el curso sobre la sección de la fila ${r} (celda combinada D:N)`)
+      if (!inicial && !curso) throw new Error(`Falta el curso sobre la sección de la fila ${r} (celda combinada D:N)`)
       if (!/nombre/i.test(val('H', r + 2)) || !/documento/i.test(val('I', r + 2))) throw new Error(`Formato inesperado: no se encontró la nómina de la sección ${seccion} (fila ${r + 2})`)
       secciones++
       for (let i = r + 3; val('H', i); i++) {
         if (/baja/i.test(val('G', i))) { bajas++; continue }
-        rows.push({ dni: val('I', i).replace(/\D/g, ''), nombre: val('H', i).slice(0, 120), curso: curso + seccion })
+        rows.push({ dni: val('I', i).replace(/\D/g, ''), nombre: val('H', i).slice(0, 120), curso: inicial ? seccion : curso + seccion })
       }
     } else if (!/turno/i.test(d) && d.length <= 10) {
       curso = d
