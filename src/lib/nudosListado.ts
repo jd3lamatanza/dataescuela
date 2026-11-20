@@ -3,7 +3,7 @@ import type { Table } from './export'
 export interface Nudo { id: number; nombre: string; activo: boolean }
 export interface EscuelaNudo { id: number; nudo_id: number | null; clave: string | null; tipo: string | null; numero: number | null; nombre: string | null; localidad: string | null }
 export type OrdenNudo = 'clave' | 'nombre' | 'localidad'
-export interface FiltrosNudos { busqueda: string; nudo: string; localidad: string; orden: OrdenNudo; descendente: boolean }
+export interface FiltrosNudos { busqueda: string; nudo: string; localidad: string; orden: OrdenNudo; descendente: boolean; ocultarSinAsignar?: boolean }
 export interface GrupoNudo { id: number | null; nombre: string; activo: boolean; escuelas: EscuelaNudo[] }
 
 const normalizar = (valor: string) => valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es-AR').trim()
@@ -39,10 +39,26 @@ export function filtrarNudos(nudos: Nudo[], escuelas: EscuelaNudo[], filtros: Fi
     })
   }
   return grupos.filter((grupo) => {
+    if (filtros.ocultarSinAsignar && (grupo.id === null || esSinNudo(grupo, tipo))) return false
     if (grupo.escuelas.length) return true
     if (filtros.localidad || (filtros.nudo && (filtros.nudo === 'sin-asignar' ? !(grupo.id === null || esSinNudo(grupo, tipo)) : String(grupo.id) !== filtros.nudo))) return false
     return !termino || normalizar(grupo.nombre).includes(termino)
   }).sort((a, b) => factor * comparar(a.nombre, b.nombre) || (a.id ?? 0) - (b.id ?? 0))
+}
+
+export function paginarGrupos(grupos: GrupoNudo[], pagina: number, size: number) {
+  const inicio = (pagina - 1) * size
+  const fin = inicio + size
+  let total = 0
+  const visibles: GrupoNudo[] = []
+  for (const grupo of grupos) {
+    const cantidad = Math.max(1, grupo.escuelas.length)
+    if (total < fin && total + cantidad > inicio) {
+      visibles.push({ ...grupo, escuelas: grupo.escuelas.slice(Math.max(0, inicio - total), fin - total) })
+    }
+    total += cantidad
+  }
+  return { visibles, total }
 }
 
 export function tablaNudos(grupos: GrupoNudo[], filtros: FiltrosNudos, organizacion: string, tipo: 'nudo' | 'circuito' = 'nudo'): Table {
@@ -51,6 +67,7 @@ export function tablaNudos(grupos: GrupoNudo[], filtros: FiltrosNudos, organizac
   const subtitle = [
     organizacion, filtros.nudo && `${etiqueta}: ${filtros.nudo === 'sin-asignar' ? 'Sin asignar' : grupos[0]?.nombre ?? 'Seleccionado'}`,
     filtros.busqueda && `Búsqueda: ${filtros.busqueda.trim()}`, filtros.localidad && `Localidad: ${filtros.localidad}`,
+    filtros.ocultarSinAsignar && `Sin ${tipo} asignado: ocultos`,
     `Orden: ${filtros.orden} ${filtros.descendente ? 'descendente' : 'ascendente'}`, `${total} escuela(s)`,
   ].filter(Boolean).join(' · ')
   return {

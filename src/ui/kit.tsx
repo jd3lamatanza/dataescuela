@@ -160,7 +160,7 @@ export function RowMenu({ items }: { items: MenuItem[] }) {
 
 export const Toggle = ({ checked, onChange, label, disabled }: { checked: boolean; onChange(v: boolean): void; label?: string; disabled?: boolean }) => (
   <label class="inline-flex items-center gap-2 text-sm text-slate-700">
-    <button type="button" role="switch" aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)}
+    <button type="button" role="switch" aria-label={label} aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)}
       class={`relative h-6 w-11 shrink-0 rounded-full transition ${checked ? 'bg-sky-600' : 'bg-slate-300'} disabled:opacity-50`}>
       <span class={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${checked ? 'left-[22px]' : 'left-0.5'}`} />
     </button>

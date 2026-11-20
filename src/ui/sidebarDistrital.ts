@@ -14,6 +14,7 @@ const CATEGORIA_POR_MODULO: Record<string, CategoriaDistrital> = {
   distrito: 'escuelas',
   escuelas: 'escuelas',
   nudos: 'escuelas',
+  'circuitos-electorales': 'escuelas',
   plantas: 'escuelas',
   matriculas: 'escuelas',
   'salidas-distrito': 'escuelas',

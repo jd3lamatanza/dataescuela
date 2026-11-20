@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { contarSinNudo, filtrarNudos, tablaNudos } from '../src/lib/nudosListado.ts'
+import { contarSinNudo, filtrarNudos, paginarGrupos, tablaNudos } from '../src/lib/nudosListado.ts'
 
 const nudos = [
   { id: 1, nombre: 'Sin Nudo', activo: true },
@@ -51,4 +51,29 @@ test('los circuitos cuentan la opción provisional y exportan sus propios nombre
   const tabla = tablaNudos(grupos, filtros, 'Distrito', 'circuito')
   assert.equal(tabla.title, 'Escuelas por circuito')
   assert.equal(tabla.headers[0], 'Circuito')
+})
+
+test('ocultar sin circuito excluye escuelas sin referencia y con circuito provisional de lista y exportación', () => {
+  const circuitos = [{ id: 1, nombre: 'Sin Circuito', activo: true }, { id: 2, nombre: 'Circuito 36', activo: true }]
+  const filtros = { ...base, ocultarSinAsignar: true }
+  const grupos = filtrarNudos(circuitos, escuelas, filtros, 'circuito')
+  assert.deepEqual(grupos.flatMap((g) => g.escuelas.map((e) => e.id)), [3, 4])
+  const tabla = tablaNudos(grupos, filtros, 'Distrito', 'circuito')
+  assert.equal(tabla.rows.length, 2)
+  assert.ok(tabla.subtitle.includes('Sin circuito asignado: ocultos'))
+})
+
+test('pagina escuelas dentro de un circuito y conserva circuitos vacíos; exporta todos los resultados', () => {
+  const muchos = Array.from({ length: 32 }, (_, i) => escuela(i + 10, 2, `EP${i}`, 'Sol', 'Catán'))
+  const grupos = filtrarNudos(nudos, muchos, base)
+  const primera = paginarGrupos(grupos, 1, 15)
+  const segunda = paginarGrupos(grupos, 2, 15)
+  const ultima = paginarGrupos(grupos, 3, 15)
+  assert.equal(primera.total, 34)
+  assert.equal(segunda.total, 34)
+  assert.equal(ultima.visibles.reduce((n, g) => n + Math.max(1, g.escuelas.length), 0), 4)
+  assert.equal(tablaNudos(grupos, base, 'Distrito').rows.length, 34)
+  const ids = [primera, segunda, ultima].flatMap((p) => p.visibles.flatMap((g) => g.escuelas.map((e) => e.id)))
+  assert.equal(ids.length, 32)
+  assert.equal(new Set(ids).size, 32)
 })

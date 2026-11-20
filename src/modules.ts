@@ -43,7 +43,7 @@ export const MODULES: readonly AppModule[] = [
   { id: 'mapa-escolar', label: 'Mapa Escolar', path: '/mapa-escolar', icon: 'map', roles: ROLES },
   { id: 'escuelas', label: 'Escuelas', path: '/escuelas', icon: 'building', roles: ['distrital', 'areal'], primary: true },
   { id: 'nudos', label: 'Nudos', path: '/nudos', icon: 'layers', roles: ['distrital', 'areal'] },
-  { id: 'circuitos-electorales', label: 'Circuitos Electorales', path: '/circuitos-electorales', icon: 'layers', roles: ['admin'] },
+  { id: 'circuitos-electorales', label: 'Circuitos Electorales', path: '/circuitos-electorales', icon: 'layers', roles: ['admin', 'distrital', 'areal'] },
   { id: 'fichas', label: 'Fichas de Datos', path: '/fichas', icon: 'clipboard', roles: ['escolar'], primary: true },
   { id: 'planes', label: 'Planes de Estudio', path: '/planes', icon: 'book', roles: ['admin'], primary: true },
   { id: 'turnos', label: 'Turnos', path: '/turnos', icon: 'clock', roles: ['admin'], primary: true },

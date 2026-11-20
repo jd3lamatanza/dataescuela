@@ -2,13 +2,13 @@ import { useMemo, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAsync } from '../lib/hooks'
 import { useAuth } from '../lib/auth'
-import { contarSinNudo, esSinNudo, etiquetaEscuela, filtrarNudos, tablaNudos, type EscuelaNudo, type FiltrosNudos, type Nudo, type OrdenNudo } from '../lib/nudosListado'
+import { contarSinNudo, esSinNudo, etiquetaEscuela, filtrarNudos, paginarGrupos, tablaNudos, type EscuelaNudo, type FiltrosNudos, type Nudo, type OrdenNudo } from '../lib/nudosListado'
 import { buildListadoXlsx } from '../lib/escuelasListado'
 import { buildPdf } from '../lib/export'
 import { descargar, XLSX_MIME } from '../lib/download'
 import { BRAND } from '../modules'
 import { Icon } from '../ui/Icon'
-import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Spinner, TabBar, confirmar, toast, type TabItem } from '../ui/kit'
+import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PAGE_SIZE, PageHeader, Pager, Spinner, TabBar, Toggle, confirmar, toast, type TabItem } from '../ui/kit'
 
 type TipoAgrupacion = 'nudo' | 'circuito'
 
@@ -27,9 +27,10 @@ async function cargar(tipo: TipoAgrupacion) {
       escuelas.push(...r.data)
       if (r.data.length < 500) break
     } else {
-      const r = await supabase.from('escuelas').select('id,circuito_id,clave,tipo,numero,nombre,localidad').order('id').range(offset, offset + 499)
+      const r = await supabase.rpc('circuitos_escuelas').order('id').range(offset, offset + 499)
       if (r.error) throw r.error
-      escuelas.push(...r.data.map(({ circuito_id, ...e }) => ({ ...e, nudo_id: circuito_id })))
+      const filas: (Omit<EscuelaNudo, 'nudo_id'> & { circuito_id: number | null })[] = r.data
+      escuelas.push(...filas.map(({ circuito_id, ...e }) => ({ ...e, nudo_id: circuito_id })))
       if (r.data.length < 500) break
     }
   }
@@ -56,8 +57,13 @@ function Agrupaciones({ tipo }: { tipo: TipoAgrupacion }) {
   const [eliminando, setEliminando] = useState(false)
   const [exportando, setExportando] = useState(false)
   const [filtros, setFiltros] = useState<FiltrosNudos>({ busqueda: '', nudo: '', localidad: '', orden: 'clave', descendente: false })
+  const [pagina, setPagina] = useState(1)
+  const cambiarFiltros = (siguientes: FiltrosNudos) => { setFiltros(siguientes); setPagina(1) }
   const { data, error, loading, reload } = useAsync(() => cargar(tipo), [tipo, user?.id, user?.role])
   const grupos = useMemo(() => data ? filtrarNudos(data.nudos, data.escuelas, filtros, tipo) : [], [data, filtros, tipo])
+  const totalRegistros = tipo === 'circuito' ? paginarGrupos(grupos, 1, PAGE_SIZE).total : 0
+  const paginaActual = Math.min(pagina, Math.max(1, Math.ceil(totalRegistros / PAGE_SIZE)))
+  const gruposVisibles = tipo === 'circuito' ? paginarGrupos(grupos, paginaActual, PAGE_SIZE).visibles : grupos
   const localidades = useMemo(() => [...new Set((data?.escuelas ?? []).map((e) => e.localidad).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, 'es-AR')), [data])
   const sinNudo = data ? contarSinNudo(data.nudos, data.escuelas, tipo) : 0
   const exportar = async (formato: 'xlsx' | 'pdf') => {
@@ -89,22 +95,24 @@ function Agrupaciones({ tipo }: { tipo: TipoAgrupacion }) {
     {loading && !data ? <Spinner /> : data && <>
       {(tab === 'escuelas' || !puedeAdministrar) && <>
         <div class="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Lbl label="Buscar"><input class={FIELD} type="search" placeholder={`${mayuscula}, clave, escuela o localidad`} value={filtros.busqueda} onInput={(e) => setFiltros({ ...filtros, busqueda: e.currentTarget.value })} /></Lbl>
-          <Lbl label={mayuscula}><select class={FIELD} value={filtros.nudo} onChange={(e) => setFiltros({ ...filtros, nudo: e.currentTarget.value })}><option value="">Todos los {plural}</option><option value="sin-asignar">Sin {tipo} asignado</option>{data.nudos.filter((n) => !esSinNudo(n, tipo)).map((n) => <option key={n.id} value={n.id}>{n.nombre}</option>)}</select></Lbl>
-          <Lbl label="Localidad"><select class={FIELD} value={filtros.localidad} onChange={(e) => setFiltros({ ...filtros, localidad: e.currentTarget.value })}><option value="">Todas las localidades</option>{localidades.map((l) => <option key={l} value={l}>{l}</option>)}</select></Lbl>
-          <Lbl label="Ordenar escuelas por"><select class={FIELD} value={filtros.orden} onChange={(e) => setFiltros({ ...filtros, orden: e.currentTarget.value as OrdenNudo })}><option value="clave">Clave provincial</option><option value="nombre">Nombre</option><option value="localidad">Localidad</option></select></Lbl>
+          <Lbl label="Buscar"><input class={FIELD} type="search" placeholder={`${mayuscula}, clave, escuela o localidad`} value={filtros.busqueda} onInput={(e) => cambiarFiltros({ ...filtros, busqueda: e.currentTarget.value })} /></Lbl>
+          <Lbl label={mayuscula}><select class={FIELD} value={filtros.nudo} onChange={(e) => cambiarFiltros({ ...filtros, nudo: e.currentTarget.value, ocultarSinAsignar: e.currentTarget.value === 'sin-asignar' ? false : filtros.ocultarSinAsignar })}><option value="">Todos los {plural}</option><option value="sin-asignar">Sin {tipo} asignado</option>{data.nudos.filter((n) => !esSinNudo(n, tipo)).map((n) => <option key={n.id} value={n.id}>{n.nombre}</option>)}</select></Lbl>
+          <Lbl label="Localidad"><select class={FIELD} value={filtros.localidad} onChange={(e) => cambiarFiltros({ ...filtros, localidad: e.currentTarget.value })}><option value="">Todas las localidades</option>{localidades.map((l) => <option key={l} value={l}>{l}</option>)}</select></Lbl>
+          <Lbl label="Ordenar escuelas por"><select class={FIELD} value={filtros.orden} onChange={(e) => cambiarFiltros({ ...filtros, orden: e.currentTarget.value as OrdenNudo })}><option value="clave">Clave provincial</option><option value="nombre">Nombre</option><option value="localidad">Localidad</option></select></Lbl>
         </div>
         <div class="mb-4 flex flex-wrap items-center gap-2">
-          <button type="button" class={BTN_SECONDARY} onClick={() => setFiltros({ ...filtros, descendente: !filtros.descendente })}><Icon name="transfer" />{filtros.descendente ? 'Orden descendente' : 'Orden ascendente'}</button>
+          <button type="button" class={BTN_SECONDARY} onClick={() => cambiarFiltros({ ...filtros, descendente: !filtros.descendente })}><Icon name="transfer" />{filtros.descendente ? 'Orden descendente' : 'Orden ascendente'}</button>
+          {tipo === 'circuito' && <Toggle label="Ocultar escuelas sin circuito electoral" checked={!!filtros.ocultarSinAsignar} onChange={(v) => cambiarFiltros({ ...filtros, ocultarSinAsignar: v, nudo: v && filtros.nudo === 'sin-asignar' ? '' : filtros.nudo })} />}
           <button type="button" class={BTN_SECONDARY} disabled={exportando || loading || !!error || !grupos.length} onClick={() => exportar('xlsx')}><Icon name="download" />Excel</button>
           <button type="button" class={BTN_SECONDARY} disabled={exportando || loading || !!error || !grupos.length} onClick={() => exportar('pdf')}><Icon name="download" />PDF</button>
           <span class="text-xs text-slate-500">{exportando ? 'Preparando exportación…' : 'Se exportan todos los resultados filtrados.'}</span>
         </div>
         {grupos.length ? <div class="space-y-3">
-        {grupos.map((nudo) => {
+        {gruposVisibles.map((nudo) => {
           const escuelas = nudo.escuelas
+          const cantidad = grupos.find((grupo) => grupo.id === nudo.id)?.escuelas.length ?? 0
           return <Card key={nudo.id ?? 'sin-referencia'}>
-            <div class="mb-3 flex flex-wrap items-center gap-2"><h2 class="font-semibold text-slate-900">{nudo.nombre}</h2><Badge tone="blue">{escuelas.length} {escuelas.length === 1 ? 'escuela' : 'escuelas'}</Badge>{!nudo.activo && <Badge>Inactivo</Badge>}</div>
+            <div class="mb-3 flex flex-wrap items-center gap-2"><h2 class="font-semibold text-slate-900">{nudo.nombre}</h2><Badge tone="blue">{cantidad} {cantidad === 1 ? 'escuela' : 'escuelas'}</Badge>{!nudo.activo && <Badge>Inactivo</Badge>}</div>
             {escuelas.length ? <ul class="divide-y divide-slate-100">{escuelas.map((e) => <li key={e.id} class="flex items-start gap-2 py-2 text-sm">
               <Icon name="building" class="mt-0.5 size-4 shrink-0 text-sky-600" />
               <div><p class="font-medium text-slate-800">{etiquetaEscuela(e)}{e.nombre ? ` · ${e.nombre}` : ''}</p>{e.localidad && <p class="text-slate-500">{e.localidad}</p>}</div>
@@ -112,6 +120,7 @@ function Agrupaciones({ tipo }: { tipo: TipoAgrupacion }) {
           </Card>
         })}
       </div> : <EmptyState title="Sin resultados" text="Probá con otros filtros." />}
+      {tipo === 'circuito' && <Pager page={paginaActual} total={totalRegistros} onPage={setPagina} />}
       </>}
       {puedeAdministrar && tab === 'gestion' && <>
         <div class="mb-3 flex justify-end"><button class={BTN_PRIMARY} onClick={() => setEditando('nuevo')}><Icon name="plus" />Nuevo {tipo}</button></div>
