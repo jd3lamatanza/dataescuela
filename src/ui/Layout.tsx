@@ -10,7 +10,7 @@ import { useAuth } from '../lib/auth'
 import { Bandeja } from './Bandeja'
 import { AvisoSimulado } from './AvisoSimulado'
 import { agruparMenuDistrital, type CategoriaDistrital } from './sidebarDistrital'
-import { toast } from './kit'
+import { Modal, toast } from './kit'
 import type { AppModule } from '../modules'
 
 export const Logo = ({ class: cls = 'size-10' }: { class?: string }) => (
@@ -47,6 +47,7 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
 export function AppShell({ user, path, onLogout, children }: { user: Profile; path: string; onLogout(): void; children?: ComponentChildren }) {
   const { refresh } = useAuth()
   const [drawer, setDrawer] = useState(false)
+  const [acerca, setAcerca] = useState(false)
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('dw-sb') === '1')
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
   useEffect(() => {
@@ -94,7 +95,7 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
         <a href={href('/')} class="flex items-center gap-2 font-semibold text-slate-900"><Logo class="size-8" /><span class="hidden sm:inline">{BRAND.name}</span></a>
         <div class="ml-auto flex items-center gap-2">
           <Bandeja />
-          <UserMenu user={user} initials={initials} onLogout={onLogout} />
+          <UserMenu user={user} initials={initials} onLogout={onLogout} onAcerca={() => setAcerca(true)} />
         </div>
       </header>
 
@@ -136,12 +137,13 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
         {user.role === 'distrital' && <div class="hidden h-14 lg:block" />}
       </main>
       {user.role === 'distrital' && <BarraServidor collapsed={collapsed} />}
+      {acerca && <AcercaDe onClose={() => setAcerca(false)} />}
     </div>
   )
 }
 
 /** Menú desplegable del usuario: datos de la cuenta, módulos personales y salida. */
-function UserMenu({ user, initials, onLogout }: { user: Profile; initials: string; onLogout(): void }) {
+function UserMenu({ user, initials, onLogout, onAcerca }: { user: Profile; initials: string; onLogout(): void; onAcerca(): void }) {
   const [open, setOpen] = useState(false)
   useEffect(() => {
     if (!open) return
@@ -169,9 +171,35 @@ function UserMenu({ user, initials, onLogout }: { user: Profile; initials: strin
           {own.map((m) => (
             <a key={m.id} role="menuitem" href={href(m.path)} onClick={() => setOpen(false)} class={`${item} text-slate-700`}><Icon name={m.icon} class="size-[18px] text-slate-500" />{m.label}</a>
           ))}
-          <button type="button" role="menuitem" onClick={() => { setOpen(false); onLogout() }} class={`${item} ${own.length ? 'border-t border-slate-100' : ''} text-slate-700`}><Icon name="logout" class="size-[18px] text-slate-500" />Cerrar sesión</button>
+          <button type="button" role="menuitem" onClick={() => { setOpen(false); onAcerca() }} class={`${item} text-slate-700`}><Icon name="info" class="size-[18px] text-slate-500" />Acerca de DataEscuela</button>
+          <button type="button" role="menuitem" onClick={() => { setOpen(false); onLogout() }} class={`${item} border-t border-slate-100 text-slate-700`}><Icon name="logout" class="size-[18px] text-slate-500" />Cerrar sesión</button>
         </div>
       )}
     </div>
   )
+}
+
+function AcercaDe({ onClose }: { onClose(): void }) {
+  return <Modal title="Acerca de DataEscuela" onClose={onClose}>
+    <div class="space-y-4 text-sm leading-relaxed text-slate-600">
+      <div class="flex items-center gap-3">
+        <Logo class="size-14" />
+        <div>
+          <p class="text-lg font-bold text-slate-900">DataEscuela v2</p>
+          <p>Sistema de Relevamiento de Datos de JD3</p>
+        </div>
+      </div>
+      <p class="font-semibold text-slate-800">Jefa Distrital: Karina Mattivi</p>
+      <p>DataEscuela es una plataforma destinada al relevamiento de datos y comunicación con las escuelas de JD3.</p>
+      <p>Es un sistema de código abierto desarrollado por la JD3, alojado gratuitamente en servidores mediante servicios gratuitos para desarrolladores. Es el producto del trabajo de sistematización de la información realizado durante los últimos dos años.</p>
+      <div class="rounded-lg bg-slate-50 p-3">
+        <p><span class="font-semibold text-slate-800">Soporte Técnico:</span> Orlando Martínez (JD3)</p>
+        <p><span class="font-semibold text-slate-800">Desarrollador:</span> Joel Amarante (JD3)</p>
+      </div>
+      <div class="border-t border-slate-200 pt-4 text-right">
+        <p class="font-semibold italic text-slate-800">Es en equipo o no es.</p>
+        <p class="mt-1">Karina Mattivi</p>
+      </div>
+    </div>
+  </Modal>
 }
