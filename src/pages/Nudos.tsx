@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAsync } from '../lib/hooks'
+import { useAuth } from '../lib/auth'
 import { contarSinNudo, esSinNudo, etiquetaEscuela, filtrarNudos, tablaNudos, type EscuelaNudo, type FiltrosNudos, type Nudo, type OrdenNudo } from '../lib/nudosListado'
 import { buildListadoXlsx } from '../lib/escuelasListado'
 import { buildPdf } from '../lib/export'
@@ -23,7 +24,7 @@ async function cargar() {
     if (r.data.length < 500) break
   }
   for (let offset = 0; ; offset += 500) {
-    const r = await supabase.from('escuelas').select('id,nudo_id,clave,tipo,numero,nombre,localidad').order('id').range(offset, offset + 499)
+    const r = await supabase.rpc('nudos_escuelas').order('id').range(offset, offset + 499)
     if (r.error) throw r.error
     escuelas.push(...r.data)
     if (r.data.length < 500) break
@@ -34,12 +35,14 @@ async function cargar() {
 }
 
 export function Nudos() {
+  const { user } = useAuth()
+  const puedeAdministrar = user?.role === 'distrital'
   const [tab, setTab] = useState('escuelas')
   const [editando, setEditando] = useState<Nudo | 'nuevo' | null>(null)
   const [eliminando, setEliminando] = useState(false)
   const [exportando, setExportando] = useState(false)
   const [filtros, setFiltros] = useState<FiltrosNudos>({ busqueda: '', nudo: '', localidad: '', orden: 'clave', descendente: false })
-  const { data, error, loading, reload } = useAsync(cargar, [])
+  const { data, error, loading, reload } = useAsync(cargar, [user?.id, user?.role])
   const grupos = useMemo(() => data ? filtrarNudos(data.nudos, data.escuelas, filtros) : [], [data, filtros])
   const localidades = useMemo(() => [...new Set((data?.escuelas ?? []).map((e) => e.localidad).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, 'es-AR')), [data])
   const sinNudo = data ? contarSinNudo(data.nudos, data.escuelas) : 0
@@ -67,10 +70,10 @@ export function Nudos() {
   return <>
     <PageHeader title="Nudos" subtitle="Agrupamientos territoriales de escuelas" />
     {data && sinNudo > 0 && <div class="mb-4"><Badge tone="amber"><Icon name="alert" class="mr-1 size-4" />{sinNudo} {sinNudo === 1 ? 'escuela sin nudo asignado' : 'escuelas sin nudo asignado'}</Badge></div>}
-    <TabBar label="Nudos" items={TABS} active={tab} onChange={setTab} />
+    <TabBar label="Nudos" items={puedeAdministrar ? TABS : TABS.filter((t) => t.id === 'escuelas')} active={puedeAdministrar ? tab : 'escuelas'} onChange={setTab} />
     {error && <div class="mb-3"><Alert tone="error">{error}</Alert></div>}
     {loading && !data ? <Spinner /> : data && <>
-      {tab === 'escuelas' && <>
+      {(tab === 'escuelas' || !puedeAdministrar) && <>
         <div class="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Lbl label="Buscar"><input class={FIELD} type="search" placeholder="Nudo, clave, escuela o localidad" value={filtros.busqueda} onInput={(e) => setFiltros({ ...filtros, busqueda: e.currentTarget.value })} /></Lbl>
           <Lbl label="Nudo"><select class={FIELD} value={filtros.nudo} onChange={(e) => setFiltros({ ...filtros, nudo: e.currentTarget.value })}><option value="">Todos los nudos</option><option value="sin-asignar">Sin nudo asignado</option>{data.nudos.filter((n) => !esSinNudo(n)).map((n) => <option key={n.id} value={n.id}>{n.nombre}</option>)}</select></Lbl>
@@ -96,7 +99,7 @@ export function Nudos() {
         })}
       </div> : <EmptyState title="Sin resultados" text="Probá con otros filtros." />}
       </>}
-      {tab === 'gestion' && <>
+      {puedeAdministrar && tab === 'gestion' && <>
         <div class="mb-3 flex justify-end"><button class={BTN_PRIMARY} onClick={() => setEditando('nuevo')}><Icon name="plus" />Nuevo nudo</button></div>
         {!data.nudos.length ? <EmptyState title="Todavía no hay nudos" text="Creá el primero para que las escuelas puedan seleccionarlo." /> : <Card>
           <ul class="-my-4 divide-y divide-slate-100">{data.nudos.map((nudo) => {
@@ -112,7 +115,7 @@ export function Nudos() {
         </Card>}
       </>}
     </>}
-    {editando && <NudoForm nudo={editando === 'nuevo' ? null : editando} onClose={() => setEditando(null)} onDone={() => { setEditando(null); reload() }} />}
+    {puedeAdministrar && editando && <NudoForm nudo={editando === 'nuevo' ? null : editando} onClose={() => setEditando(null)} onDone={() => { setEditando(null); reload() }} />}
   </>
 }
 

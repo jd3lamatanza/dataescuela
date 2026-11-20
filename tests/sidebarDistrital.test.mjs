@@ -15,11 +15,12 @@ test('el menú distrital agrupa todos los módulos una sola vez', () => {
   assert.ok(grupos.find((g) => g.id === 'utilidades').modulos.some((m) => m.id === 'acreditacion'))
 })
 
-test('Nudos está en Escuelas y solo está disponible para Distrital', () => {
+test('Nudos está en Escuelas para Distrital y disponible también para Areal', () => {
   const m = modulesFor('distrital').find((m) => m.id === 'nudos')
   assert.ok(m)
   assert.ok(agruparMenuDistrital([m]).find((g) => g.id === 'escuelas')?.modulos.includes(m))
-  for (const role of ROLES) assert.equal(canAccess(m, role), role === 'distrital')
+  for (const role of ROLES) assert.equal(canAccess(m, role), role === 'distrital' || role === 'areal')
+  assert.ok(modulesFor('areal').includes(m))
 })
 
 test('un módulo distrital nuevo no desaparece del menú', () => {
