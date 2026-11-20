@@ -1,11 +1,13 @@
-import { useState } from 'preact/hooks'
+import { useMemo, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAsync } from '../lib/hooks'
+import { contarSinNudo, esSinNudo, etiquetaEscuela, filtrarNudos, tablaNudos, type EscuelaNudo, type FiltrosNudos, type Nudo, type OrdenNudo } from '../lib/nudosListado'
+import { buildListadoXlsx } from '../lib/escuelasListado'
+import { buildPdf } from '../lib/export'
+import { descargar, XLSX_MIME } from '../lib/download'
+import { BRAND } from '../modules'
 import { Icon } from '../ui/Icon'
 import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Spinner, TabBar, confirmar, toast, type TabItem } from '../ui/kit'
-
-interface Nudo { id: number; nombre: string; activo: boolean }
-interface Escuela { id: number; nudo_id: number; clave: string | null; tipo: string | null; numero: number | null; nombre: string | null; localidad: string | null }
 
 const TABS: TabItem[] = [
   { id: 'escuelas', label: 'Escuelas por nudo', icon: 'building', color: 'sky' },
@@ -13,7 +15,7 @@ const TABS: TabItem[] = [
 ]
 
 async function cargar() {
-  const nudos: Nudo[] = [], escuelas: Escuela[] = []
+  const nudos: Nudo[] = [], escuelas: EscuelaNudo[] = []
   for (let offset = 0; ; offset += 500) {
     const r = await supabase.from('nudos').select('id,nombre,activo').order('id').range(offset, offset + 499)
     if (r.error) throw r.error
@@ -21,7 +23,7 @@ async function cargar() {
     if (r.data.length < 500) break
   }
   for (let offset = 0; ; offset += 500) {
-    const r = await supabase.from('escuelas').select('id,nudo_id,clave,tipo,numero,nombre,localidad').not('nudo_id', 'is', null).order('id').range(offset, offset + 499)
+    const r = await supabase.from('escuelas').select('id,nudo_id,clave,tipo,numero,nombre,localidad').order('id').range(offset, offset + 499)
     if (r.error) throw r.error
     escuelas.push(...r.data)
     if (r.data.length < 500) break
@@ -35,7 +37,25 @@ export function Nudos() {
   const [tab, setTab] = useState('escuelas')
   const [editando, setEditando] = useState<Nudo | 'nuevo' | null>(null)
   const [eliminando, setEliminando] = useState(false)
+  const [exportando, setExportando] = useState(false)
+  const [filtros, setFiltros] = useState<FiltrosNudos>({ busqueda: '', nudo: '', localidad: '', orden: 'clave', descendente: false })
   const { data, error, loading, reload } = useAsync(cargar, [])
+  const grupos = useMemo(() => data ? filtrarNudos(data.nudos, data.escuelas, filtros) : [], [data, filtros])
+  const localidades = useMemo(() => [...new Set((data?.escuelas ?? []).map((e) => e.localidad).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, 'es-AR')), [data])
+  const sinNudo = data ? contarSinNudo(data.nudos, data.escuelas) : 0
+  const exportar = async (tipo: 'xlsx' | 'pdf') => {
+    setExportando(true)
+    try {
+      const tabla = tablaNudos(grupos, filtros, BRAND.org)
+      if (tipo === 'xlsx') descargar(await buildListadoXlsx(tabla, BRAND.name, 'Nudos'), 'escuelas-por-nudo.xlsx', XLSX_MIME)
+      else {
+        const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
+        if (!respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
+        descargar(await buildPdf(tabla, { brand: { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) }, maxCellLines: 60 }), 'escuelas-por-nudo.pdf', 'application/pdf')
+      }
+    } catch (e) { toast.error(`No se pudo exportar el listado: ${e instanceof Error ? e.message : String(e)}`) }
+    finally { setExportando(false) }
+  }
   const eliminar = async (nudo: Nudo) => {
     if (!(await confirmar('Eliminar nudo', { text: `¿Eliminar el nudo "${nudo.nombre}"?`, ok: 'Eliminar', danger: true }))) return
     setEliminando(true)
@@ -46,21 +66,36 @@ export function Nudos() {
   }
   return <>
     <PageHeader title="Nudos" subtitle="Agrupamientos territoriales de escuelas" />
+    {data && sinNudo > 0 && <div class="mb-4"><Badge tone="amber"><Icon name="alert" class="mr-1 size-4" />{sinNudo} {sinNudo === 1 ? 'escuela sin nudo asignado' : 'escuelas sin nudo asignado'}</Badge></div>}
     <TabBar label="Nudos" items={TABS} active={tab} onChange={setTab} />
     {error && <div class="mb-3"><Alert tone="error">{error}</Alert></div>}
     {loading && !data ? <Spinner /> : data && <>
-      {tab === 'escuelas' && (data.nudos.length ? <div class="space-y-3">
-        {data.nudos.map((nudo) => {
-          const escuelas = data.escuelas.filter((e) => e.nudo_id === nudo.id)
-          return <Card key={nudo.id}>
+      {tab === 'escuelas' && <>
+        <div class="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Lbl label="Buscar"><input class={FIELD} type="search" placeholder="Nudo, clave, escuela o localidad" value={filtros.busqueda} onInput={(e) => setFiltros({ ...filtros, busqueda: e.currentTarget.value })} /></Lbl>
+          <Lbl label="Nudo"><select class={FIELD} value={filtros.nudo} onChange={(e) => setFiltros({ ...filtros, nudo: e.currentTarget.value })}><option value="">Todos los nudos</option><option value="sin-asignar">Sin nudo asignado</option>{data.nudos.filter((n) => !esSinNudo(n)).map((n) => <option key={n.id} value={n.id}>{n.nombre}</option>)}</select></Lbl>
+          <Lbl label="Localidad"><select class={FIELD} value={filtros.localidad} onChange={(e) => setFiltros({ ...filtros, localidad: e.currentTarget.value })}><option value="">Todas las localidades</option>{localidades.map((l) => <option key={l} value={l}>{l}</option>)}</select></Lbl>
+          <Lbl label="Ordenar escuelas por"><select class={FIELD} value={filtros.orden} onChange={(e) => setFiltros({ ...filtros, orden: e.currentTarget.value as OrdenNudo })}><option value="clave">Clave provincial</option><option value="nombre">Nombre</option><option value="localidad">Localidad</option></select></Lbl>
+        </div>
+        <div class="mb-4 flex flex-wrap items-center gap-2">
+          <button type="button" class={BTN_SECONDARY} onClick={() => setFiltros({ ...filtros, descendente: !filtros.descendente })}><Icon name="transfer" />{filtros.descendente ? 'Orden descendente' : 'Orden ascendente'}</button>
+          <button type="button" class={BTN_SECONDARY} disabled={exportando || loading || !!error || !grupos.length} onClick={() => exportar('xlsx')}><Icon name="download" />Excel</button>
+          <button type="button" class={BTN_SECONDARY} disabled={exportando || loading || !!error || !grupos.length} onClick={() => exportar('pdf')}><Icon name="download" />PDF</button>
+          <span class="text-xs text-slate-500">{exportando ? 'Preparando exportación…' : 'Se exportan todos los resultados filtrados.'}</span>
+        </div>
+        {grupos.length ? <div class="space-y-3">
+        {grupos.map((nudo) => {
+          const escuelas = nudo.escuelas
+          return <Card key={nudo.id ?? 'sin-referencia'}>
             <div class="mb-3 flex flex-wrap items-center gap-2"><h2 class="font-semibold text-slate-900">{nudo.nombre}</h2><Badge tone="blue">{escuelas.length} {escuelas.length === 1 ? 'escuela' : 'escuelas'}</Badge>{!nudo.activo && <Badge>Inactivo</Badge>}</div>
             {escuelas.length ? <ul class="divide-y divide-slate-100">{escuelas.map((e) => <li key={e.id} class="flex items-start gap-2 py-2 text-sm">
               <Icon name="building" class="mt-0.5 size-4 shrink-0 text-sky-600" />
-              <div><p class="font-medium text-slate-800">{e.clave || [e.tipo, e.numero].filter(Boolean).join(' ') || `Escuela ${e.id}`}{e.nombre ? ` · ${e.nombre}` : ''}</p>{e.localidad && <p class="text-slate-500">{e.localidad}</p>}</div>
+              <div><p class="font-medium text-slate-800">{etiquetaEscuela(e)}{e.nombre ? ` · ${e.nombre}` : ''}</p>{e.localidad && <p class="text-slate-500">{e.localidad}</p>}</div>
             </li>)}</ul> : <p class="text-sm text-slate-500">Sin escuelas asociadas.</p>}
           </Card>
         })}
-      </div> : <EmptyState title="Todavía no hay nudos" text="Creá uno en Administrar nudos." />)}
+      </div> : <EmptyState title="Sin resultados" text="Probá con otros filtros." />}
+      </>}
       {tab === 'gestion' && <>
         <div class="mb-3 flex justify-end"><button class={BTN_PRIMARY} onClick={() => setEditando('nuevo')}><Icon name="plus" />Nuevo nudo</button></div>
         {!data.nudos.length ? <EmptyState title="Todavía no hay nudos" text="Creá el primero para que las escuelas puedan seleccionarlo." /> : <Card>
