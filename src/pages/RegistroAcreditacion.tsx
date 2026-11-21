@@ -51,7 +51,7 @@ export function RegistroAcreditacion({ id }: { id: string }) {
     {error && <Alert tone="error">{error}</Alert>}
     {evento && <div class="eav-card eav-form">
       <div class="eav-intro"><span class="eav-intro-icon"><Icon name="calendar" class="size-5" /></span><div><h2>{evento.nombre}</h2><p>{fechaEvento(evento)} · {evento.lugar}</p><p>{evento.descripcion}</p></div></div>
-      {completo ? <div class="eav-success" role="status"><h2>¡Acreditación realizada!</h2><p>Tu asistencia fue registrada correctamente. ¡Gracias por participar!</p></div> :
+      {completo ? <div class="eav-success" role="status"><h2>¡Listo!</h2><p>Tu acreditación se registró correctamente. No necesitás hacer nada más.</p></div> :
       evento.estado !== 'activo' ? <div class="eav-section"><Alert tone="info">La acreditación de este evento no está habilitada.</Alert></div> :
       <form onSubmit={enviar}>
         <div class="eav-progress"><div class="eav-progress-label">Paso {paso} de 2 · {paso === 1 ? 'Tus datos' : 'Confirmación'}</div><div class="eav-progress-track"><span class="eav-progress-filled" /><span class={paso === 2 ? 'eav-progress-filled' : ''} /></div></div>
