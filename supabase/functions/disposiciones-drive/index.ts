@@ -22,11 +22,13 @@ Deno.serve(async (req) => {
     const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', { auth: { persistSession: false } })
     const { data: who, error: authError } = await user.auth.getUser()
     if (authError || !who.user) throw new HttpError(401, 'Sesión inválida')
-    const { data: permitido, error: permisoError } = await user.rpc('disposiciones_permitido')
-    if (permisoError) throw permisoError
-    if (!permitido) throw new HttpError(403, 'Sin permiso')
     const body = await req.json()
     const action = String(body?.action ?? '')
+    if (action !== 'download') {
+      const { data: permitido, error: permisoError } = await user.rpc('disposiciones_permitido')
+      if (permisoError) throw permisoError
+      if (!permitido) throw new HttpError(403, 'Sin permiso')
+    }
     if (action === 'init' || action === 'register') {
       const id = Number(body.disposicion_id)
       if (!Number.isSafeInteger(id) || id < 1) throw new HttpError(400, 'Disposición inválida')

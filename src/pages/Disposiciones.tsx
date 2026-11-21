@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAsync } from '../lib/hooks'
+import { useAuth } from '../lib/auth'
 import { abrirArchivo, CARGOS, ESTADOS, MAX_ARCHIVOS, MAX_BYTES, quitarArchivo, REVISTAS, subirArchivo, TIPOS_ARCHIVO, type Disposicion, type MotivoDisposicion } from '../lib/disposiciones'
 import { SelectorEscuela, type Escuela } from './PreinscripcionEav'
 import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, Spinner, toast, Toggle } from '../ui/kit'
@@ -8,7 +9,7 @@ import { Icon } from '../ui/Icon'
 
 interface Datos { registros: Disposicion[]; escuelas: Escuela[]; inspectores: string[]; motivos: MotivoDisposicion[] }
 
-async function cargar(): Promise<Datos> {
+async function cargar(puedeEditar: boolean): Promise<Datos> {
   const registros: Disposicion[] = []
   const escuelas: Escuela[] = []
   for (let offset = 0; ; offset += 500) {
@@ -17,6 +18,7 @@ async function cargar(): Promise<Datos> {
     registros.push(...r.data as Disposicion[])
     if (r.data.length < 500) break
   }
+  if (!puedeEditar) return { registros, escuelas, inspectores: [], motivos: [] }
   for (let offset = 0; ; offset += 500) {
     const r = await supabase.from('escuelas').select('id,nombre,tipo,numero,codigo,localidad,eav,clave').order('clave').range(offset, offset + 499)
     if (r.error) throw r.error
@@ -37,7 +39,13 @@ const fecha = (s: string) => new Date(s).toLocaleString('es-AR', { timeZone: 'Am
 const tono = (estado: string) => estado === 'Finalizada' ? 'green' : estado === 'Rechazada' ? 'red' : estado === 'Enviada a SAD' ? 'blue' : 'amber'
 
 export function Disposiciones() {
-  const { data, error, loading, reload } = useAsync(cargar)
+  const { user } = useAuth()
+  if (!user) return null
+  return <Listado key={`${user.id}-${user.role}`} puedeEditar={user.role === 'distrital'} />
+}
+
+function Listado({ puedeEditar }: { puedeEditar: boolean }) {
+  const { data, error, loading, reload } = useAsync(() => cargar(puedeEditar), [puedeEditar])
   const [buscar, setBuscar] = useState('')
   const [pagina, setPagina] = useState(1)
   const [tamano, setTamano] = useState(20)
@@ -51,7 +59,7 @@ export function Disposiciones() {
 
   return <>
     <PageHeader title="Disposiciones" subtitle="Registro y seguimiento de disposiciones por escuela."
-      actions={<button type="button" class={BTN_PRIMARY} disabled={!data || !!error} onClick={() => setEditar('nuevo')}><Icon name="plus" />Nueva disposición</button>} />
+      actions={puedeEditar ? <button type="button" class={BTN_PRIMARY} disabled={!data || !!error} onClick={() => setEditar('nuevo')}><Icon name="plus" />Nueva disposición</button> : undefined} />
     {error && <div class="mb-3"><Alert tone="error">{error}</Alert></div>}
     {loading && !data ? <Spinner /> : data && <>
       <div class="mb-4 flex flex-wrap gap-2">
@@ -73,14 +81,43 @@ export function Disposiciones() {
               <p class="text-xs text-slate-500">{fecha(r.fecha_registro)} · {r.inspector} · {r.tipo} · {r.motivo}</p>
               {r.archivos.length > 0 && <p class="mt-1 text-xs text-slate-500">{r.archivos.length} {r.archivos.length === 1 ? 'probanza' : 'probanzas'}</p>}
             </div>
-            <button type="button" class={BTN_SECONDARY} aria-label={`Abrir disposición ${r.id}`} onClick={() => setEditar(r)}><Icon name="edit" />Ver y editar</button>
+            <button type="button" class={BTN_SECONDARY} aria-label={`Abrir disposición ${r.id}`} onClick={() => setEditar(r)}><Icon name={puedeEditar ? 'edit' : 'eye'} />{puedeEditar ? 'Ver y editar' : 'Ver detalle'}</button>
           </li>)}
         </ul>
       </Card>}
       <Pager page={actual} total={registros.length} size={tamano} onPage={setPagina} />
-      {editar && <Formulario registro={editar === 'nuevo' ? null : editar} data={data} onClose={() => setEditar(null)} onDone={() => { setEditar(null); reload() }} />}
+      {editar && (puedeEditar
+        ? <Formulario registro={editar === 'nuevo' ? null : editar} data={data} onClose={() => setEditar(null)} onDone={() => { setEditar(null); reload() }} />
+        : editar !== 'nuevo' && <Detalle registro={editar} onClose={() => setEditar(null)} />)}
     </>}
   </>
+}
+
+function Detalle({ registro: r, onClose }: { registro: Disposicion; onClose(): void }) {
+  const fechaDia = (s: string) => s.split('-').reverse().join('/')
+  const escuela = (clave: string, nombre: string) => [clave, nombre].filter(Boolean).join(' · ')
+  const campos = [
+    ['Estado', r.estado], ['Fecha de registro', fecha(r.fecha_registro)],
+    ['Inspector solicitante', r.inspector], ['Correo de jefatura', r.email_jefatura],
+    ['Nombre completo del docente', r.docente_nombre], ['CUIL del docente', r.docente_cuil], ['Correo del docente', r.docente_email],
+    ['Escuela a cubrir', escuela(r.escuela_cubrir_clave, r.escuela_cubrir_nombre)],
+    ['Cargo a cubrir', r.cargo_cubrir], ['Revista a cubrir', r.revista_cubrir], ['Tipo de disposición', r.tipo], ['Motivo', r.motivo],
+    ['Fecha de designación', fechaDia(r.fecha_designacion)], ['Número de designación', r.numero_designacion],
+    ['Escuela base afectada', `${escuela(r.escuela_base_clave, r.escuela_base_nombre)}${r.escuela_base_fuera_distrital ? ' (fuera de la Distrital)' : ''}`],
+    ['Cargo base', r.cargo_base], ['Revista base', r.revista_base], ['Fecha desde', fechaDia(r.fecha_desde)],
+    ['Observaciones', r.observaciones || '—'], ['Usuario', r.usuario], ['Última actualización', fecha(r.actualizada)],
+  ]
+  return <Modal title={`Disposición #${r.id}`} onClose={onClose} wide>
+    <p class="mb-3 text-sm text-slate-500">Consulta de solo lectura</p>
+    <dl class="grid gap-3 sm:grid-cols-2">
+      {campos.map(([label, valor]) => <div key={label} class="min-w-0"><dt class="text-xs font-semibold text-slate-500">{label}</dt><dd class="break-words text-sm text-slate-900">{valor}</dd></div>)}
+    </dl>
+    <section class="mt-4">
+      <h3 class="font-semibold text-slate-900">Probanzas</h3>
+      {r.archivos.length ? <ul class="mt-2 space-y-2">{r.archivos.map((a) => <li key={a.id}><button type="button" class="text-sm text-sky-700 underline" onClick={() => abrirArchivo(a).catch((e) => toast.error(e instanceof Error ? e.message : String(e)))}>{a.nombre}</button></li>)}</ul> : <p class="mt-1 text-sm text-slate-500">Sin probanzas.</p>}
+    </section>
+    <div class="mt-4 flex justify-end"><button type="button" class={BTN_SECONDARY} onClick={onClose}>Cerrar</button></div>
+  </Modal>
 }
 
 function Formulario({ registro, data, onClose, onDone }: { registro: Disposicion | null; data: Datos; onClose(): void; onDone(): void }) {

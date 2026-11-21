@@ -45,10 +45,10 @@ test('Circuitos Electorales está disponible para Administrador, Distrital y Are
   assert.ok(agruparMenuDistrital([m]).find((g) => g.id === 'escuelas')?.modulos.includes(m))
 })
 
-test('Disposiciones está disponible solo para Distrital en Inspectores', () => {
+test('Disposiciones está disponible para Distrital, Areal y Escolar', () => {
   const m = modulesFor('distrital').find((m) => m.id === 'disposiciones')
   assert.ok(m)
-  for (const role of ROLES) assert.equal(canAccess(m, role), role === 'distrital')
+  for (const role of ROLES) assert.equal(canAccess(m, role), ['distrital', 'areal', 'escolar'].includes(role))
   assert.ok(agruparMenuDistrital([m]).find((g) => g.id === 'inspectores')?.modulos.includes(m))
 })
 

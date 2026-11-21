@@ -95,11 +95,11 @@ do $$ begin
   end if;
 end $$;
 reset role;
-update public.profiles set role = 'areal' where id = (select actor from disposiciones_test_ids);
+update public.profiles set role = 'regional' where id = (select actor from disposiciones_test_ids);
 set local role authenticated;
 do $$ begin
   if exists (select 1 from public.disposiciones) or exists (select 1 from public.disposicion_motivos) then
-    raise exception 'Areal tiene acceso a disposiciones';
+    raise exception 'Regional tiene acceso a disposiciones';
   end if;
 end $$;
 reset role;
