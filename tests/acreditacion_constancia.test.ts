@@ -6,8 +6,8 @@ async function imagen(nombre: string) {
   return { mime: 'image/png', base64: btoa(Array.from(bytes, (n) => String.fromCharCode(n)).join('')) }
 }
 
-function contenido(documento: PDFDocument) {
-  const referencias = documento.context.lookup(documento.getPages()[0].node.Contents(), PDFArray)
+function contenido(documento: PDFDocument, pagina = 0) {
+  const referencias = documento.context.lookup(documento.getPages()[pagina].node.Contents(), PDFArray)
   const stream = documento.context.lookup(referencias.get(0))
   if (!(stream instanceof PDFRawStream)) throw new Error('El contenido del PDF no es un stream.')
   return new TextDecoder().decode(decodePDFRawStream(stream).decode())
@@ -29,6 +29,32 @@ Deno.test('genera una constancia A5 con imágenes y datos extensos', async () =>
   if (posiciones.length !== 2 || posiciones.some((m) => Number(m[2]) < 35 || Number(m[1]) + Number(m[3]) > width - 19)) {
     throw new Error('Las imágenes deben permanecer dentro del marco de la constancia.')
   }
+})
+
+Deno.test('una constancia contiene las cuatro escuelas y sus cargos incluso con datos extensos', async () => {
+  const firma = await imagen('icon-192.png')
+  const pdf = await generarConstancia(
+    { nombre: 'Encuentro '.repeat(19), lugar: 'Lugar '.repeat(32), fecha: '2026-11-16', hora_inicio: '10:00', hora_fin: '12:00' },
+    { nombre: 'Persona '.repeat(24), cargo: 'CargoUno ' + 'cargo '.repeat(30), escuela: 'EscuelaUno ' + 'sede '.repeat(32),
+      adicionales: [
+        { cargo: 'CargoDos ' + 'cargo '.repeat(30), escuela: 'EscuelaDos ' + 'sede '.repeat(32) },
+        { cargo: 'CargoTres ' + 'cargo '.repeat(30), escuela: 'EscuelaTres ' + 'sede '.repeat(32) },
+        { cargo: 'CargoCuatro ' + 'cargo '.repeat(30), escuela: 'EscuelaCuatro ' + 'sede '.repeat(32) },
+      ] },
+    [firma],
+  )
+  const documento = await PDFDocument.load(pdf)
+  if (documento.getPageCount() < 2) throw new Error('Los datos extensos deben continuar en otra página del mismo PDF')
+  const operaciones = documento.getPages().map((_, i) => contenido(documento, i))
+  const texto = operaciones.flatMap((pagina) => [...pagina.matchAll(/1 0 0 1 45 ([\d.]+) Tm\n<([0-9A-F]+)> Tj/g)]
+    .map((m) => {
+      if (Number(m[1]) < 150 || Number(m[1]) > 410) throw new Error('Texto fuera del área de contenido')
+      return new TextDecoder('windows-1252').decode(Uint8Array.from(m[2].match(/../g)!, (n) => parseInt(n, 16)))
+    })).join(' ')
+  for (const dato of ['CargoUno', 'EscuelaUno', 'CargoDos', 'EscuelaDos', 'CargoTres', 'EscuelaTres', 'CargoCuatro', 'EscuelaCuatro']) {
+    if (!texto.includes(dato)) throw new Error(`Falta ${dato}`)
+  }
+  if (!operaciones.at(-1)?.includes('/Image')) throw new Error('Falta la firma al final')
 })
 
 Deno.test('incluye cargo y escuela y ubica sellos grandes justo después del texto', async () => {

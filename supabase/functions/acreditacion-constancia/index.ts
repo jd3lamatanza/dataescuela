@@ -34,13 +34,14 @@ Deno.serve(async (req) => {
     const claim = await admin.rpc('acreditacion_iniciar_envio', { p_evento: body.evento, p_persona: personaId })
     if (claim.error) return json({ error: claim.error.message }, 409)
     token = claim.data as string
-    const [ev, person, imgs, config] = await Promise.all([
+    const [ev, person, adicionales, imgs, config] = await Promise.all([
       admin.from('acreditacion_eventos').select('nombre,lugar,fecha,hora_inicio,hora_fin').eq('id', body.evento).single(),
       admin.from('acreditacion_personas').select('nombre,email,cargo,escuela_id,escuela_externa').eq('id', personaId).eq('evento_id', body.evento).single(),
+      admin.from('acreditacion_escuelas_adicionales').select('orden,cargo,escuela_id,escuela_externa').eq('persona_id', personaId).order('orden'),
       admin.rpc('acreditacion_firmas_datos', { p_ids: ids }),
       admin.from('configuracion_email').select('salidas_destino,sistema_remitente,respuesta,nombre_remitente').eq('id', true).maybeSingle(),
     ])
-    if (ev.error || person.error || imgs.error || config.error) throw new Error('No se pudieron cargar los datos de la constancia.')
+    if (ev.error || person.error || adicionales.error || imgs.error || config.error) throw new Error('No se pudieron cargar los datos de la constancia.')
     if (!imgs.data?.length) throw new Error('Configurá al menos una imagen de firma antes de enviar constancias.')
     if (ids) comprobarFirmas(ids, imgs.data)
     if (imgs.data.length > 6) throw new Error('Seleccioná entre una y seis firmas válidas.')
@@ -49,14 +50,18 @@ Deno.serve(async (req) => {
       mime: f.mime,
       base64: f.drive_file_id && driveToken ? await descargarFirma(driveToken, f.drive_file_id, f.mime) : f.base64!,
     })))
-    let nombreEscuela = person.data.escuela_externa
-    if (person.data.escuela_id != null) {
-      const { data: escuela, error: errorEscuela } = await admin.from('escuelas').select('id,clave,tipo,numero,nombre,codigo,localidad').eq('id', person.data.escuela_id).single()
-      if (errorEscuela || !escuela) throw new Error('No se pudo cargar la escuela del acreditado.')
-      nombreEscuela = escuela.clave?.trim() || [escuela.tipo || escuela.codigo, escuela.numero, escuela.nombre, escuela.localidad ? `(${escuela.localidad})` : ''].filter(Boolean).join(' ') || `Escuela ${escuela.id}`
+    const identificar = async (item: { cargo: string; escuela_id: number | null; escuela_externa: string | null }) => {
+      let nombreEscuela = item.escuela_externa
+      if (item.escuela_id != null) {
+        const { data: escuela, error: errorEscuela } = await admin.from('escuelas').select('id,clave,tipo,numero,nombre,codigo,localidad').eq('id', item.escuela_id).single()
+        if (errorEscuela || !escuela) throw new Error('No se pudo cargar la escuela del acreditado.')
+        nombreEscuela = escuela.clave?.trim() || [escuela.tipo || escuela.codigo, escuela.numero, escuela.nombre, escuela.localidad ? `(${escuela.localidad})` : ''].filter(Boolean).join(' ') || `Escuela ${escuela.id}`
+      }
+      if (!nombreEscuela) throw new Error('La escuela del acreditado no tiene identificación.')
+      return { cargo: item.cargo, escuela: nombreEscuela }
     }
-    if (!nombreEscuela) throw new Error('La escuela del acreditado no tiene identificación.')
-    const persona: PersonaConstancia = { nombre: person.data.nombre, cargo: person.data.cargo, escuela: nombreEscuela }
+    const escuelas = await Promise.all([person.data, ...adicionales.data].map(identificar))
+    const persona: PersonaConstancia = { nombre: person.data.nombre, ...escuelas[0], adicionales: escuelas.slice(1) }
     const contenido = await generarConstancia(ev.data as EventoConstancia, persona, firmas)
     const configuracion = config.data as ConfiguracionEmail | null
     if (configuracion) validarConfiguracion(configuracion)

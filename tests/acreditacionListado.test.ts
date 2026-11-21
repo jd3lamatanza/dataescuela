@@ -6,7 +6,7 @@ import { buildPdf } from '../src/lib/export.ts'
 import type { Evento, Persona } from '../src/lib/acreditacionTipos.ts'
 
 const evento: Evento = { id: 'abc', nombre: 'Encuentro docente', lugar: 'Escuela central', fecha: '2026-11-16', hora_inicio: '10:00:00', hora_fin: '12:00:00', descripcion: 'Jornada distrital', estado: 'finalizado' }
-const persona: Persona = { id: 1, nombre: '=Ana Pérez', dni: '01234567', cargo: 'Directora', escuela_id: 1, escuela_externa: null, escuela: { id: 1, tipo: 'EP', numero: 10, nombre: 'Escuela del Sol', localidad: 'Catán', codigo: null, eav: null, clave: '0123EP0010' }, email: 'ana@abc.gob.ar', envio_estado: 'pendiente', constancia_enviada_en: null }
+const persona: Persona = { id: 1, nombre: '=Ana Pérez', dni: '01234567', cargo: 'Directora', escuela_id: 1, escuela_externa: null, escuela: { id: 1, tipo: 'EP', numero: 10, nombre: 'Escuela del Sol', localidad: 'Catán', codigo: null, eav: null, clave: '0123EP0010' }, adicionales: [], email: 'ana@abc.gob.ar', envio_estado: 'pendiente', constancia_enviada_en: null }
 const comprobar = (condicion: boolean, mensaje: string) => { if (!condicion) throw new Error(mensaje) }
 
 Deno.test('listado incluye datos del evento, filtros, escuela y estados precisos', () => {
@@ -22,6 +22,17 @@ Deno.test('listado incluye datos del evento, filtros, escuela y estados precisos
   comprobar(tabla.rows[1][5].startsWith('Enviada ·'), 'Falta fecha de envío')
   comprobar(estadoConstancia(incierto).texto === 'Envío sin confirmar', 'Falta estado incierto')
   comprobar(estadoConstancia(enCurso).texto === 'Envío en curso', 'Falta estado en curso')
+})
+
+Deno.test('listado y exportación conservan la asociación de cada cargo y escuela', () => {
+  const varias: Persona = { ...persona, adicionales: [
+    { orden: 3, cargo: 'Preceptora', escuela_id: null, escuela_externa: 'Escuela externa', escuela: null },
+    { orden: 2, cargo: 'Docente', escuela_id: 2, escuela_externa: null, escuela: { id: 2, tipo: 'EP', numero: 11, nombre: null, codigo: null, localidad: null, eav: null, clave: '0123EP0011' } },
+  ] }
+  const filas = tablaAcreditados(evento, [varias], '', 'Distrito').rows
+  comprobar(filas.length === 3 && filas[0][2] === 'Directora' && filas[0][3] === '0123EP0010'
+    && filas[1][2] === 'Docente' && filas[1][3] === '0123EP0011'
+    && filas[2][2] === 'Preceptora' && filas[2][3] === 'Escuela externa', 'Escuelas y cargos incorrectos')
 })
 
 Deno.test('Excel y PDF incluyen marca, metadatos y todas las filas', async () => {
