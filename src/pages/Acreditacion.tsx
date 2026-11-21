@@ -139,13 +139,26 @@ function Listado({ eventos: lista }: { eventos: Evento[] }) {
   </>
 }
 
-function Personas({ evento, manual, refreshKey = 0 }: { evento: Evento; manual?: boolean; refreshKey?: number }) {
+async function enviarConstancia(evento: string, persona: number) {
+  const r = await supabase.functions.invoke('acreditacion-constancia', { body: { evento, persona } })
+  if (r.error) {
+    let detalle = r.error.message
+    if (r.error.context instanceof Response) {
+      const body = await r.error.context.json().catch(() => null)
+      if (typeof body?.error === 'string') detalle = body.error
+    }
+    throw new Error(detalle)
+  }
+}
+
+function Personas({ evento, manual, refreshKey = 0, envioOcupado = false, onEnvioBusy, onEnvioTerminado }: { evento: Evento; manual?: boolean; refreshKey?: number; envioOcupado?: boolean; onEnvioBusy?(busy: boolean): void; onEnvioTerminado?(): void }) {
   const [q, setQ] = useState(''), [page, setPage] = useState(1), [abrir, setAbrir] = useState(false)
   const [exportando, setExportando] = useState(false)
+  const [enviandoId, setEnviandoId] = useState<number | null>(null)
   const filtro = q.trim().replace(/[,()%*\\]/g, ' ').slice(0, 80)
   const query = useDebounced(filtro)
   const consulta = (busqueda: string) => {
-    let request = supabase.from('acreditacion_personas').select('id,nombre,dni,cargo,escuela_id,escuela_externa,email,constancia_enviada_en,envio_estado,escuela:escuelas(id,nombre,tipo,numero,codigo,localidad,eav,clave),adicionales:acreditacion_escuelas_adicionales(orden,cargo,escuela_id,escuela_externa,escuela:escuelas(id,nombre,tipo,numero,codigo,localidad,eav,clave))', { count: 'exact' }).eq('evento_id', evento.id)
+    let request = supabase.from('acreditacion_personas').select('id,nombre,dni,cargo,escuela_id,escuela_externa,email,constancia_enviada_en,envio_estado,envio_iniciado_en,escuela:escuelas(id,nombre,tipo,numero,codigo,localidad,eav,clave),adicionales:acreditacion_escuelas_adicionales(orden,cargo,escuela_id,escuela_externa,escuela:escuelas(id,nombre,tipo,numero,codigo,localidad,eav,clave))', { count: 'exact' }).eq('evento_id', evento.id)
     if (busqueda) request = request.or(`nombre.ilike.%${busqueda}%,dni.ilike.%${busqueda}%,cargos_busqueda.ilike.%${busqueda}%,email.ilike.%${busqueda}%`)
     return request.order('id', { ascending: false })
   }
@@ -155,6 +168,14 @@ function Personas({ evento, manual, refreshKey = 0 }: { evento: Evento; manual?:
     const personas: Persona[] = r.data.map((p) => ({ ...p, escuela: Array.isArray(p.escuela) ? p.escuela[0] ?? null : p.escuela, adicionales: p.adicionales.map((a) => ({ ...a, escuela: Array.isArray(a.escuela) ? a.escuela[0] ?? null : a.escuela })) }))
     return { personas, total: r.count ?? 0 }
   }, [evento.id, query, page, refreshKey])
+  const enviarIndividual = async (p: Persona) => {
+    const incierto = p.envio_estado === 'incierto' || p.envio_estado === 'enviando'
+    if (!(await confirmar('Enviar constancia', { text: `Se enviará la constancia de ${p.nombre} a ${p.email}.${incierto ? ' El envío anterior no se confirmó; reintentar podría duplicar el correo.' : ''}`, ok: 'Enviar' }))) return
+    setEnviandoId(p.id); onEnvioBusy?.(true)
+    try { await enviarConstancia(evento.id, p.id); toast.ok('Constancia enviada') }
+    catch (e) { toast.error(`No se pudo enviar la constancia: ${errorText(e)}`) }
+    finally { reload(); onEnvioTerminado?.(); onEnvioBusy?.(false); setEnviandoId(null) }
+  }
   const exportar = async (tipo: 'xlsx' | 'pdf') => {
     setExportando(true)
     try {
@@ -183,9 +204,14 @@ function Personas({ evento, manual, refreshKey = 0 }: { evento: Evento; manual?:
     <button type="button" class={BTN_SECONDARY} aria-label="Exportar acreditados a PDF" disabled={exportando || loading || !!error || query !== filtro || !data?.total} onClick={() => exportar('pdf')}><Icon name="download" />PDF</button>
     </div>
     <p class="mb-3 text-xs text-slate-500">{exportando ? 'Preparando exportación…' : 'Las exportaciones incluyen todos los resultados de la búsqueda, no solo esta página, con una fila por escuela.'}</p>
-    {error && <Alert tone="error">{error}</Alert>}{loading && !data ? <Spinner /> : !data?.personas.length ? <EmptyState title="Sin acreditados" text={query ? 'No hay resultados para esta búsqueda.' : 'Todavía no hay personas acreditadas en este evento.'} /> : <div class="space-y-2">{data.personas.map((p) => { const estado = estadoConstancia(p); return <article key={p.id} class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    {error && <Alert tone="error">{error}</Alert>}{loading && !data ? <Spinner /> : !data?.personas.length ? <EmptyState title="Sin acreditados" text={query ? 'No hay resultados para esta búsqueda.' : 'Todavía no hay personas acreditadas en este evento.'} /> : <div class="space-y-2">{data.personas.map((p) => { const estado = estadoConstancia(p)
+      const vencido = p.envio_estado === 'enviando' && !!p.envio_iniciado_en && new Date(p.envio_iniciado_en).getTime() < Date.now() - 10 * 60 * 1000
+      const disponible = !p.constancia_enviada_en && (p.envio_estado === 'pendiente' || p.envio_estado === 'incierto' || vencido)
+      const motivo = evento.estado !== 'finalizado' ? 'El evento debe estar finalizado.' : !evento.firmas_configuradas ? 'Configurá las firmas del evento.' : !disponible ? 'La constancia ya fue enviada o tiene un envío en curso.' : ''
+      return <article key={p.id} class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div class="flex flex-wrap items-start justify-between gap-2"><div class="flex min-w-0 gap-3"><span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-700"><Icon name="users" /></span><div class="min-w-0"><h3 class="break-words font-semibold text-slate-900">{p.nombre}</h3><p class="text-sm text-slate-500">DNI {p.dni}</p></div></div><Badge tone={estado.tone}><Icon name={estado.icon} class="mr-1 size-4" />Constancia {estado.texto.toLowerCase()}</Badge></div>
       <div class="mt-3 grid gap-1.5 text-sm text-slate-600 sm:ml-13">{escuelasYCargos(p).map((e, i) => <p key={i} class="flex items-start gap-2"><Icon name="school" class="mt-0.5 size-4 shrink-0" /><span class="break-words">{e.escuela} · {e.cargo}</span></p>)}<p class="flex items-start gap-2"><Icon name="mail" class="mt-0.5 size-4 shrink-0" /><span class="break-all">{p.email}</span></p>{estado.detalle && <p class="flex items-start gap-2 text-xs"><Icon name={estado.icon} class="size-4 shrink-0" />{estado.detalle}</p>}</div>
+      <div class="mt-3"><button type="button" class={BTN_SECONDARY} aria-label={`Enviar constancia de ${p.nombre}`} title={motivo || 'Enviar constancia por correo'} disabled={!!motivo || enviandoId !== null || envioOcupado || loading || !!error} onClick={() => enviarIndividual(p)}><Icon name="send" />{enviandoId === p.id ? 'Enviando…' : 'Enviar constancia'}</button>{motivo && <p class="mt-1 text-xs text-slate-500">{motivo}</p>}</div>
     </article> })}</div>}
     <Pager page={page} total={data?.total ?? 0} onPage={setPage} />
     {abrir && <RegistroManual evento={evento.id} onClose={() => setAbrir(false)} onDone={() => { setAbrir(false); reload() }} />}
@@ -342,15 +368,7 @@ function Envios({ evento, reloadEventos, onBusyChange }: { evento: Evento; reloa
       if (candidatos.error) throw candidatos.error
       for (const persona of candidatos.data) {
         if (!vivo.current) break
-        const r = await supabase.functions.invoke('acreditacion-constancia', { body: { evento: evento.id, persona: persona.id } })
-        if (r.error) {
-          let detalle = r.error.message
-          if (r.error.context instanceof Response) {
-            const body = await r.error.context.json().catch(() => null)
-            if (body?.error) detalle = body.error
-          }
-          throw new Error(detalle)
-        }
+        await enviarConstancia(evento.id, persona.id)
         const p = await supabase.rpc('acreditacion_progreso_envios', { p_evento: evento.id }).single()
         if (p.error) throw p.error
         if (vivo.current) setParcial(p.data as Progreso)
@@ -376,6 +394,6 @@ function Envios({ evento, reloadEventos, onBusyChange }: { evento: Evento; reloa
       </div>
       {busy && <p class="mt-2 text-sm text-slate-600">No cierres esta pantalla hasta completar la tanda. Si salís, podrás continuar luego.</p>}
     </Card>
-    <Personas evento={evento} manual refreshKey={version} />
+    <Personas evento={evento} manual refreshKey={version} envioOcupado={busy} onEnvioBusy={(valor) => { setBusy(valor); onBusyChange(valor) }} onEnvioTerminado={() => setVersion((v) => v + 1)} />
   </div>
 }
