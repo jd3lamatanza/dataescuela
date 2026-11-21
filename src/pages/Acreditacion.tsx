@@ -12,6 +12,8 @@ import { Icon, type IconKey } from '../ui/Icon'
 import { CamposAcreditacion } from './RegistroAcreditacion'
 import { useAuth } from '../lib/auth'
 import { AcreditacionEscolar } from './AcreditacionEscolar'
+import type { Escuela } from '../lib/escuelaEtiqueta'
+import type { EscuelaCargo } from '../lib/acreditacionTipos'
 
 const TABS: TabItem[] = [
   { id: 'evento', label: 'Evento', icon: 'calendar', color: 'sky' },
@@ -28,7 +30,7 @@ function AccionIcono({ icon, label, onClick, disabled = false, danger = false }:
 }
 
 async function eventos(): Promise<Evento[]> {
-  const { data, error } = await supabase.from('acreditacion_eventos').select('id,nombre,lugar,fecha,hora_inicio,hora_fin,descripcion,estado,firmas_configuradas').order('fecha', { ascending: false })
+  const { data, error } = await supabase.from('acreditacion_eventos').select('id,nombre,lugar,fecha,hora_inicio,hora_fin,descripcion,estado,firmas_configuradas,autor_id').order('fecha', { ascending: false })
   if (error) throw error
   return data as Evento[]
 }
@@ -36,31 +38,34 @@ async function eventos(): Promise<Evento[]> {
 export function Acreditacion() {
   const { user } = useAuth()
   if (!user) return null
-  return user.role === 'escolar' ? <AcreditacionEscolar /> : <AcreditacionDistrital />
+  return user.role === 'escolar' ? <AcreditacionEscolar /> : <AcreditacionDistrital areal={user.role === 'areal'} usuario={user.id} />
 }
 
-function AcreditacionDistrital() {
+function AcreditacionDistrital({ areal, usuario }: { areal: boolean; usuario: string }) {
   const [tab, setTab] = useState('evento')
+  const [firmasVersion, setFirmasVersion] = useState(0)
   const { data, error, loading, reload } = useAsync(eventos, [])
+  const firmas = useAsync(() => areal ? listarFirmas() : Promise.resolve([]), [areal, firmasVersion])
   return <>
-    <PageHeader title="Acreditación" subtitle="Asistencia y constancias de eventos distritales" />
-    <TabBar label="Acreditación" items={TABS} active={tab} onChange={setTab} />
+    <PageHeader title="Acreditación" subtitle="Asistencia y constancias de eventos" />
+    <TabBar label="Acreditación" items={areal ? TABS.filter((t) => t.id !== 'constancias') : TABS} active={tab} onChange={setTab} />
     {error && <Alert tone="error">{error}</Alert>}
+    {areal && firmas.error && <Alert tone="error">{firmas.error}</Alert>}
     {loading && !data ? <Spinner /> : data && <>
-      {tab === 'evento' && <Eventos eventos={data} reload={reload} />}
-      {tab === 'acreditacion' && <Listado eventos={data} />}
-      {tab === 'constancias' && <Constancias eventos={data} reloadEventos={reload} />}
-      {tab === 'firmas' && <Firmas />}
+      {tab === 'evento' && <Eventos eventos={data} reload={reload} areal={areal} usuario={usuario} tieneFirma={!areal || !!firmas.data?.length} />}
+      {tab === 'acreditacion' && <Listado eventos={data} areal={areal} />}
+      {!areal && tab === 'constancias' && <Constancias eventos={data} reloadEventos={reload} />}
+      {tab === 'firmas' && <Firmas onChange={() => setFirmasVersion((v) => v + 1)} />}
     </>}
   </>
 }
 
-function Eventos({ eventos: lista, reload }: { eventos: Evento[]; reload(): void }) {
+function Eventos({ eventos: lista, reload, areal, usuario, tieneFirma }: { eventos: Evento[]; reload(): void; areal: boolean; usuario: string; tieneFirma: boolean }) {
   const [editando, setEditando] = useState<Evento | 'nuevo' | null>(null)
   const [qr, setQr] = useState<Evento | null>(null)
   const [configurando, setConfigurando] = useState<Evento | null>(null)
   const cambiarEstado = async (e: Evento, estado: 'activo' | 'finalizado') => {
-    const texto = estado === 'finalizado' ? 'Se cerrará la acreditación por QR. Podrás agregar personas manualmente y enviar constancias.' : 'Se habilitará nuevamente la acreditación mediante el QR.'
+    const texto = estado === 'finalizado' ? (areal ? 'Se cerrará la acreditación por QR.' : 'Se cerrará la acreditación por QR. Podrás agregar personas manualmente y enviar constancias.') : 'Se habilitará nuevamente la acreditación mediante el QR.'
     if (!(await confirmar(estado === 'finalizado' ? 'Finalizar evento' : 'Iniciar acreditación', { text: texto }))) return
     const r = await supabase.rpc('acreditacion_estado_evento', { p_id: e.id, p_estado: estado })
     if (r.error) toast.error(r.error.message); else { toast.ok('Estado actualizado'); reload() }
@@ -71,13 +76,14 @@ function Eventos({ eventos: lista, reload }: { eventos: Evento[]; reload(): void
     if (r.error) toast.error(r.error.message); else { toast.ok('Evento eliminado'); reload() }
   }
   return <>
-    <div class="mb-3 flex justify-end"><button class={BTN_PRIMARY} onClick={() => setEditando('nuevo')}><Icon name="plus" />Crear evento</button></div>
+    {areal && !tieneFirma && <div class="mb-3"><Alert tone="info">Cargá tu firma digital para crear o gestionar tus eventos.</Alert></div>}
+    <div class="mb-3 flex justify-end"><button class={BTN_PRIMARY} disabled={!tieneFirma} onClick={() => setEditando('nuevo')}><Icon name="plus" />Crear evento</button></div>
     {!lista.length ? <EmptyState title="Todavía no hay eventos" text="Creá un evento para comenzar." /> : <div class="space-y-3">{lista.map((e) => <Card key={e.id}>
       <div class="flex flex-wrap items-start justify-between gap-4"><div class="min-w-0 flex-1"><h2 class="font-semibold text-slate-900">{e.nombre}</h2><p class="mt-1 flex items-start gap-1.5 text-sm text-slate-600"><Icon name="calendar" class="mt-0.5 size-4 shrink-0" />{fechaEvento(e)} · {e.lugar}</p><p class="mt-1 text-sm text-slate-600">{e.descripcion}</p><div class="mt-2"><Badge tone={e.estado === 'activo' ? 'green' : e.estado === 'finalizado' ? 'slate' : 'amber'}><Icon name={e.estado === 'activo' ? 'check' : e.estado === 'finalizado' ? 'lock' : 'clock'} class="mr-1 size-4" />{e.estado === 'activo' ? 'Acreditación activa' : e.estado === 'finalizado' ? 'Finalizado' : 'Sin iniciar'}</Badge></div></div>
       <div class="flex flex-wrap gap-2"><AccionIcono icon="grid" label={`Compartir QR de ${e.nombre}`} onClick={() => setQr(e)} />
-        {!e.firmas_configuradas && <button type="button" class={BTN_SECONDARY} onClick={() => setConfigurando(e)}><Icon name="edit" />Configurar firmas</button>}
-        {e.estado !== 'finalizado' && <><AccionIcono icon="edit" label={`Editar ${e.nombre}`} onClick={() => setEditando(e)} /><AccionIcono icon="trash" label={`Eliminar ${e.nombre}`} danger onClick={() => eliminar(e)} /></>}
-        <AccionIcono icon={e.estado === 'activo' ? 'lock' : 'power'} label={`${e.estado === 'activo' ? 'Finalizar evento' : e.estado === 'finalizado' ? 'Reabrir evento' : 'Iniciar acreditación'}: ${e.nombre}`} onClick={() => cambiarEstado(e, e.estado === 'activo' ? 'finalizado' : 'activo')} />
+        {!areal && !e.firmas_configuradas && <button type="button" class={BTN_SECONDARY} onClick={() => setConfigurando(e)}><Icon name="edit" />Configurar firmas</button>}
+        {(!areal || e.autor_id === usuario) && <>{e.estado !== 'finalizado' && <><AccionIcono icon="edit" disabled={!tieneFirma} label={`Editar ${e.nombre}`} onClick={() => setEditando(e)} /><AccionIcono icon="trash" disabled={!tieneFirma} label={`Eliminar ${e.nombre}`} danger onClick={() => eliminar(e)} /></>}
+        <AccionIcono icon={e.estado === 'activo' ? 'lock' : 'power'} disabled={!tieneFirma} label={`${e.estado === 'activo' ? 'Finalizar evento' : e.estado === 'finalizado' ? 'Reabrir evento' : 'Iniciar acreditación'}: ${e.nombre}`} onClick={() => cambiarEstado(e, e.estado === 'activo' ? 'finalizado' : 'activo')} /></>}
       </div></div>
     </Card>)}</div>}
     {editando && <EventoForm evento={editando === 'nuevo' ? null : editando} onClose={() => setEditando(null)} onDone={() => { setEditando(null); reload() }} />}
@@ -130,12 +136,12 @@ function EventoQr({ evento, onClose }: { evento: Evento; onClose(): void }) {
   </div></Modal>
 }
 
-function Listado({ eventos: lista }: { eventos: Evento[] }) {
+function Listado({ eventos: lista, areal = false }: { eventos: Evento[]; areal?: boolean }) {
   const [id, setId] = useState('')
   const evento = lista.find((e) => e.id === id)
   return <>
     <Lbl label="Evento"><select class={FIELD} value={id} onChange={(e) => setId(e.currentTarget.value)}><option value="">Seleccioná un evento</option>{lista.map((e) => <option key={e.id} value={e.id}>{e.nombre} · {fechaEvento(e)} · {e.estado === 'activo' ? 'Activo' : e.estado === 'finalizado' ? 'Finalizado' : 'Sin iniciar'}</option>)}</select></Lbl>
-    {evento && <Personas key={id} evento={evento} manual />}
+    {evento && <Personas key={id} evento={evento} manual={!areal} areal={areal} />}
   </>
 }
 
@@ -151,21 +157,32 @@ async function enviarConstancia(evento: string, persona: number) {
   }
 }
 
-function Personas({ evento, manual, refreshKey = 0, envioOcupado = false, onEnvioBusy, onEnvioTerminado }: { evento: Evento; manual?: boolean; refreshKey?: number; envioOcupado?: boolean; onEnvioBusy?(busy: boolean): void; onEnvioTerminado?(): void }) {
+type PersonaConsulta = Omit<Persona, 'escuela' | 'adicionales'> & {
+  escuela: Escuela | Escuela[] | null
+  adicionales: (Omit<EscuelaCargo, 'escuela'> & { escuela: Escuela | Escuela[] | null })[]
+}
+const normalizarPersona = (p: PersonaConsulta): Persona => ({
+  ...p, escuela: Array.isArray(p.escuela) ? p.escuela[0] ?? null : p.escuela,
+  adicionales: p.adicionales.map((a) => ({ ...a, escuela: Array.isArray(a.escuela) ? a.escuela[0] ?? null : a.escuela })),
+})
+
+function Personas({ evento, manual, areal = false, refreshKey = 0, envioOcupado = false, onEnvioBusy, onEnvioTerminado }: { evento: Evento; manual?: boolean; areal?: boolean; refreshKey?: number; envioOcupado?: boolean; onEnvioBusy?(busy: boolean): void; onEnvioTerminado?(): void }) {
   const [q, setQ] = useState(''), [page, setPage] = useState(1), [abrir, setAbrir] = useState(false)
   const [exportando, setExportando] = useState(false)
   const [enviandoId, setEnviandoId] = useState<number | null>(null)
   const filtro = q.trim().replace(/[,()%*\\]/g, ' ').slice(0, 80)
   const query = useDebounced(filtro)
   const consulta = (busqueda: string) => {
-    let request = supabase.from('acreditacion_personas').select('id,nombre,dni,cargo,escuela_id,escuela_externa,email,constancia_enviada_en,envio_estado,envio_iniciado_en,escuela:escuelas(id,nombre,tipo,numero,codigo,localidad,eav,clave),adicionales:acreditacion_escuelas_adicionales(orden,cargo,escuela_id,escuela_externa,escuela:escuelas(id,nombre,tipo,numero,codigo,localidad,eav,clave))', { count: 'exact' }).eq('evento_id', evento.id)
+    let request = areal
+      ? supabase.rpc('acreditacion_areal_personas', { p_evento: evento.id }, { count: 'exact' }).select('*')
+      : supabase.from('acreditacion_personas').select('id,nombre,dni,cargo,escuela_id,escuela_externa,email,constancia_enviada_en,envio_estado,envio_iniciado_en,escuela:escuelas(id,nombre,tipo,numero,codigo,localidad,eav,clave),adicionales:acreditacion_escuelas_adicionales(orden,cargo,escuela_id,escuela_externa,escuela:escuelas(id,nombre,tipo,numero,codigo,localidad,eav,clave))', { count: 'exact' }).eq('evento_id', evento.id)
     if (busqueda) request = request.or(`nombre.ilike.%${busqueda}%,dni.ilike.%${busqueda}%,cargos_busqueda.ilike.%${busqueda}%,email.ilike.%${busqueda}%`)
     return request.order('id', { ascending: false })
   }
   const { data, error, loading, reload } = useAsync(async () => {
     const r = await consulta(query).range((page - 1) * 15, page * 15 - 1)
     if (r.error) throw r.error
-    const personas: Persona[] = r.data.map((p) => ({ ...p, escuela: Array.isArray(p.escuela) ? p.escuela[0] ?? null : p.escuela, adicionales: p.adicionales.map((a) => ({ ...a, escuela: Array.isArray(a.escuela) ? a.escuela[0] ?? null : a.escuela })) }))
+    const personas = (r.data as PersonaConsulta[]).map(normalizarPersona)
     return { personas, total: r.count ?? 0 }
   }, [evento.id, query, page, refreshKey])
   const enviarIndividual = async (p: Persona) => {
@@ -183,7 +200,7 @@ function Personas({ evento, manual, refreshKey = 0, envioOcupado = false, onEnvi
       for (let offset = 0; ; offset += 500) {
         const r = await consulta(filtro).range(offset, offset + 499)
         if (r.error) throw r.error
-        personas.push(...r.data.map((p) => ({ ...p, escuela: Array.isArray(p.escuela) ? p.escuela[0] ?? null : p.escuela, adicionales: p.adicionales.map((a) => ({ ...a, escuela: Array.isArray(a.escuela) ? a.escuela[0] ?? null : a.escuela })) })))
+        personas.push(...(r.data as PersonaConsulta[]).map(normalizarPersona))
         if (r.data.length < 500) break
       }
       if (!personas.length) { toast.info('No hay acreditados para exportar con esta búsqueda.'); return }
@@ -211,7 +228,7 @@ function Personas({ evento, manual, refreshKey = 0, envioOcupado = false, onEnvi
       return <article key={p.id} class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div class="flex flex-wrap items-start justify-between gap-2"><div class="flex min-w-0 gap-3"><span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-700"><Icon name="users" /></span><div class="min-w-0"><h3 class="break-words font-semibold text-slate-900">{p.nombre}</h3><p class="text-sm text-slate-500">DNI {p.dni}</p></div></div><Badge tone={estado.tone}><Icon name={estado.icon} class="mr-1 size-4" />Constancia {estado.texto.toLowerCase()}</Badge></div>
       <div class="mt-3 grid gap-1.5 text-sm text-slate-600 sm:ml-13">{escuelasYCargos(p).map((e, i) => <p key={i} class="flex items-start gap-2"><Icon name="school" class="mt-0.5 size-4 shrink-0" /><span class="break-words">{e.escuela} · {e.cargo}</span></p>)}<p class="flex items-start gap-2"><Icon name="mail" class="mt-0.5 size-4 shrink-0" /><span class="break-all">{p.email}</span></p>{estado.detalle && <p class="flex items-start gap-2 text-xs"><Icon name={estado.icon} class="size-4 shrink-0" />{estado.detalle}</p>}</div>
-      <div class="mt-3"><button type="button" class={BTN_SECONDARY} aria-label={`Enviar constancia de ${p.nombre}`} title={motivo || 'Enviar constancia por correo'} disabled={!!motivo || enviandoId !== null || envioOcupado || loading || !!error} onClick={() => enviarIndividual(p)}><Icon name="send" />{enviandoId === p.id ? 'Enviando…' : 'Enviar constancia'}</button>{motivo && <p class="mt-1 text-xs text-slate-500">{motivo}</p>}</div>
+      {!areal && <div class="mt-3"><button type="button" class={BTN_SECONDARY} aria-label={`Enviar constancia de ${p.nombre}`} title={motivo || 'Enviar constancia por correo'} disabled={!!motivo || enviandoId !== null || envioOcupado || loading || !!error} onClick={() => enviarIndividual(p)}><Icon name="send" />{enviandoId === p.id ? 'Enviando…' : 'Enviar constancia'}</button>{motivo && <p class="mt-1 text-xs text-slate-500">{motivo}</p>}</div>}
     </article> })}</div>}
     <Pager page={page} total={data?.total ?? 0} onPage={setPage} />
     {abrir && <RegistroManual evento={evento.id} onClose={() => setAbrir(false)} onDone={() => { setAbrir(false); reload() }} />}
@@ -299,7 +316,7 @@ function Constancias({ eventos: lista, reloadEventos }: { eventos: Evento[]; rel
   </div>
 }
 
-function Firmas() {
+function Firmas({ onChange }: { onChange?(): void }) {
   const { data, error, loading, reload } = useAsync(listarFirmas, [])
   const [busy, setBusy] = useState(false)
   const [nombre, setNombre] = useState(''), [file, setFile] = useState<File | null>(null), [fileVersion, setFileVersion] = useState(0)
@@ -317,13 +334,13 @@ function Firmas() {
       })
       await gestionarFirmas({ action: 'cargar', nombre: nombre.trim(), mime: file.type, base64 })
       setNombre(''); setFile(null); setFileVersion((v) => v + 1)
-      toast.ok('Firma guardada'); reload()
+      toast.ok('Firma guardada'); reload(); onChange?.()
     } catch (e) { toast.error(errorText(e)) } finally { setBusy(false) }
   }
   const eliminar = async (id: number) => {
     if (!(await confirmar('Eliminar imagen de firma', { text: 'Ya no estará disponible para eventos nuevos. Los eventos existentes conservan sus firmas.', danger: true }))) return
     setBusy(true)
-    try { await gestionarFirmas({ action: 'eliminar', id }); toast.ok('Firma eliminada'); reload() }
+    try { await gestionarFirmas({ action: 'eliminar', id }); toast.ok('Firma eliminada'); reload(); onChange?.() }
     catch (e) { toast.error(errorText(e)) } finally { setBusy(false) }
   }
   return <Card title="Biblioteca de firmas digitales">

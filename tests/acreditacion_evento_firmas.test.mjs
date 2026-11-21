@@ -13,8 +13,8 @@ function servicio(rol = 'distrital') {
   }
   const admin = { rpc: async (name, args) => {
     llamadas.push({ name, args })
-    return name === 'acreditacion_firmas_datos'
-      ? { data: [{ id: 1, nombre: 'Firma', mime: 'image/png', base64: null, drive_file_id: 'ficticio' }], error: null }
+    return name === 'acreditacion_firmas_usuario'
+      ? { data: args.p_ids.includes(1) ? [{ id: 1, nombre: 'Firma', mime: 'image/png', base64: null, drive_file_id: 'ficticio' }] : [], error: null }
       : { data: null, error: null }
   } }
   const source = readFileSync(new URL('../supabase/functions/acreditacion-firmas/index.ts', import.meta.url), 'utf8')
@@ -26,7 +26,7 @@ function servicio(rol = 'distrital') {
     Deno: { env: { get: (name) => ({ APP_PUBLIC_URL: 'https://app.example', SUPABASE_URL: 'https://example.test', SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'service' })[name] }, serve: (fn) => { handler = fn } },
     createClient: (_url, key) => key === 'anon' ? user : admin,
     drive: { tokenDrive: async () => 'token', descargarFirma: async () => 'imagen-fija', validarImagen: () => new Uint8Array([1]) },
-    seleccion: { validarFirmas: (ids) => ids, comprobarFirmas: () => {} },
+    seleccion: { validarFirmas: (ids) => ids, comprobarFirmas: (ids, firmas) => { if (ids.length !== firmas.length) throw new Error('Firma no disponible') } },
     Uint8Array, Request, Response, URL, console,
   })
   const enviar = (body) => handler(new Request('https://example.test', { method: 'POST', headers: { authorization: 'Bearer ficticio', 'Content-Type': 'application/json' }, body: JSON.stringify(body) }))
@@ -37,10 +37,20 @@ test('al crear un evento copia las firmas seleccionadas y registra al actor auto
   const s = servicio()
   const r = await s.enviar({ action: 'guardar_evento', evento: { id: null, nombre: 'Evento ficticio' }, firmas: [1] })
   assert.equal(r.status, 200)
-  assert.equal(s.llamadas[0].name, 'acreditacion_firmas_datos')
+  assert.equal(s.llamadas[0].name, 'acreditacion_firmas_usuario')
   assert.equal(s.llamadas[1].name, 'acreditacion_guardar_evento_firmado')
   assert.equal(s.llamadas[1].args.p_usuario, 'actor-ficticio')
   assert.equal(s.llamadas[1].args.p_firmas[0].base64, 'imagen-fija')
+})
+
+test('un inspector solo puede seleccionar firmas de su biblioteca', async () => {
+  const s = servicio('areal')
+  const propia = await s.enviar({ action: 'guardar_evento', evento: { id: null, nombre: 'Evento ficticio' }, firmas: [1] })
+  assert.equal(propia.status, 200)
+  assert.equal(s.llamadas[0].args.p_usuario, 'actor-ficticio')
+  const otra = await s.enviar({ action: 'guardar_evento', evento: { id: null, nombre: 'Evento ficticio' }, firmas: [2] })
+  assert.notEqual(otra.status, 200)
+  assert.equal(s.llamadas.filter((c) => c.name === 'acreditacion_guardar_evento_firmado').length, 1)
 })
 
 test('una escuela no puede fijar firmas de eventos', async () => {

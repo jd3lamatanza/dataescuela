@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
     if (who.error || !who.data.user) throw new HttpError(401, 'Sesión inválida.')
     const [role, real] = await Promise.all([user.rpc('app_role'), user.rpc('real_role')])
     if (role.error || real.error) throw new HttpError(503, 'No se pudo verificar el acceso.')
-    if (role.data !== 'distrital' || real.data !== 'distrital') throw new HttpError(403, 'Sin permiso.')
+    if (!['distrital', 'areal'].includes(role.data) || role.data !== real.data) throw new HttpError(403, 'Sin permiso.')
     const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
     const body = await req.json()
     if (body?.action === 'guardar_evento' || body?.action === 'configurar_evento') {
@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
         let ids: number[]
         try { ids = validarFirmas(body.firmas) }
         catch (e) { throw new HttpError(400, e instanceof Error ? e.message : 'Firmas inválidas.') }
-        const result = await admin.rpc('acreditacion_firmas_datos', { p_ids: ids })
+        const result = await admin.rpc('acreditacion_firmas_usuario', { p_usuario: who.data.user.id, p_ids: ids })
         if (result.error) throw new Error('No se pudieron consultar las firmas.')
         comprobarFirmas(ids, result.data)
         const token = result.data.some((f: { drive_file_id: string | null }) => f.drive_file_id) ? await tokenDrive() : null
@@ -40,6 +40,7 @@ Deno.serve(async (req) => {
         }))
       }
       if (body.action === 'configurar_evento') {
+        if (role.data !== 'distrital') throw new HttpError(403, 'Sin permiso.')
         const result = await admin.rpc('acreditacion_configurar_firmas', { p_evento: body.id, p_firmas: firmas, p_usuario: who.data.user.id })
         if (result.error) throw new HttpError(400, result.error.message)
       } else {
@@ -58,7 +59,7 @@ Deno.serve(async (req) => {
       return json({ ok: true })
     }
     if (body?.action === 'listar') {
-      const { data: firmas, error } = await admin.rpc('acreditacion_firmas_datos', { p_ids: null })
+      const { data: firmas, error } = await admin.rpc('acreditacion_firmas_usuario', { p_usuario: who.data.user.id, p_ids: null })
       if (error) throw new Error('No se pudieron consultar las firmas.')
       const antiguas = firmas.filter((f: { drive_file_id: string | null }) => !f.drive_file_id)
       if (antiguas.length) {
@@ -76,9 +77,7 @@ Deno.serve(async (req) => {
           }
         }
       }
-      const result = await admin.from('acreditacion_firmas').select('id,nombre,mime').order('id')
-      if (result.error) throw new Error('No se pudieron consultar las firmas.')
-      return json({ firmas: result.data })
+      return json({ firmas: firmas.map((f: { id: number; nombre: string; mime: string }) => ({ id: f.id, nombre: f.nombre, mime: f.mime })) })
     }
     if (body?.action === 'cargar') {
       const nombre = typeof body.nombre === 'string' ? body.nombre.trim() : ''
@@ -86,7 +85,7 @@ Deno.serve(async (req) => {
       const bytes = validarImagen(body.mime, body.base64)
       const token = await tokenDrive()
       const id = await subirFirma(token, nombre, body.mime, bytes)
-      const result = await admin.from('acreditacion_firmas').insert({ nombre, mime: body.mime, drive_file_id: id })
+      const result = await admin.from('acreditacion_firmas').insert({ nombre, mime: body.mime, drive_file_id: id, propietario_id: role.data === 'areal' ? who.data.user.id : null })
       if (result.error) {
         try { await borrarFirma(token, id) } catch (e) {
           console.error('No se pudo limpiar la firma no registrada:', e)
@@ -98,7 +97,9 @@ Deno.serve(async (req) => {
     }
     if (body?.action === 'eliminar') {
       if (!Number.isSafeInteger(body.id) || body.id <= 0) throw new HttpError(400, 'Firma inválida.')
-      const result = await admin.from('acreditacion_firmas').select('id,drive_file_id').eq('id', body.id).maybeSingle()
+      let consulta = admin.from('acreditacion_firmas').select('id,drive_file_id').eq('id', body.id)
+      consulta = role.data === 'areal' ? consulta.eq('propietario_id', who.data.user.id) : consulta.is('propietario_id', null)
+      const result = await consulta.maybeSingle()
       if (result.error) throw new Error('No se pudo consultar la firma.')
       if (!result.data) throw new HttpError(404, 'Firma inexistente.')
       if (result.data.drive_file_id) await borrarFirma(await tokenDrive(), result.data.drive_file_id)

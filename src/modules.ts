@@ -39,7 +39,7 @@ export const MODULES: readonly AppModule[] = [
   { id: 'simulado', label: 'Ingreso simulado', path: '/simulado', icon: 'login', roles: ['distrital'], primary: true },
   { id: 'usuarios-distrito', label: 'Usuarios', path: '/usuarios-distrito', icon: 'users', roles: ['distrital'], primary: true },
   { id: 'configuracion', label: 'Configuración', path: '/configuracion', icon: 'settings', roles: ['distrital'] },
-  { id: 'acreditacion', label: 'Acreditación', path: '/acreditacion', icon: 'check', roles: ['distrital', 'escolar'] },
+  { id: 'acreditacion', label: 'Acreditación', path: '/acreditacion', icon: 'check', roles: ['distrital', 'areal', 'escolar'] },
   { id: 'mapa-escolar', label: 'Mapa Escolar', path: '/mapa-escolar', icon: 'map', roles: ROLES },
   { id: 'escuelas', label: 'Escuelas', path: '/escuelas', icon: 'building', roles: ['distrital', 'areal'], primary: true },
   { id: 'nudos', label: 'Nudos', path: '/nudos', icon: 'layers', roles: ['distrital', 'areal'] },
