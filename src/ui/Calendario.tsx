@@ -11,7 +11,7 @@ import { href } from '../lib/router'
 
 export interface TipoEvento { id: number; nombre: string; icono: string; color: string; rol: Role; activo: boolean }
 export interface Evento {
-  id: number; fecha: string; tipo_id: number; nombre: string; descripcion: string | null; lugar?: string | null
+  id: number; fecha: string; tipo_id: number; nombre: string; descripcion: string | null; lugar?: string | null; hora?: string | null; agenda_historica?: boolean
   user_id: string; rol: Role; autor: string; para_roles: Role[]
 }
 
@@ -191,6 +191,7 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
                 </div>
                 <dl class="space-y-2 text-sm">
                   <div><dt class="text-xs uppercase text-slate-500">Autor</dt><dd>{detalle.autor} · {ROLE_LABELS[detalle.rol]}</dd></div>
+                  {detalle.hora && <div><dt class="text-xs uppercase text-slate-500">Hora</dt><dd>{detalle.hora.slice(0, 5)}</dd></div>}
                   {detalle.para_roles.length > 0 && <div><dt class="text-xs uppercase text-slate-500">Asignado a</dt><dd>{detalle.para_roles.map((r) => (r === 'areal' ? 'Areales' : 'Escuelas')).join(' y ')}</dd></div>}
                   {detalle.lugar && <div><dt class="text-xs uppercase text-slate-500">Lugar</dt><dd>{detalle.lugar}</dd></div>}
                   <div><dt class="text-xs uppercase text-slate-500">Descripción</dt><dd class="whitespace-pre-line">{detalle.descripcion || 'Sin descripción'}</dd></div>
@@ -200,7 +201,9 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
                   {esAutor(detalle) && (
                     <div class="flex gap-2">
                       <button type="button" class="min-h-11 rounded-md border border-red-300 px-4 text-sm font-medium text-red-600 hover:bg-red-50" onClick={() => eliminar(detalle)}>Eliminar</button>
-                      <button type="button" class={BTN_PRIMARY} onClick={() => setEdit(detalle)}>Editar</button>
+                      {detalle.agenda_historica && detalle.nombre.trim().length < 3
+                        ? <a class={BTN_PRIMARY} href={href('/agenda-areal')}>Editar en Agenda</a>
+                        : <button type="button" class={BTN_PRIMARY} onClick={() => setEdit(detalle)}>Editar</button>}
                     </div>
                   )}
                 </div>

@@ -3,12 +3,14 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useAsync } from '../lib/hooks'
 import { descargar, XLSX_MIME } from '../lib/download'
-import { buildPdf, buildXlsx, type Table } from '../lib/export'
+import { buildPdf, buildXlsx } from '../lib/export'
+import { leerPaginas } from '../lib/calendarioDistrital'
+import { tablaAgenda, type ItemAgenda } from '../lib/agendaListado'
 import { Calendario } from '../ui/Calendario'
 import { Icon } from '../ui/Icon'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, RowMenu, Spinner, confirmar, toast } from '../ui/kit'
 
-interface Item { id: number; fecha: string; nombre: string; descripcion: string | null; lugar: string | null; user_id: string; autor: string }
+type Item = ItemAgenda
 
 const fmt = (d: string) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(d + 'T00:00:00Z'))
 
@@ -26,10 +28,8 @@ export function Agenda() {
     const { data: tipo, error: e1 } = await supabase.from('evento_tipos').select('id').eq('nombre', 'Agenda Anticipada').maybeSingle()
     if (e1) throw e1
     if (!tipo) return [] as Item[]
-    const { data, error } = await supabase.from('eventos').select('id,fecha,nombre,descripcion,lugar,user_id,autor').eq('tipo_id', tipo.id).order('fecha').order('id')
-    if (error) throw error
-    return data as Item[]
-  })
+    return leerPaginas<Item>((a, b) => supabase.from('eventos').select('id,fecha,hora,nombre,descripcion,lugar,user_id,autor,agenda_historica').eq('tipo_id', tipo.id).order('fecha').order('id').range(a, b))
+  }, [user?.id, user?.role])
 
   const reload = () => { recargar(); setVersion((v) => v + 1) }
   // Distrito filtra por inspector; el inspector, por lugar
@@ -40,16 +40,7 @@ export function Agenda() {
   const rows = (data ?? []).filter((i) => i.fecha.startsWith(mesKey) && (!sel || campo(i) === sel))
 
   const bajar = async (tipo: 'xlsx' | 'pdf') => {
-    const tabla: Table = {
-      title: 'Agenda Anticipada',
-      subtitle: `${mesTxt.replace(/^./, (c) => c.toUpperCase())}${sel ? ` · ${distrito ? 'Inspector' : 'Lugar'}: ${sel}` : ''} · ${rows.length} evento(s)`,
-      headers: distrito ? ['Fecha', 'Título', 'Lugar', 'Inspector', 'Descripción'] : ['Fecha', 'Título', 'Lugar', 'Descripción'],
-      widths: distrito ? [12, 28, 22, 24, 40] : [12, 30, 24, 44],
-      rows: rows.map((i) => {
-        const f = i.fecha.split('-').reverse().join('/')
-        return distrito ? [f, i.nombre, i.lugar ?? '', i.autor, i.descripcion ?? ''] : [f, i.nombre, i.lugar ?? '', i.descripcion ?? '']
-      }),
-    }
+    const tabla = tablaAgenda(rows, mesTxt, sel, distrito)
     const name = `agenda-anticipada-${mesKey}`
     try {
       if (tipo === 'xlsx') descargar(buildXlsx(tabla, 'Agenda'), `${name}.xlsx`, XLSX_MIME)
@@ -72,7 +63,7 @@ export function Agenda() {
     <li key={i.id} class="flex items-center gap-2 p-3">
       <button type="button" class="min-w-0 flex-1 text-left" onClick={() => setVer(i)}>
         <span class="block truncate font-medium text-slate-900">{i.nombre}</span>
-        <span class="block truncate text-xs text-slate-500">{fmt(i.fecha)} · {i.lugar ?? 'Sin lugar'}{distrito ? ` · ${i.autor}` : ''}</span>
+        <span class="block truncate text-xs text-slate-500">{fmt(i.fecha)}{i.hora ? ` · ${i.hora.slice(0, 5)}` : ''} · {i.lugar ?? 'Sin lugar'}{distrito ? ` · ${i.autor}` : ''}</span>
       </button>
       {!distrito && <RowMenu items={menu(i)} />}
     </li>
@@ -103,6 +94,7 @@ export function Agenda() {
         <Modal title={ver.nombre} onClose={() => setVer(null)}>
           <dl class="space-y-2 text-sm">
             <div><dt class="text-xs uppercase text-slate-500">Fecha</dt><dd>{fmt(ver.fecha)}</dd></div>
+            {ver.hora && <div><dt class="text-xs uppercase text-slate-500">Hora</dt><dd>{ver.hora.slice(0, 5)}</dd></div>}
             <div><dt class="text-xs uppercase text-slate-500">Lugar</dt><dd>{ver.lugar ?? '—'}</dd></div>
             <div><dt class="text-xs uppercase text-slate-500">Inspector</dt><dd>{ver.autor}</dd></div>
             <div><dt class="text-xs uppercase text-slate-500">Descripción</dt><dd class="whitespace-pre-line">{ver.descripcion || 'Sin descripción'}</dd></div>
@@ -114,12 +106,12 @@ export function Agenda() {
 }
 
 function Formulario({ item, onClose, onDone }: { item: Partial<Item>; onClose(): void; onDone(): void }) {
-  const [f, setF] = useState({ titulo: item.nombre ?? '', fecha: item.fecha ?? '', lugar: item.lugar ?? '', desc: item.descripcion ?? '' })
+  const [f, setF] = useState({ titulo: item.nombre ?? '', fecha: item.fecha ?? '', hora: item.hora?.slice(0, 5) ?? '', lugar: item.lugar ?? '', desc: item.descripcion ?? '' })
   const [err, setErr] = useState<string | null>(null)
   const set = (k: keyof typeof f) => (e: Event) => setF({ ...f, [k]: (e.currentTarget as HTMLInputElement).value })
   const submit = async (e: Event) => {
     e.preventDefault()
-    const { error } = await supabase.rpc('agenda_guardar', { p_id: item.id ?? null, p_titulo: f.titulo, p_fecha: f.fecha, p_lugar: f.lugar, p_desc: f.desc })
+    const { error } = await supabase.rpc('agenda_guardar_hora', { p_id: item.id ?? null, p_titulo: f.titulo, p_fecha: f.fecha, p_hora: f.hora || null, p_lugar: f.lugar, p_desc: f.desc })
     if (error) setErr(error.message)
     else { toast.ok(item.id ? 'Evento actualizado' : 'Evento creado'); onDone() }
   }
@@ -127,10 +119,11 @@ function Formulario({ item, onClose, onDone }: { item: Partial<Item>; onClose():
     <Modal title={item.id ? 'Editar evento' : 'Nuevo evento'} onClose={onClose}>
       <form onSubmit={submit} class="space-y-4">
         {err && <Alert tone="error">{err}</Alert>}
-        <Lbl label="Título"><input class={FIELD} value={f.titulo} onInput={set('titulo')} required minLength={3} maxLength={150} /></Lbl>
+        <Lbl label="Título"><input class={FIELD} value={f.titulo} onInput={set('titulo')} required minLength={item.agenda_historica && item.nombre && item.nombre.length < 3 && f.titulo === item.nombre ? 1 : 3} maxLength={150} /></Lbl>
         <div class="grid gap-3 sm:grid-cols-2">
           <Lbl label="Fecha"><input class={FIELD} type="date" value={f.fecha} onInput={set('fecha')} required /></Lbl>
-          <Lbl label="Lugar"><input class={FIELD} value={f.lugar} onInput={set('lugar')} required minLength={2} maxLength={200} /></Lbl>
+          <Lbl label="Hora (opcional)"><input class={FIELD} type="time" value={f.hora} onInput={set('hora')} /></Lbl>
+          <Lbl label="Lugar"><input class={FIELD} value={f.lugar} onInput={set('lugar')} required={!(item.agenda_historica && item.lugar == null)} minLength={2} maxLength={200} /></Lbl>
         </div>
         <Lbl label="Descripción"><textarea class={`${FIELD} min-h-24 py-2`} value={f.desc} onInput={set('desc')} maxLength={2000} /></Lbl>
         <div class="flex justify-end gap-2"><button type="button" class={BTN_SECONDARY} onClick={onClose}>Cancelar</button><button class={BTN_PRIMARY}>Guardar</button></div>
