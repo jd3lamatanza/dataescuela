@@ -24,3 +24,6 @@ verify_jwt = false
 
 [functions.acreditacion-firmas]
 verify_jwt = false
+
+[functions.disposiciones-drive]
+verify_jwt = false
