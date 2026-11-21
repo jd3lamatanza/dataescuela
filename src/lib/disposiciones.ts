@@ -7,7 +7,7 @@ export interface Disposicion {
   escuela_cubrir_id: number; escuela_cubrir_clave: string; escuela_cubrir_nombre: string
   cargo_cubrir: string; revista_cubrir: string; tipo: string; motivo: string
   fecha_designacion: string; numero_designacion: string
-  escuela_base_id: number | null; escuela_base_clave: string; escuela_base_nombre: string
+  escuela_base_id: number | null; escuela_base_clave: string; escuela_base_nombre: string; escuela_base_fuera_distrital: boolean
   cargo_base: string; revista_base: string; fecha_desde: string; observaciones: string
   usuario: string; actualizada: string; archivos: ArchivoDisposicion[]
 }

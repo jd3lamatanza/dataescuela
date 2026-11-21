@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAsync } from '../lib/hooks'
 import { abrirArchivo, CARGOS, ESTADOS, MAX_ARCHIVOS, MAX_BYTES, quitarArchivo, REVISTAS, subirArchivo, TIPOS_ARCHIVO, type Disposicion, type MotivoDisposicion } from '../lib/disposiciones'
 import { SelectorEscuela, type Escuela } from './PreinscripcionEav'
-import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, Spinner, toast } from '../ui/kit'
+import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, Spinner, toast, Toggle } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 
 interface Datos { registros: Disposicion[]; escuelas: Escuela[]; inspectores: string[]; motivos: MotivoDisposicion[] }
@@ -89,11 +89,14 @@ function Formulario({ registro, data, onClose, onDone }: { registro: Disposicion
     docente_nombre: registro?.docente_nombre ?? '', docente_cuil: registro?.docente_cuil ?? '', docente_email: registro?.docente_email ?? '',
     escuela_cubrir_id: registro ? String(registro.escuela_cubrir_id) : '', cargo_cubrir: registro?.cargo_cubrir ?? '', revista_cubrir: registro?.revista_cubrir ?? '',
     tipo: registro?.tipo ?? '', motivo: registro?.motivo ?? '', fecha_designacion: registro?.fecha_designacion ?? '', numero_designacion: registro?.numero_designacion ?? '',
-    escuela_base_id: registro?.escuela_base_id ? String(registro.escuela_base_id) : '', cargo_base: registro?.cargo_base ?? '',
+    escuela_base_id: registro?.escuela_base_id ? String(registro.escuela_base_id) : '',
+    escuela_base_clave: registro?.escuela_base_fuera_distrital ? registro.escuela_base_clave : '',
+    escuela_base_nombre: registro?.escuela_base_fuera_distrital ? registro.escuela_base_nombre : '', cargo_base: registro?.cargo_base ?? '',
     revista_base: registro?.revista_base ?? '', fecha_desde: registro?.fecha_desde ?? '', observaciones: registro?.observaciones ?? '',
   })
   const [actuales, setActuales] = useState(registro?.archivos ?? [])
   const [nuevos, setNuevos] = useState<File[]>([])
+  const [fueraDistrital, setFueraDistrital] = useState(registro?.escuela_base_fuera_distrital ?? false)
   const [cambiarBase, setCambiarBase] = useState(!registro || !!registro.escuela_base_id)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -113,8 +116,9 @@ function Formulario({ registro, data, onClose, onDone }: { registro: Disposicion
     let guardado = false
     try {
       const datos = {
-        ...f, docente_cuil: f.docente_cuil.replace(/\D/g, ''), escuela_cubrir_id: Number(f.escuela_cubrir_id), escuela_base_id: f.escuela_base_id ? Number(f.escuela_base_id) : null,
-        escuela_cubrir_clave: '', escuela_cubrir_nombre: '', escuela_base_clave: '', escuela_base_nombre: '', usuario: '',
+        ...f, docente_cuil: f.docente_cuil.replace(/\D/g, ''), escuela_cubrir_id: Number(f.escuela_cubrir_id),
+        escuela_base_id: !fueraDistrital && f.escuela_base_id ? Number(f.escuela_base_id) : null,
+        escuela_base_fuera_distrital: fueraDistrital, escuela_cubrir_clave: '', escuela_cubrir_nombre: '', usuario: '',
       }
       const r = registro
         ? await supabase.from('disposiciones').update(datos).eq('id', registro.id).select('id').single()
@@ -151,8 +155,15 @@ function Formulario({ registro, data, onClose, onDone }: { registro: Disposicion
         {campo('Fecha de designación', 'fecha_designacion', 'date')}
         {campo('Número de designación', 'numero_designacion')}
         <div>
-          {cambiarBase && <SelectorEscuela id="disposicion-base" label="Escuela base afectada" escuelas={escuelas} value={f.escuela_base_id} onChange={(v) => actualizar('escuela_base_id', v)} />}
-          {registro && !registro.escuela_base_id && <div class="mt-1 text-xs text-amber-700">
+          <div class="mb-2"><Toggle label="Escuela fuera de la Distrital" checked={fueraDistrital} onChange={(valor) => {
+            setFueraDistrital(valor)
+            if (!valor && registro?.escuela_base_fuera_distrital) setCambiarBase(true)
+          }} /></div>
+          {fueraDistrital ? <div class="space-y-2">
+            {campo('Nombre de la escuela base', 'escuela_base_nombre')}
+            <Lbl label="Clave provincial (opcional)"><input class={FIELD} value={f.escuela_base_clave} onInput={(e) => actualizar('escuela_base_clave', e.currentTarget.value)} /></Lbl>
+          </div> : cambiarBase && <SelectorEscuela id="disposicion-base" label="Escuela base afectada" escuelas={escuelas} value={f.escuela_base_id} onChange={(v) => actualizar('escuela_base_id', v)} />}
+          {!fueraDistrital && registro && !registro.escuela_base_id && !registro.escuela_base_fuera_distrital && <div class="mt-1 text-xs text-amber-700">
             Escuela histórica no encontrada: {registro.escuela_base_clave} · {registro.escuela_base_nombre}. Se conservará el dato original hasta que selecciones una escuela.
             <button type="button" class="ml-2 underline" onClick={() => { setCambiarBase(!cambiarBase); actualizar('escuela_base_id', '') }}>{cambiarBase ? 'Conservar dato original' : 'Seleccionar escuela'}</button>
           </div>}

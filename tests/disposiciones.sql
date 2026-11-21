@@ -30,6 +30,39 @@ begin
   begin update public.disposiciones set escuela_base_id = null where id = nuevo;
   exception when raise_exception then if sqlerrm <> 'Seleccioná una escuela base' then raise; end if; rechazado := true; end;
   if not rechazado then raise exception 'Se aceptó una escuela base vacía'; end if;
+  update public.disposiciones set escuela_base_id = null, escuela_base_fuera_distrital = true,
+    escuela_base_nombre = ' Escuela externa ', escuela_base_clave = ' X123 ' where id = nuevo;
+  if not exists (select 1 from public.disposiciones where id = nuevo and escuela_base_id is null
+    and escuela_base_fuera_distrital and escuela_base_nombre = 'Escuela externa' and escuela_base_clave = 'X123') then
+    raise exception 'No se guardó la escuela externa';
+  end if;
+  update public.disposiciones set escuela_base_nombre = 'Otra escuela externa', escuela_base_clave = '' where id = nuevo;
+  if not exists (select 1 from public.disposiciones where id = nuevo and escuela_base_nombre = 'Otra escuela externa' and escuela_base_clave = '') then
+    raise exception 'No se editó la escuela externa sin clave';
+  end if;
+  rechazado := false;
+  begin update public.disposiciones set escuela_base_nombre = '   ' where id = nuevo;
+  exception when raise_exception then if sqlerrm <> 'Ingresá el nombre de la escuela fuera de la Distrital' then raise; end if; rechazado := true; end;
+  if not rechazado then raise exception 'Se aceptó una escuela externa sin nombre'; end if;
+  rechazado := false;
+  begin update public.disposiciones set escuela_base_fuera_distrital = false where id = nuevo;
+  exception when raise_exception then if sqlerrm <> 'Seleccioná una escuela base' then raise; end if; rechazado := true; end;
+  if not rechazado then raise exception 'Se aceptó desactivar la escuela externa sin seleccionar una escuela'; end if;
+  update public.disposiciones set escuela_base_fuera_distrital = false, escuela_base_id = escuela where id = nuevo;
+  if not exists (select 1 from public.disposiciones where id = nuevo and escuela_base_id = escuela
+    and not escuela_base_fuera_distrital and escuela_base_clave = nombre_clave) then
+    raise exception 'No se volvió a vincular la escuela de la Distrital';
+  end if;
+  insert into public.disposiciones(inspector,email_jefatura,docente_nombre,docente_cuil,docente_email,
+    escuela_cubrir_id,escuela_cubrir_clave,escuela_cubrir_nombre,cargo_cubrir,revista_cubrir,tipo,motivo,
+    fecha_designacion,numero_designacion,escuela_base_id,escuela_base_clave,escuela_base_nombre,escuela_base_fuera_distrital,cargo_base,revista_base,fecha_desde,usuario)
+  values ('Inspector Prueba','jefatura@abc.gob.ar','Docente externo prueba','20123456789','docente@abc.gob.ar',
+    escuela,'','','Director','Titular','Asignación AP','Acto Público',
+    '2026-01-01','123',null,'','Escuela externa',true,'Docente','Titular','2026-01-01','');
+  if not exists (select 1 from public.disposiciones where docente_nombre = 'Docente externo prueba'
+    and escuela_base_fuera_distrital and escuela_base_nombre = 'Escuela externa') then
+    raise exception 'No se creó la disposición con escuela externa';
+  end if;
   rechazado := false;
   begin update public.disposiciones set docente_email = 'externo@example.com' where id = nuevo;
   exception when raise_exception then if sqlerrm <> 'Completá los datos obligatorios con valores válidos' then raise; end if; rechazado := true; end;
