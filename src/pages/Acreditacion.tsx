@@ -10,6 +10,8 @@ import { BRAND } from '../modules'
 import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, Spinner, TabBar, confirmar, toast, type TabItem } from '../ui/kit'
 import { Icon, type IconKey } from '../ui/Icon'
 import { CamposAcreditacion } from './RegistroAcreditacion'
+import { useAuth } from '../lib/auth'
+import { AcreditacionEscolar } from './AcreditacionEscolar'
 
 const TABS: TabItem[] = [
   { id: 'evento', label: 'Evento', icon: 'calendar', color: 'sky' },
@@ -26,12 +28,18 @@ function AccionIcono({ icon, label, onClick, disabled = false, danger = false }:
 }
 
 async function eventos(): Promise<Evento[]> {
-  const { data, error } = await supabase.from('acreditacion_eventos').select('id,nombre,lugar,fecha,hora_inicio,hora_fin,descripcion,estado').order('fecha', { ascending: false })
+  const { data, error } = await supabase.from('acreditacion_eventos').select('id,nombre,lugar,fecha,hora_inicio,hora_fin,descripcion,estado,firmas_configuradas').order('fecha', { ascending: false })
   if (error) throw error
   return data as Evento[]
 }
 
 export function Acreditacion() {
+  const { user } = useAuth()
+  if (!user) return null
+  return user.role === 'escolar' ? <AcreditacionEscolar /> : <AcreditacionDistrital />
+}
+
+function AcreditacionDistrital() {
   const [tab, setTab] = useState('evento')
   const { data, error, loading, reload } = useAsync(eventos, [])
   return <>
@@ -50,6 +58,7 @@ export function Acreditacion() {
 function Eventos({ eventos: lista, reload }: { eventos: Evento[]; reload(): void }) {
   const [editando, setEditando] = useState<Evento | 'nuevo' | null>(null)
   const [qr, setQr] = useState<Evento | null>(null)
+  const [configurando, setConfigurando] = useState<Evento | null>(null)
   const cambiarEstado = async (e: Evento, estado: 'activo' | 'finalizado') => {
     const texto = estado === 'finalizado' ? 'Se cerrará la acreditación por QR. Podrás agregar personas manualmente y enviar constancias.' : 'Se habilitará nuevamente la acreditación mediante el QR.'
     if (!(await confirmar(estado === 'finalizado' ? 'Finalizar evento' : 'Iniciar acreditación', { text: texto }))) return
@@ -66,26 +75,32 @@ function Eventos({ eventos: lista, reload }: { eventos: Evento[]; reload(): void
     {!lista.length ? <EmptyState title="Todavía no hay eventos" text="Creá un evento para comenzar." /> : <div class="space-y-3">{lista.map((e) => <Card key={e.id}>
       <div class="flex flex-wrap items-start justify-between gap-4"><div class="min-w-0 flex-1"><h2 class="font-semibold text-slate-900">{e.nombre}</h2><p class="mt-1 flex items-start gap-1.5 text-sm text-slate-600"><Icon name="calendar" class="mt-0.5 size-4 shrink-0" />{fechaEvento(e)} · {e.lugar}</p><p class="mt-1 text-sm text-slate-600">{e.descripcion}</p><div class="mt-2"><Badge tone={e.estado === 'activo' ? 'green' : e.estado === 'finalizado' ? 'slate' : 'amber'}><Icon name={e.estado === 'activo' ? 'check' : e.estado === 'finalizado' ? 'lock' : 'clock'} class="mr-1 size-4" />{e.estado === 'activo' ? 'Acreditación activa' : e.estado === 'finalizado' ? 'Finalizado' : 'Sin iniciar'}</Badge></div></div>
       <div class="flex flex-wrap gap-2"><AccionIcono icon="grid" label={`Compartir QR de ${e.nombre}`} onClick={() => setQr(e)} />
+        {!e.firmas_configuradas && <button type="button" class={BTN_SECONDARY} onClick={() => setConfigurando(e)}><Icon name="edit" />Configurar firmas</button>}
         {e.estado !== 'finalizado' && <><AccionIcono icon="edit" label={`Editar ${e.nombre}`} onClick={() => setEditando(e)} /><AccionIcono icon="trash" label={`Eliminar ${e.nombre}`} danger onClick={() => eliminar(e)} /></>}
         <AccionIcono icon={e.estado === 'activo' ? 'lock' : 'power'} label={`${e.estado === 'activo' ? 'Finalizar evento' : e.estado === 'finalizado' ? 'Reabrir evento' : 'Iniciar acreditación'}: ${e.nombre}`} onClick={() => cambiarEstado(e, e.estado === 'activo' ? 'finalizado' : 'activo')} />
       </div></div>
     </Card>)}</div>}
     {editando && <EventoForm evento={editando === 'nuevo' ? null : editando} onClose={() => setEditando(null)} onDone={() => { setEditando(null); reload() }} />}
     {qr && <EventoQr evento={qr} onClose={() => setQr(null)} />}
+    {configurando && <ConfigurarFirmas evento={configurando} onClose={() => setConfigurando(null)} onDone={() => { setConfigurando(null); reload() }} />}
   </>
 }
 
 function EventoForm({ evento, onClose, onDone }: { evento: Evento | null; onClose(): void; onDone(): void }) {
   const [form, setForm] = useState(() => evento ? { nombre: evento.nombre, lugar: evento.lugar, fecha: evento.fecha, hora_inicio: evento.hora_inicio.slice(0, 5), hora_fin: evento.hora_fin.slice(0, 5), descripcion: evento.descripcion } : datosEvento())
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const [firmas, setFirmas] = useState<number[]>([])
   const set = (k: keyof typeof form) => (e: Event) => setForm((v) => ({ ...v, [k]: (e.currentTarget as HTMLInputElement).value }))
   const guardar = async (e: Event) => {
     e.preventDefault(); setError('')
     if (form.hora_inicio >= form.hora_fin) { setError('La hora de finalización debe ser posterior al inicio.'); return }
+    if (!evento && !firmas.length) { setError('Seleccioná las firmas del evento.'); return }
+    if (!evento && !(await confirmar('Crear evento', { text: 'Las firmas quedarán fijas y no podrán modificarse para este evento.' }))) return
     setBusy(true)
-    const r = await supabase.rpc('acreditacion_guardar_evento', { p_id: evento?.id ?? null, p_nombre: form.nombre, p_lugar: form.lugar, p_fecha: form.fecha, p_inicio: form.hora_inicio, p_fin: form.hora_fin, p_descripcion: form.descripcion })
-    setBusy(false)
-    if (r.error) setError(r.error.message); else { toast.ok('Evento guardado'); onDone() }
+    try {
+      await gestionarFirmas({ action: 'guardar_evento', evento: { id: evento?.id ?? null, ...form }, firmas })
+      toast.ok('Evento guardado'); onDone()
+    } catch (e) { setError(errorText(e)) } finally { setBusy(false) }
   }
   return <Modal title={evento ? 'Editar evento' : 'Crear evento'} onClose={onClose}><form class="space-y-4" onSubmit={guardar}>
     {error && <Alert tone="error">{error}</Alert>}
@@ -94,6 +109,7 @@ function EventoForm({ evento, onClose, onDone }: { evento: Evento | null; onClos
     <Lbl label="Fecha"><input class={FIELD} type="date" required value={form.fecha} onInput={set('fecha')} /></Lbl>
     <div class="grid grid-cols-2 gap-3"><Lbl label="Hora de inicio"><input class={FIELD} type="time" required value={form.hora_inicio} onInput={set('hora_inicio')} /></Lbl><Lbl label="Hora de finalización"><input class={FIELD} type="time" required value={form.hora_fin} onInput={set('hora_fin')} /></Lbl></div>
     <Lbl label="Descripción breve"><textarea class={FIELD} required maxLength={1000} value={form.descripcion} onInput={set('descripcion')} /></Lbl>
+    {!evento && <SelectorFirmas seleccion={firmas} onChange={setFirmas} disabled={busy} />}
     <button class={BTN_PRIMARY} disabled={busy}><Icon name="check" />{busy ? 'Guardando…' : 'Guardar evento'}</button>
   </form></Modal>
 }
@@ -211,34 +227,49 @@ async function listarFirmas(): Promise<Firma[]> {
   return data.firmas
 }
 
+function SelectorFirmas({ seleccion, onChange, disabled }: { seleccion: number[]; onChange(ids: number[]): void; disabled: boolean }) {
+  const { data, error, loading } = useAsync(listarFirmas, [])
+  return <div class="space-y-2">
+    <p class="text-sm font-semibold">Firmas del evento</p>
+    <p class="text-sm text-slate-600">Elegí de una a seis firmas. Quedarán fijas para todas las constancias del evento.</p>
+    {error && <Alert tone="error">{error}</Alert>}
+    {loading && !data && <Spinner />}
+    {data && !data.length && <Alert tone="info">Cargá firmas en la pestaña Firma Digital antes de continuar.</Alert>}
+    {data && data.length > 0 && <fieldset disabled={disabled} class="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2">
+      <legend class="sr-only">Seleccionar firmas</legend>
+      {data.map((firma) => <label key={firma.id} class="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm hover:bg-slate-50">
+        <input type="checkbox" class="size-4 accent-sky-600" checked={seleccion.includes(firma.id)}
+          disabled={!seleccion.includes(firma.id) && seleccion.length >= 6}
+          onChange={(e) => onChange(e.currentTarget.checked ? [...seleccion, firma.id] : seleccion.filter((id) => id !== firma.id))} />
+        <span>{firma.nombre}</span>
+      </label>)}
+    </fieldset>}
+  </div>
+}
+
+function ConfigurarFirmas({ evento, onClose, onDone }: { evento: Evento; onClose(): void; onDone(): void }) {
+  const [seleccion, setSeleccion] = useState<number[]>([]), [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const guardar = async () => {
+    if (!seleccion.length) { setError('Seleccioná las firmas del evento.'); return }
+    if (!(await confirmar('Fijar firmas', { text: 'Las firmas quedarán fijas y no podrán modificarse para este evento.' }))) return
+    setBusy(true); setError('')
+    try { await gestionarFirmas({ action: 'configurar_evento', id: evento.id, firmas: seleccion }); toast.ok('Firmas configuradas'); onDone() }
+    catch (e) { setError(errorText(e)) } finally { setBusy(false) }
+  }
+  return <Modal title={`Configurar firmas: ${evento.nombre}`} onClose={onClose}>
+    {error && <div class="mb-3"><Alert tone="error">{error}</Alert></div>}
+    <SelectorFirmas seleccion={seleccion} onChange={setSeleccion} disabled={busy} />
+    <button type="button" class={`${BTN_PRIMARY} mt-4`} disabled={busy} onClick={guardar}><Icon name="check" />{busy ? 'Guardando…' : 'Fijar firmas'}</button>
+  </Modal>
+}
+
 function Constancias({ eventos: lista, reloadEventos }: { eventos: Evento[]; reloadEventos(): void }) {
-  const [id, setId] = useState(''), [seleccion, setSeleccion] = useState<number[]>([])
+  const [id, setId] = useState('')
   const [enviando, setEnviando] = useState(false)
-  const { data: firmas, error, loading } = useAsync(listarFirmas, [])
   const evento = lista.find((e) => e.id === id)
   return <div class="space-y-4">
-    <Card title="Firmas para las constancias">
-      <p class="mb-3 text-sm text-slate-600">Seleccioná entre una y seis firmas para esta tanda. Se colocan una junto a otra; al continuar más tarde, volvé a seleccionarlas.</p>
-      {error && <Alert tone="error">{error}</Alert>}
-      {loading && !firmas && <Spinner />}
-      {firmas && !firmas.length && <Alert tone="info">Cargá firmas en la pestaña Firma Digital para enviar constancias.</Alert>}
-      {firmas && firmas.length > 0 && <details class="rounded-md border border-slate-300 bg-white">
-        <summary class="flex min-h-11 cursor-pointer items-center justify-between gap-2 px-3 text-sm font-medium text-slate-700">
-          <span>{seleccion.length ? `${seleccion.length} firma(s) seleccionada(s)` : 'Seleccioná las firmas'}</span><Icon name="chevr" class="size-4 rotate-90" />
-        </summary>
-        <fieldset disabled={enviando} class="max-h-64 space-y-1 overflow-y-auto border-t border-slate-200 p-2">
-          <legend class="sr-only">Seleccionar firmas</legend>
-          {firmas.map((firma) => <label key={firma.id} class="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm hover:bg-slate-50">
-            <input type="checkbox" class="size-4 accent-sky-600" checked={seleccion.includes(firma.id)}
-              disabled={!seleccion.includes(firma.id) && seleccion.length >= 6}
-              onChange={(e) => { const checked = e.currentTarget.checked; setSeleccion((actual) => checked ? [...actual, firma.id] : actual.filter((x) => x !== firma.id)) }} />
-            <span>{firma.nombre}</span>
-          </label>)}
-        </fieldset>
-      </details>}
-    </Card>
     <Lbl label="Evento"><select class={FIELD} disabled={enviando} value={id} onChange={(e) => setId(e.currentTarget.value)}><option value="">Seleccioná un evento</option>{lista.map((e) => <option value={e.id}>{e.nombre} · {fechaEvento(e)}</option>)}</select></Lbl>
-    {evento && <Envios key={evento.id} evento={evento} reloadEventos={reloadEventos} firmas={seleccion} onBusyChange={setEnviando} />}
+    {evento && <Envios key={evento.id} evento={evento} reloadEventos={reloadEventos} onBusyChange={setEnviando} />}
   </div>
 }
 
@@ -264,13 +295,13 @@ function Firmas() {
     } catch (e) { toast.error(errorText(e)) } finally { setBusy(false) }
   }
   const eliminar = async (id: number) => {
-    if (!(await confirmar('Eliminar imagen de firma', { text: 'Las próximas constancias dejarán de incluir esta imagen.', danger: true }))) return
+    if (!(await confirmar('Eliminar imagen de firma', { text: 'Ya no estará disponible para eventos nuevos. Los eventos existentes conservan sus firmas.', danger: true }))) return
     setBusy(true)
     try { await gestionarFirmas({ action: 'eliminar', id }); toast.ok('Firma eliminada'); reload() }
     catch (e) { toast.error(errorText(e)) } finally { setBusy(false) }
   }
   return <Card title="Biblioteca de firmas digitales">
-    <p class="mb-3 text-sm text-slate-600">Guardá imágenes PNG o JPEG de hasta 2 MB en Google Drive y elegí cuáles usar en cada tanda de constancias.</p>
+    <p class="mb-3 text-sm text-slate-600">Guardá imágenes PNG o JPEG de hasta 2 MB en Google Drive y elegí cuáles usar al crear cada evento.</p>
     {error && <Alert tone="error">{error}</Alert>}
     {loading && !data && <Spinner />}
     <ul class="mb-3 space-y-2">{data?.map((f) => <li key={f.id} class="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-sm"><span class="flex min-w-0 items-center gap-2 break-all"><Icon name="attachment" class="size-4 shrink-0 text-sky-600" />{f.nombre}</span><AccionIcono icon="trash" label={`Quitar imagen ${f.nombre}`} danger disabled={busy} onClick={() => eliminar(f.id)} /></li>)}</ul>
@@ -282,7 +313,7 @@ function Firmas() {
   </Card>
 }
 
-function Envios({ evento, reloadEventos, firmas, onBusyChange }: { evento: Evento; reloadEventos(): void; firmas: number[]; onBusyChange(busy: boolean): void }) {
+function Envios({ evento, reloadEventos, onBusyChange }: { evento: Evento; reloadEventos(): void; onBusyChange(busy: boolean): void }) {
   const [version, setVersion] = useState(0), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [parcial, setParcial] = useState<Progreso | null>(null)
   const vivo = useRef(true)
@@ -300,7 +331,7 @@ function Envios({ evento, reloadEventos, firmas, onBusyChange }: { evento: Event
   }
   const enviar = async () => {
     if (evento.estado !== 'finalizado') { setError('Debés confirmar la finalización del evento antes de enviar constancias.'); return }
-    if (!firmas.length || firmas.length > 6) { setError('Seleccioná entre una y seis firmas antes de enviar.'); return }
+    if (!evento.firmas_configuradas) { setError('Configurá las firmas de este evento desde la pestaña Evento.'); return }
     if (!(await confirmar('Enviar constancias', { text: 'Se enviarán hasta 100 constancias pendientes, una a la vez. Un reintento de un envío sin confirmar podría duplicar el correo.', ok: 'Iniciar envío' }))) return
     setError(''); setBusy(true); onBusyChange(true)
     try {
@@ -311,7 +342,7 @@ function Envios({ evento, reloadEventos, firmas, onBusyChange }: { evento: Event
       if (candidatos.error) throw candidatos.error
       for (const persona of candidatos.data) {
         if (!vivo.current) break
-        const r = await supabase.functions.invoke('acreditacion-constancia', { body: { evento: evento.id, persona: persona.id, firmas } })
+        const r = await supabase.functions.invoke('acreditacion-constancia', { body: { evento: evento.id, persona: persona.id } })
         if (r.error) {
           let detalle = r.error.message
           if (r.error.context instanceof Response) {
@@ -331,6 +362,7 @@ function Envios({ evento, reloadEventos, firmas, onBusyChange }: { evento: Event
   return <div class="space-y-4">
     <Card title="Envío de constancias">
       {evento.estado !== 'finalizado' && <div class="mb-3"><Alert tone="warning">Confirmá la finalización del evento para habilitar el envío. El QR dejará de aceptar registros.</Alert></div>}
+      {!evento.firmas_configuradas && <div class="mb-3"><Alert tone="warning">Configurá las firmas de este evento desde la pestaña Evento.</Alert></div>}
       {error && <div class="mb-3"><Alert tone="error">{error}</Alert></div>}
       {progreso.error && <Alert tone="error">{progreso.error}</Alert>}
       {valor && <div class="space-y-2"><p class="flex flex-wrap items-center gap-2 font-semibold"><Icon name="send" class="size-5 text-sky-600" />{valor.enviados} de {valor.total} enviados · {valor.pendientes} pendientes</p>
@@ -340,7 +372,7 @@ function Envios({ evento, reloadEventos, firmas, onBusyChange }: { evento: Event
       </div>}
       <div class="mt-4 flex flex-wrap gap-2">
         {evento.estado === 'activo' && <button class={BTN_SECONDARY} disabled={busy} onClick={finalizar}><Icon name="lock" />Confirmar finalización</button>}
-        <button class={BTN_PRIMARY} disabled={busy || !firmas.length || evento.estado !== 'finalizado' || !valor || !valor.pendientes || !!valor.en_curso} onClick={enviar}><Icon name="send" />{busy ? 'Enviando…' : `Continuar envío: ${valor?.enviados ?? 0} de ${valor?.total ?? 0}`}</button>
+        <button class={BTN_PRIMARY} disabled={busy || !evento.firmas_configuradas || evento.estado !== 'finalizado' || !valor || !valor.pendientes || !!valor.en_curso} onClick={enviar}><Icon name="send" />{busy ? 'Enviando…' : `Continuar envío: ${valor?.enviados ?? 0} de ${valor?.total ?? 0}`}</button>
       </div>
       {busy && <p class="mt-2 text-sm text-slate-600">No cierres esta pantalla hasta completar la tanda. Si salís, podrás continuar luego.</p>}
     </Card>

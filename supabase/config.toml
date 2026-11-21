@@ -22,6 +22,9 @@ verify_jwt = false
 [functions.acreditacion-constancia]
 verify_jwt = false
 
+[functions.acreditacion-escolar]
+verify_jwt = false
+
 [functions.acreditacion-firmas]
 verify_jwt = false
 

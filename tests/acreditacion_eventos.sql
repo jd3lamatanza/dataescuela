@@ -2,8 +2,21 @@
 create temporary table acreditacion_eventos_test as
 select (select id from public.escuelas limit 1) escuela,
        (select id from public.profiles where role = 'distrital' and active limit 1) distrital,
-       (select id from public.profiles where role = 'escolar' and active limit 1) escolar;
-grant select on acreditacion_eventos_test to authenticated, service_role;
+       (select id from public.profiles where role = 'escolar' and active limit 1) escolar,
+       null::uuid evento;
+grant select, update on acreditacion_eventos_test to authenticated, service_role;
+
+set local role service_role;
+do $$
+declare t record; v_evento uuid;
+begin
+  select * into t from acreditacion_eventos_test;
+  perform set_config('request.jwt.claim.role', 'service_role', true);
+  v_evento := public.acreditacion_guardar_evento_firmado(null, 'Evento ficticio', 'Lugar ficticio', '2099-01-01', '10:00', '11:00', 'Prueba',
+    '[{"nombre":"Firma de prueba","mime":"image/png","base64":"iVBORw0KGgo="}]', t.distrital);
+  update acreditacion_eventos_test set evento = v_evento;
+end $$;
+reset role;
 
 set local role authenticated;
 do $$
@@ -18,7 +31,7 @@ begin
   exception when others then bloqueado := true; end;
   if not bloqueado then raise exception 'Rol escolar puede crear eventos'; end if;
   perform set_config('request.jwt.claim.sub', t.distrital::text, true);
-  evento := public.acreditacion_guardar_evento(null, 'Evento ficticio', 'Lugar ficticio', '2099-01-01', '10:00', '11:00', 'Prueba');
+  evento := t.evento;
   perform public.acreditacion_estado_evento(evento, 'activo');
   resultado := public.acreditacion_registrar(evento, 'Persona ficticia', '99999888', 'Docente', t.escuela, 'ejemplo@abc.gob.ar', false);
   if resultado <> 'ok' then raise exception 'Registro manual fallido: %', resultado; end if;
@@ -30,11 +43,19 @@ begin
   begin perform public.acreditacion_eliminar_evento(evento); exception when others then bloqueado := true; end;
   if not bloqueado then raise exception 'Se eliminó evento con acreditados'; end if;
   perform public.acreditacion_estado_evento(evento, 'finalizado');
-  bloqueado := false;
-  begin perform public.acreditacion_guardar_evento(evento, 'Cambio', 'Lugar ficticio', '2099-01-01', '10:00', '11:00', 'Prueba');
-  exception when others then bloqueado := true; end;
-  if not bloqueado then raise exception 'Se editó evento finalizado'; end if;
   perform public.acreditacion_estado_evento(evento, 'activo');
   perform public.acreditacion_estado_evento(evento, 'finalizado');
+end $$;
+reset role;
+
+set local role service_role;
+do $$
+declare t record; bloqueado boolean := false;
+begin
+  select * into t from acreditacion_eventos_test;
+  perform set_config('request.jwt.claim.role', 'service_role', true);
+  begin perform public.acreditacion_guardar_evento_firmado(t.evento, 'Cambio', 'Lugar ficticio', '2099-01-01', '10:00', '11:00', 'Prueba', null, t.distrital);
+  exception when others then bloqueado := true; end;
+  if not bloqueado then raise exception 'Se editó evento finalizado'; end if;
 end $$;
 reset role;

@@ -9,6 +9,7 @@ export interface Evento {
   hora_fin: string
   descripcion: string
   estado: 'pendiente' | 'activo' | 'finalizado'
+  firmas_configuradas?: boolean
 }
 export interface EscuelaCargoForm { cargo: string; escuela: string; externa: boolean; escuelaExterna: string }
 export interface DatosPersona { nombre: string; dni: string; escuelas: EscuelaCargoForm[]; email: string }
