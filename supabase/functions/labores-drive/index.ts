@@ -172,11 +172,14 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'quitar') {
-      const { data: a } = await user.from('labor_archivos').select('id, labor_id, drive_file_id').eq('id', Number(body?.archivo_id)).maybeSingle()
+      const { data: a } = await user.from('labor_archivos').select('id, labor_id, drive_file_id, historico').eq('id', Number(body?.archivo_id)).maybeSingle()
       if (!a) throw new HttpError(404, 'Archivo inexistente')
       await requireAutor(a.labor_id)
-      const token = await driveToken()
-      await fetch(`https://www.googleapis.com/drive/v3/files/${a.drive_file_id}?supportsAllDrives=true`, { method: 'PATCH', headers: { ...AUTH(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }) })
+      if (!a.historico) {
+        const token = await driveToken()
+        const r = await fetch(`https://www.googleapis.com/drive/v3/files/${a.drive_file_id}?supportsAllDrives=true`, { method: 'PATCH', headers: { ...AUTH(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }) })
+        if (!r.ok && r.status !== 404) throw new HttpError(503, 'No se pudo mover el archivo a la papelera de Drive')
+      }
       await admin.from('labor_archivos').delete().eq('id', a.id)
       return json({ ok: true })
     }

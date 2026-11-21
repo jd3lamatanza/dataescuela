@@ -11,13 +11,14 @@ import { Icon } from '../ui/Icon'
 export interface Archivo { id: number; nombre: string; mime: string | null; bytes: number | null; drive_file_id: string }
 export interface Labor {
   id: number; user_id: string; autor: string; fecha: string; motivo: string; acuerdos: string | null; equipo: boolean
+  escuela_historica: string | null; acuerdos_pendientes_historicos: string | null
   lugar: { nombre: string } | null; tipo: { nombre: string } | null; dimension: { nombre: string } | null; evento: { nombre: string } | null
   archivos: Archivo[]; participantes: { user_id: string; nombre: string }[]
 }
 interface Cat { id: number; nombre: string }
 interface Insp { user_id: string; nombre: string }
 
-export const SELECT = 'id,user_id,autor,fecha,motivo,acuerdos,equipo,lugar:catalogos!labores_lugar_id_fkey(nombre),tipo:catalogos!labores_tipo_id_fkey(nombre),dimension:catalogos!labores_dimension_id_fkey(nombre),evento:catalogos!labores_evento_id_fkey(nombre),archivos:labor_archivos(id,nombre,mime,bytes,drive_file_id),participantes:labor_inspectores(user_id,nombre)'
+export const SELECT = 'id,user_id,autor,fecha,motivo,acuerdos,equipo,escuela_historica,acuerdos_pendientes_historicos,lugar:catalogos!labores_lugar_id_fkey(nombre),tipo:catalogos!labores_tipo_id_fkey(nombre),dimension:catalogos!labores_dimension_id_fkey(nombre),evento:catalogos!labores_evento_id_fkey(nombre),archivos:labor_archivos(id,nombre,mime,bytes,drive_file_id),participantes:labor_inspectores(user_id,nombre)'
 const fmt = (d: string) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(d + 'T00:00:00Z'))
 const tam = (b: number | null) => (b == null ? '' : b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`)
 const COLS = [['lugar', 'labor_lugar', 'Lugar'], ['tipo', 'labor_tipo', 'Tipo'], ['dimension', 'labor_dimension', 'Dimensión'], ['evento', 'labor_evento', 'Evento']] as const
@@ -159,8 +160,10 @@ function Detalle({ l, propia, onClose }: { l: Labor; propia: boolean; onClose():
       <Modal title={l.motivo} onClose={onClose} wide>
         <dl class="grid gap-3 text-sm sm:grid-cols-2">
           {dato('Fecha', fmt(l.fecha))}{dato('Inspector', l.autor)}{dato('Evento', l.evento?.nombre)}{dato('Lugar', l.lugar?.nombre)}{dato('Tipo', l.tipo?.nombre)}{dato('Dimensión', l.dimension?.nombre)}
+          {l.escuela_historica && dato('Escuela (registro histórico)', l.escuela_historica)}
           {l.equipo && <div class="sm:col-span-2"><dt class="text-xs uppercase text-slate-500">Labor de Equipo Supervisivo · participantes</dt><dd>{l.participantes.map((p) => p.nombre).join(', ') || 'Ninguno'}</dd></div>}
           <div class="sm:col-span-2"><dt class="text-xs uppercase text-slate-500">Acuerdos</dt><dd class="whitespace-pre-line">{l.acuerdos || 'Sin acuerdos'}</dd></div>
+          {l.acuerdos_pendientes_historicos && <div class="sm:col-span-2"><dt class="text-xs uppercase text-slate-500">Acuerdos pendientes (registro histórico)</dt><dd class="whitespace-pre-line">{l.acuerdos_pendientes_historicos}</dd></div>}
         </dl>
         <h3 class="mb-1 mt-4 text-sm font-semibold text-slate-700">Probanza</h3>
         {l.archivos.length === 0 ? <p class="text-sm text-slate-500">Sin archivos.</p> : (
@@ -239,7 +242,7 @@ function Formulario({ item, cats, onClose, onDone }: { item: Partial<Labor>; cat
           <Lbl label="Fecha"><input class={FIELD} type="date" value={v.fecha} onInput={set('fecha')} required /></Lbl>
           {sel('evento', 'labor_evento', 'Evento')}{sel('lugar', 'labor_lugar', 'Lugar')}{sel('tipo', 'labor_tipo', 'Tipo')}{sel('dimension', 'labor_dimension', 'Dimensión')}
         </div>
-        <Lbl label="Motivo"><input class={FIELD} value={v.motivo} onInput={set('motivo')} required minLength={3} maxLength={200} /></Lbl>
+        <Lbl label="Motivo"><textarea class={`${FIELD} min-h-20 py-2`} value={v.motivo} onInput={set('motivo')} required minLength={3} maxLength={1000} /></Lbl>
         <Lbl label="Acuerdos"><textarea class={`${FIELD} min-h-24 py-2`} value={v.acuerdos} onInput={set('acuerdos')} maxLength={4000} /></Lbl>
         <Toggle checked={equipo} onChange={setEquipo} label="Labor de Equipo Supervisivo" />
         {equipo && (

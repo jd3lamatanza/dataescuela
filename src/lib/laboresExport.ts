@@ -11,8 +11,9 @@ export async function descargarListado(tipo: 'xlsx' | 'pdf', rows: Labor[], peri
     headers: ['Fecha', 'Inspector', 'Evento', 'Lugar', 'Tipo', 'Dimensión', 'Motivo', 'Equipo', 'Acuerdos', 'Probanzas (enlaces)'],
     widths: [10, 16, 14, 10, 10, 14, 22, 14, 24, 40],
     rows: rows.map((l) => [
-      l.fecha.split('-').reverse().join('/'), l.autor, l.evento?.nombre ?? '', l.lugar?.nombre ?? '', l.tipo?.nombre ?? '', l.dimension?.nombre ?? '', l.motivo,
-      l.equipo ? l.participantes.map((p) => p.nombre).join(', ') || 'Sí' : 'No', l.acuerdos ?? '',
+      l.fecha.split('-').reverse().join('/'), l.autor, l.evento?.nombre ?? '', [l.lugar?.nombre, l.escuela_historica && `Escuela: ${l.escuela_historica}`].filter(Boolean).join('\n'), l.tipo?.nombre ?? '', l.dimension?.nombre ?? '', l.motivo,
+      l.equipo ? l.participantes.map((p) => p.nombre).join(', ') || 'Sí' : 'No',
+      [l.acuerdos, l.acuerdos_pendientes_historicos && `Pendientes: ${l.acuerdos_pendientes_historicos}`].filter(Boolean).join('\n'),
       l.archivos.map((a) => `${a.nombre}: ${driveLink(a.drive_file_id)}`).join('  '),
     ]),
   }
