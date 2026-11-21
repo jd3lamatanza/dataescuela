@@ -5,6 +5,9 @@ import { useAsync } from '../lib/hooks'
 import { ROLE_LABELS, type Role } from '../modules'
 import { Alert, Card, BTN_PRIMARY, BTN_SECONDARY, FIELD, Lbl, Modal, RowMenu, Spinner, confirmar, toast } from './kit'
 import { Icon, iconOr } from './Icon'
+import { leerPaginas, sinEventosDeSalidas, type FuenteCalendario, type RegistroCalendario } from '../lib/calendarioDistrital'
+import { cargarCalendarioDistrital } from '../lib/calendarioDistritalDatos'
+import { href } from '../lib/router'
 
 export interface TipoEvento { id: number; nombre: string; icono: string; color: string; rol: Role; activo: boolean }
 export interface Evento {
@@ -24,6 +27,18 @@ const COLORS: Record<string, { dot: string; chip: string; card: string }> = {
   slate: { dot: 'bg-slate-500', chip: 'bg-slate-100 text-slate-800', card: 'border-slate-200 bg-slate-50 text-slate-700' },
 }
 export const col = (c?: string) => COLORS[c ?? ''] ?? COLORS.slate
+const FUENTES: Record<FuenteCalendario, { nombre: string; color: string; icono: string }> = {
+  acreditacion: { nombre: 'Acreditación', color: 'violet', icono: 'check' },
+  salida: { nombre: 'Salida Educativa', color: 'green', icono: 'bus' },
+  labor: { nombre: 'Labor', color: 'cyan', icono: 'clipboard' },
+  disposicion: { nombre: 'Disposición', color: 'amber', icono: 'clipboard' },
+  matricula: { nombre: 'Matrícula', color: 'orange', icono: 'chart' },
+  posesion: { nombre: 'Toma de posesión', color: 'slate', icono: 'users' },
+}
+type Entrada = { clase: 'evento'; evento: Evento } | { clase: 'registro'; registro: RegistroCalendario }
+const fechaEntrada = (e: Entrada) => e.clase === 'evento' ? e.evento.fecha : e.registro.fecha
+const nombreEntrada = (e: Entrada) => e.clase === 'evento' ? e.evento.nombre : e.registro.nombre
+const idEntrada = (e: Entrada) => e.clase === 'evento' ? `evento-${e.evento.id}` : e.registro.id
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const key = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -48,6 +63,7 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
   const setYm = ctl?.setYm ?? setYmLocal
   const [dia, setDia] = useState<string | null>(null)
   const [detalle, setDetalle] = useState<Evento | null>(null)
+  const [detalleRegistro, setDetalleRegistro] = useState<RegistroCalendario | null>(null)
   const [edit, setEdit] = useState<Partial<Evento> | null>(null)
 
   const celdas = useMemo(() => {
@@ -58,31 +74,44 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
   }, [ym])
   const desde = key(celdas[0]); const hasta = key(celdas[celdas.length - 1])
 
-  const { data, loading, error, reload } = useAsync(async () => {
-    const [e, t] = await Promise.all([
-      supabase.from('eventos').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha').order('id'),
-      supabase.from('evento_tipos').select('*').eq('activo', true).order('id'),
+  const { data, error, reload } = useAsync(async () => {
+    const [eventos, t, resultadoExtra] = await Promise.all([
+      leerPaginas<Evento>((a, b) => supabase.from('eventos').select('*').gte('fecha', desde).lte('fecha', hasta).order('id').range(a, b)),
+      supabase.from('evento_tipos').select('*').order('id'),
+      !ctl && user?.role === 'distrital'
+        ? cargarCalendarioDistrital(desde, hasta).then((datos) => ({ datos, error: '' })).catch((e: unknown) => ({ datos: null, error: e instanceof Error ? e.message : 'Error desconocido' }))
+        : Promise.resolve({ datos: null, error: '' }),
     ])
-    if (e.error) throw e.error
     if (t.error) throw t.error
-    return { eventos: e.data as Evento[], tipos: t.data as TipoEvento[] }
-  }, [desde, hasta, ctl?.version])
+    return { desde, hasta, usuario: user?.id, rol: user?.role, controlado: !!ctl, eventos: sinEventosDeSalidas(eventos, resultadoExtra.datos?.eventosSalidas ?? []), tipos: t.data as TipoEvento[], registros: resultadoExtra.datos?.registros ?? [], errorExtra: resultadoExtra.error }
+  }, [desde, hasta, ctl?.version, user?.id, user?.role, !!ctl])
 
+  const dataActual = data?.desde === desde && data.hasta === hasta && data.usuario === user?.id && data.rol === user?.role && data.controlado === !!ctl ? data : null
   const tipoFijo = ctl?.tipoNombre
-  const tipos = (data?.tipos ?? []).filter((t) => !tipoFijo || t.nombre === tipoFijo)
+  const tipos = (dataActual?.tipos ?? []).filter((t) => (t.activo || (!ctl && user?.role === 'distrital')) && (!tipoFijo || t.nombre === tipoFijo))
   const tipoDe = (id: number) => tipos.find((t) => t.id === id)
-  const propios = ctl?.tipoNombre ? [] : tipos.filter((t) => t.rol === user?.role)
+  const propios = ctl?.tipoNombre ? [] : tipos.filter((t) => t.activo && t.rol === user?.role)
   const porDia = useMemo(() => {
-    const m = new Map<string, Evento[]>()
-    for (const e of data?.eventos ?? []) if (tipos.some((t) => t.id === e.tipo_id) && (!ctl?.filtro || ctl.filtro(e))) m.set(e.fecha, [...(m.get(e.fecha) ?? []), e])
+    const m = new Map<string, Entrada[]>()
+    const agregar = (e: Entrada) => { const fecha = fechaEntrada(e); const lista = m.get(fecha); if (lista) lista.push(e); else m.set(fecha, [e]) }
+    for (const e of dataActual?.eventos ?? []) if (tipos.some((t) => t.id === e.tipo_id) && (!ctl?.filtro || ctl.filtro(e))) agregar({ clase: 'evento', evento: e })
+    for (const r of dataActual?.registros ?? []) agregar({ clase: 'registro', registro: r })
     return m
-  }, [data, ctl?.filtro, tipoFijo])
-  const resumen = (evs: Evento[]) => {
-    const m = new Map<number, number>()
-    evs.forEach((e) => m.set(e.tipo_id, (m.get(e.tipo_id) ?? 0) + 1))
-    return [...m.entries()].sort(([a], [b]) => a - b).map(([id, n]) => [tipoDe(id), n] as const)
+  }, [dataActual, ctl?.filtro, tipoFijo])
+  const tipoEntrada = (e: Entrada) => e.clase === 'evento' ? tipoDe(e.evento.tipo_id) : FUENTES[e.registro.fuente]
+  const resumen = (evs: Entrada[]) => {
+    const m = new Map<string, { nombre: string; icono: string; color: string; n: number }>()
+    evs.forEach((e) => {
+      const tipo = tipoEntrada(e)
+      if (!tipo) return
+      const id = e.clase === 'evento' ? `evento-${e.evento.tipo_id}` : e.registro.fuente
+      const actual = m.get(id)
+      if (actual) actual.n++
+      else m.set(id, { nombre: tipo.nombre, icono: tipo.icono, color: tipo.color, n: 1 })
+    })
+    return [...m.entries()]
   }
-  const delDia = useMemo(() => [...(dia ? porDia.get(dia) ?? [] : [])].sort((a, b) => a.tipo_id - b.tipo_id || a.id - b.id), [dia, porDia])
+  const delDia = useMemo(() => [...(dia ? porDia.get(dia) ?? [] : [])].sort((a, b) => nombreEntrada(a).localeCompare(nombreEntrada(b), 'es')), [dia, porDia])
 
   const ir = (delta: number) => {
     const d = new Date(ym.y, ym.m + delta, 1)
@@ -109,7 +138,8 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
           {propios.length > 0 && <button type="button" class={BTN_PRIMARY} onClick={() => setEdit({ fecha: hoy })}>Nuevo evento</button>}
         </div>
       </div>
-      {error && <Alert tone="error">{error}</Alert>}
+      {(error || dataActual?.errorExtra) && <div class="mb-2 space-y-2"><Alert tone="error">{error ? `No se pudo cargar el calendario: ${error}` : `No se pudieron cargar todos los registros distritales: ${dataActual?.errorExtra}`}</Alert><button type="button" class={BTN_SECONDARY} onClick={reload}>Reintentar</button></div>}
+      {!dataActual && !error && <p class="mb-2 text-sm text-slate-500">Cargando calendario…</p>}
 
       <div class="grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 text-center">
         {DIAS.map((d, i) => <div key={i} class="bg-slate-50 py-1.5 text-xs font-medium text-slate-500">{d}</div>)}
@@ -118,13 +148,13 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
           const evs = porDia.get(k) ?? []
           const fuera = d.getMonth() !== ym.m
           return (
-            <button key={k} type="button" onClick={() => { setDia(k); setDetalle(null) }} aria-label={`${diaLabel(k)}${evs.length ? `, ${evs.length} eventos` : ''}`}
+            <button key={k} type="button" onClick={() => { setDia(k); setDetalle(null); setDetalleRegistro(null) }} aria-label={`${diaLabel(k)}${evs.length ? `, ${evs.length} eventos` : ''}`}
               class={`flex min-h-14 flex-col items-center gap-1 p-1 text-sm sm:min-h-20 sm:items-start ${fuera ? 'bg-slate-50 text-slate-400' : 'bg-white text-slate-800'} hover:bg-sky-50`}>
               <span class={`flex size-7 items-center justify-center rounded-full text-xs font-medium ${k === hoy ? 'bg-sky-600 text-white' : ''}`}>{d.getDate()}</span>
               <span class="flex flex-wrap justify-center gap-0.5 sm:justify-start">
-                {resumen(evs).map(([t, n]) => (
-                  <span key={t?.id ?? 0} title={`${t?.nombre ?? 'Evento'}: ${n}`} class={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[11px] font-semibold leading-none ${col(t?.color).chip}`}>
-                    <Icon name={iconOr(t?.icono)} class="size-3.5" />{n}
+                {resumen(evs).map(([id, t]) => (
+                  <span key={id} title={`${t.nombre}: ${t.n}`} class={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[11px] font-semibold leading-none ${col(t.color).chip}`}>
+                    <Icon name={iconOr(t.icono)} class="size-3.5" />{t.n}
                   </span>
                 ))}
               </span>
@@ -133,15 +163,25 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
         })}
       </div>
 
-      {tipos.length > 0 && (
+      {(tipos.length > 0 || (!ctl && user?.role === 'distrital')) && (
         <ul class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600" aria-label="Referencias">
           {tipos.map((t) => <li key={t.id} class="flex items-center gap-1.5"><span class={`size-2.5 rounded-full ${col(t.color).dot}`} />{t.nombre}</li>)}
+          {!ctl && user?.role === 'distrital' && Object.entries(FUENTES).filter(([fuente]) => fuente !== 'salida' || !tipos.some((t) => t.nombre === 'Salida Educativa')).map(([fuente, t]) => <li key={fuente} class="flex items-center gap-1.5"><span class={`size-2.5 rounded-full ${col(t.color).dot}`} />{t.nombre}</li>)}
         </ul>
       )}
 
     {dia && !edit && (
-        <Modal title={detalle ? detalle.nombre : diaLabel(dia).replace(/^./, (c) => c.toUpperCase())} onClose={() => { setDia(null); setDetalle(null) }}>
-          {detalle ? (() => {
+        <Modal title={detalle?.nombre ?? detalleRegistro?.nombre ?? diaLabel(dia).replace(/^./, (c) => c.toUpperCase())} onClose={() => { setDia(null); setDetalle(null); setDetalleRegistro(null) }}>
+          {detalleRegistro ? <div class="space-y-4">
+            <div class="flex items-center gap-3"><span class={`flex size-12 shrink-0 items-center justify-center rounded-lg border ${col(FUENTES[detalleRegistro.fuente].color).card}`}><Icon name={iconOr(FUENTES[detalleRegistro.fuente].icono)} class="size-6" /></span>
+              <div><span class={`rounded px-1.5 py-0.5 text-xs font-medium ${col(FUENTES[detalleRegistro.fuente].color).chip}`}>{FUENTES[detalleRegistro.fuente].nombre}</span><p class="mt-1 text-sm capitalize text-slate-600">{diaLabel(detalleRegistro.fecha)}</p></div></div>
+            <dl class="space-y-2 text-sm">
+              {detalleRegistro.estado && <div><dt class="text-xs uppercase text-slate-500">Estado</dt><dd>{detalleRegistro.estado}</dd></div>}
+              {detalleRegistro.lugar && <div><dt class="text-xs uppercase text-slate-500">Lugar o destino</dt><dd>{detalleRegistro.lugar}</dd></div>}
+              <div><dt class="text-xs uppercase text-slate-500">Detalle</dt><dd class="whitespace-pre-line">{detalleRegistro.descripcion}</dd></div>
+            </dl>
+            <div class="flex flex-wrap justify-between gap-2"><button type="button" class={BTN_SECONDARY} onClick={() => setDetalleRegistro(null)}>Volver</button><a class={BTN_PRIMARY} href={href(detalleRegistro.enlace)}>Abrir módulo</a></div>
+          </div> : detalle ? (() => {
             const t = tipoDe(detalle.tipo_id); const c = col(t?.color)
             return (
               <div class="space-y-4">
@@ -168,15 +208,16 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
             )
           })() : (
             <div class="space-y-3">
-              {loading && !data ? <Spinner /> : delDia.length === 0 ? <p class="text-sm text-slate-500">Sin eventos este día.</p> : (
+              {!dataActual ? error ? <Alert tone="error">No se pudieron cargar los eventos de este mes.</Alert> : <Spinner /> : delDia.length === 0 ? <p class="text-sm text-slate-500">Sin eventos este día.</p> : (
                 <ul class="space-y-2">
-                  {delDia.map((e) => {
-                    const t = tipoDe(e.tipo_id); const c = col(t?.color)
+                  {delDia.map((entrada) => {
+                    const t = tipoEntrada(entrada); const c = col(t?.color)
+                    const autor = entrada.clase === 'evento' ? entrada.evento.autor : entrada.registro.estado
                     return (
-                      <li key={e.id}>
-                        <button type="button" onClick={() => setDetalle(e)} class="flex w-full items-center gap-3 rounded-lg border border-slate-200 p-3 text-left hover:border-sky-300 hover:bg-sky-50">
+                      <li key={idEntrada(entrada)}>
+                        <button type="button" onClick={() => entrada.clase === 'evento' ? setDetalle(entrada.evento) : setDetalleRegistro(entrada.registro)} class="flex w-full items-center gap-3 rounded-lg border border-slate-200 p-3 text-left hover:border-sky-300 hover:bg-sky-50">
                           <span class={`flex size-10 shrink-0 items-center justify-center rounded-lg border ${c.card}`}><Icon name={iconOr(t?.icono)} /></span>
-                          <span class="min-w-0 flex-1"><span class="block truncate font-medium text-slate-900">{e.nombre}</span><span class="block truncate text-xs text-slate-500">{t?.nombre ?? 'Evento'} · {e.autor}</span></span>
+                          <span class="min-w-0 flex-1"><span class="block truncate font-medium text-slate-900">{nombreEntrada(entrada)}</span><span class="block truncate text-xs text-slate-500">{t?.nombre ?? 'Evento'}{autor ? ` · ${autor}` : ''}</span></span>
                           <Icon name="chevr" class="size-4 shrink-0 text-slate-400" />
                         </button>
                       </li>
