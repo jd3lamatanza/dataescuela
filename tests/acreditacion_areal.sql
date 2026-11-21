@@ -1,11 +1,13 @@
 create temporary table acreditacion_areal_test as
 select (select id from public.profiles where role = 'areal' and active order by id limit 1) a,
        (select id from public.profiles where role = 'areal' and active order by id offset 1 limit 1) b,
-       (select id from public.profiles where role = 'distrital' and active limit 1) distrital,
+       (select p.id from public.profiles p where p.role = 'distrital' and p.active and p.permiso_avanzado limit 1) distrital,
        (select id from public.profiles where role = 'escolar' and active limit 1) escolar,
        (select id from public.escuelas limit 1) escuela,
        null::uuid evento, null::uuid ajeno, null::bigint firma;
 grant select, update on acreditacion_areal_test to authenticated, service_role;
+
+delete from public.simulaciones where actor_id = (select distrital from acreditacion_areal_test);
 
 do $$
 declare t record; v_firma bigint;
@@ -15,6 +17,14 @@ begin
   insert into public.acreditacion_firmas(nombre, mime, contenido, propietario_id)
     values ('Firma ficticia', 'image/png', decode('89504e470d0a1a0a', 'hex'), t.a) returning id into v_firma;
   update acreditacion_areal_test set firma = v_firma;
+  begin
+    insert into public.acreditacion_firmas(nombre, mime, contenido, propietario_id)
+      values ('Firma duplicada ficticia', 'image/png', decode('89504e470d0a1a0a', 'hex'), t.a);
+    raise exception 'Se aceptó una segunda firma del inspector';
+  exception when unique_violation then null; end;
+  insert into public.acreditacion_firmas(nombre, mime, contenido, propietario_id) values
+    ('Firma distrital ficticia 1', 'image/png', decode('89504e470d0a1a0a', 'hex'), null),
+    ('Firma distrital ficticia 2', 'image/png', decode('89504e470d0a1a0a', 'hex'), null);
 end $$;
 
 set local role service_role;
@@ -86,6 +96,15 @@ begin
   bloqueado := false;
   begin perform * from public.acreditacion_areal_personas(t.evento); exception when others then bloqueado := true; end;
   if not bloqueado then raise exception 'Una escuela accedió al listado areal'; end if;
+  perform set_config('request.jwt.claim.sub', t.distrital::text, true);
+  perform public.simular_iniciar(t.a);
+  if public.eff_uid() <> t.a or public.app_role() <> 'areal' then raise exception 'No se inició la simulación'; end if;
+  perform public.acreditacion_estado_evento(t.evento, 'finalizado');
+  bloqueado := false;
+  begin perform public.acreditacion_estado_evento(t.ajeno, 'activo'); exception when others then bloqueado := true; end;
+  if not bloqueado then raise exception 'La simulación modificó un evento ajeno'; end if;
+  perform public.acreditacion_estado_evento(t.evento, 'activo');
+  perform public.simular_salir();
 end $$;
 reset role;
 

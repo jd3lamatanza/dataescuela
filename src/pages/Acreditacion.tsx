@@ -55,7 +55,7 @@ function AcreditacionDistrital({ areal, usuario }: { areal: boolean; usuario: st
       {tab === 'evento' && <Eventos eventos={data} reload={reload} areal={areal} usuario={usuario} tieneFirma={!areal || !!firmas.data?.length} />}
       {tab === 'acreditacion' && <Listado eventos={data} areal={areal} />}
       {!areal && tab === 'constancias' && <Constancias eventos={data} reloadEventos={reload} />}
-      {tab === 'firmas' && <Firmas onChange={() => setFirmasVersion((v) => v + 1)} />}
+      {tab === 'firmas' && <Firmas areal={areal} onChange={() => setFirmasVersion((v) => v + 1)} />}
     </>}
   </>
 }
@@ -316,13 +316,14 @@ function Constancias({ eventos: lista, reloadEventos }: { eventos: Evento[]; rel
   </div>
 }
 
-function Firmas({ onChange }: { onChange?(): void }) {
+function Firmas({ areal, onChange }: { areal: boolean; onChange?(): void }) {
+  const { user } = useAuth()
   const { data, error, loading, reload } = useAsync(listarFirmas, [])
   const [busy, setBusy] = useState(false)
   const [nombre, setNombre] = useState(''), [file, setFile] = useState<File | null>(null), [fileVersion, setFileVersion] = useState(0)
   const cargar = async (e: Event) => {
     e.preventDefault()
-    if (!file || !nombre.trim()) { toast.error('Ingresá un nombre y elegí una imagen.'); return }
+    if (!file || (!areal && !nombre.trim())) { toast.error(areal ? 'Elegí una imagen.' : 'Ingresá un nombre y elegí una imagen.'); return }
     if (!['image/png', 'image/jpeg'].includes(file.type) || file.size > 2 * 1024 * 1024 || !file.size) { toast.error('Elegí una imagen PNG o JPEG de hasta 2 MB.'); return }
     setBusy(true)
     try {
@@ -332,7 +333,7 @@ function Firmas({ onChange }: { onChange?(): void }) {
         reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result.split(',')[1]) : reject(new Error('No se pudo leer la imagen.'))
         reader.readAsDataURL(file)
       })
-      await gestionarFirmas({ action: 'cargar', nombre: nombre.trim(), mime: file.type, base64 })
+      await gestionarFirmas({ action: 'cargar', ...(!areal ? { nombre: nombre.trim() } : {}), mime: file.type, base64 })
       setNombre(''); setFile(null); setFileVersion((v) => v + 1)
       toast.ok('Firma guardada'); reload(); onChange?.()
     } catch (e) { toast.error(errorText(e)) } finally { setBusy(false) }
@@ -344,15 +345,15 @@ function Firmas({ onChange }: { onChange?(): void }) {
     catch (e) { toast.error(errorText(e)) } finally { setBusy(false) }
   }
   return <Card title="Biblioteca de firmas digitales">
-    <p class="mb-3 text-sm text-slate-600">Guardá imágenes PNG o JPEG de hasta 2 MB en Google Drive y elegí cuáles usar al crear cada evento.</p>
+    <p class="mb-3 text-sm text-slate-600">{areal ? 'Podés cargar una firma PNG o JPEG de hasta 2 MB. Para cambiarla, eliminá la anterior y cargá la nueva.' : 'Guardá imágenes PNG o JPEG de hasta 2 MB en Google Drive y elegí cuáles usar al crear cada evento.'}</p>
     {error && <Alert tone="error">{error}</Alert>}
     {loading && !data && <Spinner />}
     <ul class="mb-3 space-y-2">{data?.map((f) => <li key={f.id} class="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-sm"><span class="flex min-w-0 items-center gap-2 break-all"><Icon name="attachment" class="size-4 shrink-0 text-sky-600" />{f.nombre}</span><AccionIcono icon="trash" label={`Quitar imagen ${f.nombre}`} danger disabled={busy} onClick={() => eliminar(f.id)} /></li>)}</ul>
-    <form class="space-y-3" onSubmit={cargar}>
-      <Lbl label="Nombre de la firma"><input class={FIELD} value={nombre} maxLength={150} required disabled={busy} onInput={(e) => setNombre(e.currentTarget.value)} /></Lbl>
+    {areal && data?.length ? <p class="text-sm text-slate-600">Ya tenés una firma cargada.</p> : <form class="space-y-3" onSubmit={cargar}>
+      {areal ? <p class="text-sm text-slate-600">Nombre de la firma: <strong>{user?.name}</strong></p> : <Lbl label="Nombre de la firma"><input class={FIELD} value={nombre} maxLength={150} required disabled={busy} onInput={(e) => setNombre(e.currentTarget.value)} /></Lbl>}
       <Lbl label="Imagen PNG o JPEG"><input key={fileVersion} type="file" accept="image/png,image/jpeg" class={FIELD} required disabled={busy} onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)} /></Lbl>
-      <button class={BTN_PRIMARY} type="submit" disabled={busy}><Icon name="plus" />{busy ? 'Guardando…' : 'Guardar firma'}</button>
-    </form>
+      <button class={BTN_PRIMARY} type="submit" disabled={busy || loading || !!error}><Icon name="plus" />{busy ? 'Guardando…' : 'Guardar firma'}</button>
+    </form>}
   </Card>
 }
 

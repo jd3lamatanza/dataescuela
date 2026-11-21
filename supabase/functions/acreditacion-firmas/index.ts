@@ -18,9 +18,12 @@ Deno.serve(async (req) => {
     const user = createClient(url, anon, { global: { headers: { Authorization: authorization } }, auth: { persistSession: false, autoRefreshToken: false } })
     const who = await user.auth.getUser()
     if (who.error || !who.data.user) throw new HttpError(401, 'Sesión inválida.')
-    const [role, real] = await Promise.all([user.rpc('app_role'), user.rpc('real_role')])
-    if (role.error || real.error) throw new HttpError(503, 'No se pudo verificar el acceso.')
-    if (!['distrital', 'areal'].includes(role.data) || role.data !== real.data) throw new HttpError(403, 'Sin permiso.')
+    const [perfil, real] = await Promise.all([user.rpc('mi_perfil'), user.rpc('real_role')])
+    if (perfil.error || real.error) throw new HttpError(503, 'No se pudo verificar el acceso.')
+    const efectivo = perfil.data
+    if (!efectivo || typeof efectivo.id !== 'string'
+      || !((efectivo.role === 'distrital' && real.data === 'distrital')
+        || (efectivo.role === 'areal' && (real.data === 'areal' || real.data === 'distrital')))) throw new HttpError(403, 'Sin permiso.')
     const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
     const body = await req.json()
     if (body?.action === 'guardar_evento' || body?.action === 'configurar_evento') {
@@ -29,7 +32,7 @@ Deno.serve(async (req) => {
         let ids: number[]
         try { ids = validarFirmas(body.firmas) }
         catch (e) { throw new HttpError(400, e instanceof Error ? e.message : 'Firmas inválidas.') }
-        const result = await admin.rpc('acreditacion_firmas_usuario', { p_usuario: who.data.user.id, p_ids: ids })
+        const result = await admin.rpc('acreditacion_firmas_usuario', { p_usuario: efectivo.id, p_ids: ids })
         if (result.error) throw new Error('No se pudieron consultar las firmas.')
         comprobarFirmas(ids, result.data)
         const token = result.data.some((f: { drive_file_id: string | null }) => f.drive_file_id) ? await tokenDrive() : null
@@ -40,15 +43,15 @@ Deno.serve(async (req) => {
         }))
       }
       if (body.action === 'configurar_evento') {
-        if (role.data !== 'distrital') throw new HttpError(403, 'Sin permiso.')
-        const result = await admin.rpc('acreditacion_configurar_firmas', { p_evento: body.id, p_firmas: firmas, p_usuario: who.data.user.id })
+        if (efectivo.role !== 'distrital') throw new HttpError(403, 'Sin permiso.')
+        const result = await admin.rpc('acreditacion_configurar_firmas', { p_evento: body.id, p_firmas: firmas, p_usuario: efectivo.id })
         if (result.error) throw new HttpError(400, result.error.message)
       } else {
         const e = body.evento
         if (!e || typeof e !== 'object') throw new HttpError(400, 'Evento inválido.')
         const result = await admin.rpc('acreditacion_guardar_evento_firmado', {
           p_id: e.id ?? null, p_nombre: e.nombre, p_lugar: e.lugar, p_fecha: e.fecha,
-          p_inicio: e.hora_inicio, p_fin: e.hora_fin, p_descripcion: e.descripcion, p_firmas: firmas, p_usuario: who.data.user.id,
+          p_inicio: e.hora_inicio, p_fin: e.hora_fin, p_descripcion: e.descripcion, p_firmas: firmas, p_usuario: efectivo.id,
         })
         if (result.error) throw new HttpError(400, result.error.message)
       }
@@ -59,7 +62,7 @@ Deno.serve(async (req) => {
       return json({ ok: true })
     }
     if (body?.action === 'listar') {
-      const { data: firmas, error } = await admin.rpc('acreditacion_firmas_usuario', { p_usuario: who.data.user.id, p_ids: null })
+      const { data: firmas, error } = await admin.rpc('acreditacion_firmas_usuario', { p_usuario: efectivo.id, p_ids: null })
       if (error) throw new Error('No se pudieron consultar las firmas.')
       const antiguas = firmas.filter((f: { drive_file_id: string | null }) => !f.drive_file_id)
       if (antiguas.length) {
@@ -80,17 +83,25 @@ Deno.serve(async (req) => {
       return json({ firmas: firmas.map((f: { id: number; nombre: string; mime: string }) => ({ id: f.id, nombre: f.nombre, mime: f.mime })) })
     }
     if (body?.action === 'cargar') {
-      const nombre = typeof body.nombre === 'string' ? body.nombre.trim() : ''
-      if (!nombre || nombre.length > 150 || /[\x00-\x1f\x7f]/.test(nombre)) throw new HttpError(400, 'Ingresá un nombre válido de hasta 150 caracteres.')
+      const nombre = efectivo.role === 'areal'
+        ? (typeof efectivo.name === 'string' ? efectivo.name.trim() : '')
+        : (typeof body.nombre === 'string' ? body.nombre.trim() : '')
+      if (!nombre || nombre.length > 150 || /[\x00-\x1f\x7f]/.test(nombre)) throw new HttpError(400, efectivo.role === 'areal' ? 'El nombre del perfil no es válido para la firma. Contactá a la Distrital.' : 'Ingresá un nombre válido de hasta 150 caracteres.')
+      if (efectivo.role === 'areal') {
+        const existentes = await admin.rpc('acreditacion_firmas_usuario', { p_usuario: efectivo.id, p_ids: null })
+        if (existentes.error) throw new Error('No se pudieron consultar las firmas.')
+        if (existentes.data.length) throw new HttpError(409, 'Ya tenés una firma. Eliminá la anterior antes de cargar otra.')
+      }
       const bytes = validarImagen(body.mime, body.base64)
       const token = await tokenDrive()
       const id = await subirFirma(token, nombre, body.mime, bytes)
-      const result = await admin.from('acreditacion_firmas').insert({ nombre, mime: body.mime, drive_file_id: id, propietario_id: role.data === 'areal' ? who.data.user.id : null })
+      const result = await admin.from('acreditacion_firmas').insert({ nombre, mime: body.mime, drive_file_id: id, propietario_id: efectivo.role === 'areal' ? efectivo.id : null })
       if (result.error) {
         try { await borrarFirma(token, id) } catch (e) {
           console.error('No se pudo limpiar la firma no registrada:', e)
           throw new Error('No se pudo registrar la firma ni limpiar el archivo en Drive. Revisá la carpeta antes de reintentar.')
         }
+        if (efectivo.role === 'areal' && result.error.code === '23505' && result.error.message.includes('acreditacion_firma_areal_unica')) throw new HttpError(409, 'Ya tenés una firma. Eliminá la anterior antes de cargar otra.')
         throw new Error('No se pudo registrar la firma. Volvé a intentarlo.')
       }
       return json({ ok: true })
@@ -98,7 +109,7 @@ Deno.serve(async (req) => {
     if (body?.action === 'eliminar') {
       if (!Number.isSafeInteger(body.id) || body.id <= 0) throw new HttpError(400, 'Firma inválida.')
       let consulta = admin.from('acreditacion_firmas').select('id,drive_file_id').eq('id', body.id)
-      consulta = role.data === 'areal' ? consulta.eq('propietario_id', who.data.user.id) : consulta.is('propietario_id', null)
+      consulta = efectivo.role === 'areal' ? consulta.eq('propietario_id', efectivo.id) : consulta.is('propietario_id', null)
       const result = await consulta.maybeSingle()
       if (result.error) throw new Error('No se pudo consultar la firma.')
       if (!result.data) throw new HttpError(404, 'Firma inexistente.')
