@@ -3,16 +3,17 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useAsync, useDebounced } from '../lib/hooks'
 import { descargarArchivo, enviarCorreo, primerNoPdf, subirArchivo, urlVistaPrevia } from '../lib/salidas'
-import { ROLE_LABELS, type Role } from '../modules'
-import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Spinner, Toggle, toast } from '../ui/kit'
+import { consultaSalidas, leerSalidasFiltradas, limpiarBusquedaSalidas, tablaSalidas, type SalidaListado } from '../lib/salidasListado'
+import { buildListadoXlsx } from '../lib/escuelasListado'
+import { buildPdf } from '../lib/export'
+import { descargar, XLSX_MIME } from '../lib/download'
+import { BRAND, ROLE_LABELS, type Role } from '../modules'
+import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, Spinner, Toggle, toast } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 import { col } from '../ui/Calendario'
 
 interface Estado { id: number; nombre: string; color: string; orden: number; activo: boolean }
-interface Salida {
-  id: number; user_id: string; cue: string; clave: string | null; escuela: string; titulo: string; fecha: string; destino: string
-  observaciones: string | null; estado_id: number; enviar_mail: boolean; mail_enviado_at: string | null; created_at: string
-}
+type Salida = SalidaListado
 interface Archivo { id: number; nombre: string; mime: string | null; bytes: number | null }
 interface Mensaje { id: number; rol: Role; autor: string; texto: string; estado_id: number | null; created_at: string }
 
@@ -23,6 +24,92 @@ const tam = (n: number | null) => (n == null ? '' : n < 1024 * 1024 ? `${Math.ma
 const EstadoChip = ({ e }: { e?: Estado }) => <span class={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${col(e?.color).chip}`}>{e?.nombre ?? '—'}</span>
 
 export function Salidas() {
+  const { user } = useAuth()
+  return user?.role === 'distrital' ? <SalidasDistrital key={user.id} /> : <SalidasGeneral key={user?.id} />
+}
+
+function SalidasDistrital() {
+  const [q, setQ] = useState('')
+  const [estado, setEstado] = useState('')
+  const [pagina, setPagina] = useState(1)
+  const [tamano, setTamano] = useState(20)
+  const [abierta, setAbierta] = useState<number | null>(null)
+  const [exportando, setExportando] = useState(false)
+  const busqueda = limpiarBusquedaSalidas(q)
+  const dq = useDebounced(busqueda)
+  const filtros = { busqueda: dq, estado }
+  const { data, loading, error, reload } = useAsync(async () => {
+    const [s, e] = await Promise.all([
+      consultaSalidas(supabase, filtros).range((pagina - 1) * tamano, pagina * tamano - 1),
+      supabase.from('salida_estados').select('*').order('orden'),
+    ])
+    if (s.error) throw s.error
+    if (e.error) throw e.error
+    if (s.count == null) throw new Error('No se pudo contar las salidas.')
+    return { salidas: s.data as Salida[], estados: e.data as Estado[], total: s.count, busqueda: dq, estado, pagina, tamano }
+  }, [dq, estado, pagina, tamano])
+
+  useEffect(() => {
+    if (!loading && !error && data && data.busqueda === dq && data.estado === estado && data.pagina === pagina && data.tamano === tamano && pagina > Math.max(1, Math.ceil(data.total / tamano))) {
+      setPagina(Math.max(1, Math.ceil(data.total / tamano)))
+    }
+  }, [loading, error, data, dq, estado, pagina, tamano])
+
+  const exportar = async (tipo: 'xlsx' | 'pdf') => {
+    setExportando(true)
+    try {
+      const salidas = await leerSalidasFiltradas(supabase, filtros)
+      if (!salidas.length) { toast.info('No hay salidas para exportar con estos filtros.'); return }
+      const tabla = tablaSalidas(salidas, data?.estados ?? [], filtros, BRAND.org)
+      if (tipo === 'xlsx') descargar(await buildListadoXlsx(tabla, BRAND.name, 'Salidas'), 'salidas-educativas.xlsx', XLSX_MIME)
+      else {
+        const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
+        if (!respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
+        descargar(await buildPdf(tabla, { brand: { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) }, maxCellLines: 30 }), 'salidas-educativas.pdf', 'application/pdf')
+      }
+    } catch (e) {
+      const mensaje = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e)
+      toast.error(`No se pudo exportar el listado: ${mensaje}`)
+    } finally { setExportando(false) }
+  }
+
+  const listo = !loading && !error && dq === busqueda && data?.busqueda === dq && data.estado === estado && data.pagina === pagina && data.tamano === tamano
+  return <>
+    <PageHeader title="Salida Educativa" subtitle="Solicitudes de las escuelas: revisá la documentación, dejá observaciones y actualizá el estado." />
+    <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <input type="search" class={FIELD} placeholder="Título, destino, escuela, clave o CUE" value={q} onInput={(e) => { setQ(e.currentTarget.value); setPagina(1) }} aria-label="Buscar salidas" />
+      <select class={FIELD} value={estado} onChange={(e) => { setEstado(e.currentTarget.value); setPagina(1) }} aria-label="Estado">
+        <option value="">Estado: todos</option>
+        {(data?.estados ?? []).map((x) => <option value={x.id}>{x.nombre}</option>)}
+      </select>
+      <select class={FIELD} value={tamano} onChange={(e) => { setTamano(Number(e.currentTarget.value)); setPagina(1) }} aria-label="Resultados por página">
+        {[10, 20, 50, 100].map((n) => <option value={n}>{n} por página</option>)}
+      </select>
+    </div>
+    <div class="mt-3 flex flex-wrap items-center gap-2">
+      <button type="button" class={BTN_SECONDARY} aria-label="Exportar salidas a Excel" disabled={!listo || exportando || !data?.total} onClick={() => void exportar('xlsx')}><Icon name="download" />Excel</button>
+      <button type="button" class={BTN_SECONDARY} aria-label="Exportar salidas a PDF" disabled={!listo || exportando || !data?.total} onClick={() => void exportar('pdf')}><Icon name="download" />PDF</button>
+      <span class="text-xs text-slate-500">{exportando ? 'Preparando exportación…' : 'Se exportan todos los resultados filtrados, no solo esta página.'}</span>
+    </div>
+    {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
+    <div class="mt-3 space-y-2">
+      {!listo ? !error && <Spinner /> : !data?.salidas.length ? <Card><EmptyState title="Sin salidas" text="No hay salidas con esos criterios." /></Card> : data.salidas.map((s) => (
+        <button key={s.id} type="button" onClick={() => setAbierta(s.id)} class="flex w-full items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm hover:border-sky-300 hover:bg-sky-50">
+          <span class={`flex size-10 shrink-0 items-center justify-center rounded-lg border ${col(data.estados.find((e) => e.id === s.estado_id)?.color).card}`}><Icon name="bus" /></span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate font-medium text-slate-900">{s.titulo}</span>
+            <span class="block truncate text-xs text-slate-500">{fecha(s.fecha)} · {s.destino} · {s.escuela}{s.clave ? ` (${s.clave})` : ''}</span>
+          </span>
+          <EstadoChip e={data.estados.find((e) => e.id === s.estado_id)} />
+        </button>
+      ))}
+    </div>
+    {listo && data && <>{data.total <= tamano && <p class="mt-3 text-sm text-slate-500">{data.total} salida(s)</p>}<Pager page={pagina} total={data.total} size={tamano} onPage={setPagina} /></>}
+    {abierta != null && <Detalle id={abierta} estados={data?.estados ?? []} onClose={() => setAbierta(null)} onChange={reload} />}
+  </>
+}
+
+function SalidasGeneral() {
   const { user } = useAuth()
   const distrito = user?.role === 'distrital'
   const escolar = user?.role === 'escolar'
