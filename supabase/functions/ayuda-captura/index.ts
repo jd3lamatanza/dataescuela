@@ -2,20 +2,6 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { tokenDrive } from '../_shared/firmas-drive.ts'
 
 const carpeta = '1HChSKnfT-wXedYF98-t08i5vFwCdx5m3'
-const capturas: Record<string, string> = {
-  inicio: '1tPNV9DcyJdfpiBZ-FsVv7a8KcfLJz96j',
-  mensajes: '1dYrgfkL6BOqwXXRbVh_YGTHX7yiMkJh9',
-  articulacion: '1t2gFbyg6C9td_0OmEQmZxG1YPI0mCUgY',
-  estadistica: '1FZ9-XwWIDr-8Wav7j2HVVfWgXLyF0IcY',
-  acreditacion: '1hkYwq_gD_wrg6MTBGAuBDK5xtwB985u3',
-  'mapa-escolar': '1zoe7XSEEUinEZ7k1ZTLmAYsxQvLm61Cn',
-  disposiciones: '146tQIjmVWVkfjGB9b9raY1se4M5lk45i',
-  fichas: '1Pf5qjGA89-a7mZVpV_HLojMkRxh_k77z',
-  planta: '1KoZDLukmi7xNTy8rMGyS4ZXUnKIfHjsa',
-  matricula: '1qw0luY4Zmo5DIwWd2aodlQKUdjBkMiTU',
-  salidas: '1GWyyO8Bj9Gh5w9UHbDn1BkdGbWZNSSOe',
-  eav: '16LYAOGIStc-pkMZuwVYuTld-lAWJmDbV',
-}
 const origin = Deno.env.get('APP_PUBLIC_URL') ? new URL(Deno.env.get('APP_PUBLIC_URL')!).origin : ''
 const cors = { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Cache-Control': 'private, no-store', Vary: 'Origin' }
 const json = (error: string, status: number) => new Response(JSON.stringify({ error }), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
@@ -31,13 +17,16 @@ Deno.serve(async (req) => {
     const user = createClient(url, anon, { global: { headers: { Authorization: authorization } }, auth: { persistSession: false, autoRefreshToken: false } })
     const who = await user.auth.getUser()
     if (who.error || !who.data.user) return json('Sesión inválida.', 401)
-    const [perfil, real] = await Promise.all([user.rpc('mi_perfil'), user.rpc('real_role')])
-    if (perfil.error || real.error) return json('No se pudo verificar el acceso.', 503)
-    if (perfil.data?.role !== 'escolar' || !['escolar', 'distrital'].includes(real.data)) return json('Sin permiso.', 403)
+    const [perfil, real, avanzado] = await Promise.all([user.rpc('mi_perfil'), user.rpc('real_role'), user.rpc('tiene_permiso_avanzado')])
+    if (perfil.error || real.error || avanzado.error) return json('No se pudo verificar el acceso.', 503)
+    if (!(perfil.data?.role === 'escolar' && ['escolar', 'distrital'].includes(real.data)) && avanzado.data !== true) return json('Sin permiso.', 403)
     let body: { captura?: unknown }
     try { body = await req.json() } catch { return json('Solicitud inválida.', 400) }
-    if (typeof body?.captura !== 'string' || !Object.hasOwn(capturas, body.captura)) return json('Captura inexistente.', 404)
-    const id = capturas[body.captura]
+    if (typeof body?.captura !== 'string' || !/^[a-z0-9-]{1,80}$/.test(body.captura)) return json('Captura inexistente.', 404)
+    const guia = await user.from('ayuda_guias').select('captura_drive').eq('id', body.captura).maybeSingle()
+    if (guia.error) throw new Error('No se pudo consultar la captura.')
+    if (!guia.data?.captura_drive) return json('Captura inexistente.', 404)
+    const id = guia.data.captura_drive
     const token = await tokenDrive()
     const headers = { Authorization: `Bearer ${token}` }
     const metadata = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true&fields=mimeType,parents,trashed,size`, { headers })

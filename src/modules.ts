@@ -65,13 +65,14 @@ export const MODULES: readonly AppModule[] = [
   { id: 'eav', label: 'Escuela de Verano', path: '/eav', icon: 'sun', roles: ['distrital'], primary: true },
   { id: 'eav-escolar', label: 'Escuela de Verano', path: '/eav-escolar', icon: 'sun', roles: ['escolar'], primary: true },
   { id: 'ayuda-escolar', label: 'Ayuda', path: '/ayuda-escolar', icon: 'book', roles: ['escolar'] },
+  { id: 'ayuda-distrital', label: 'Administrar ayuda', path: '/ayuda-distrital', icon: 'book', roles: ['distrital'] },
   { id: 'perfil', label: 'Mi perfil', path: '/perfil', icon: 'users', roles: ['distrital'], userMenu: true },
 ]
 
 export const canAccess = (m: AppModule, role: Role) => m.roles.includes(role)
 export const modulesFor = (role: Role) => MODULES.filter((m) => canAccess(m, role) && !m.userMenu)
 
-const SISTEMA_DISTRITAL = new Set(['simulado', 'usuarios-distrito', 'configuracion'])
+const SISTEMA_DISTRITAL = new Set(['simulado', 'usuarios-distrito', 'configuracion', 'ayuda-distrital'])
 export const canAccessUser = (m: AppModule, user: { role: Role; permiso_avanzado?: boolean }) =>
   canAccess(m, user.role) && (user.role !== 'distrital' || !SISTEMA_DISTRITAL.has(m.id) || user.permiso_avanzado === true)
 export const modulesForUser = (user: { role: Role; permiso_avanzado?: boolean }) =>

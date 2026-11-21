@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'preact/hooks'
-import { buscarGuias, GUIAS_ESCOLARES, type GuiaEscolar } from '../lib/ayudaEscolar'
+import { buscarGuias, type GuiaEscolar } from '../lib/ayudaEscolar'
+import { cargarGuias } from '../lib/ayudaEscolarDatos'
 import { href } from '../lib/router'
 import { supabase } from '../lib/supabase'
 import { MODULES } from '../modules'
@@ -8,11 +9,24 @@ import { Icon } from '../ui/Icon'
 
 export function AyudaEscolar() {
   const [buscar, setBuscar] = useState('')
-  const [seleccion, setSeleccion] = useState(GUIAS_ESCOLARES[0].id)
-  const resultados = useMemo(() => buscarGuias(buscar), [buscar])
+  const [seleccion, setSeleccion] = useState('')
+  const [guias, setGuias] = useState<GuiaEscolar[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [error, setError] = useState('')
+  const [intento, setIntento] = useState(0)
+  useEffect(() => {
+    let activa = true
+    setCargando(true); setError('')
+    cargarGuias().then((data) => { if (activa) setGuias(data) })
+      .catch((e) => { if (activa) setError(e instanceof Error ? e.message : 'No se pudieron cargar las guías.') })
+      .finally(() => { if (activa) setCargando(false) })
+    return () => { activa = false }
+  }, [intento])
+  const resultados = useMemo(() => buscarGuias(guias, buscar), [guias, buscar])
   const guia = resultados.find((g) => g.id === seleccion) ?? resultados[0]
   return <>
     <PageHeader title="Ayuda para escuelas" subtitle="Guías paso a paso para usar DataEscuela." />
+    {cargando ? <Spinner /> : error ? <div class="space-y-2"><Alert tone="error">{error}</Alert><button type="button" class={BTN_SECONDARY} onClick={() => setIntento((i) => i + 1)}>Reintentar</button></div> :
     <div class="grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
       <aside aria-label="Buscar y elegir una guía">
         <label class="block text-sm font-medium text-slate-700" for="ayuda-busqueda">Buscar en la ayuda</label>
@@ -22,31 +36,30 @@ export function AyudaEscolar() {
             const modulo = MODULES.find((m) => m.id === g.modulo)
             return <button type="button" key={g.id} aria-pressed={guia?.id === g.id} onClick={() => setSeleccion(g.id)}
               class={`flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm ${guia?.id === g.id ? 'bg-sky-100 font-semibold text-sky-900' : 'text-slate-700 hover:bg-slate-100'}`}>
-              <Icon name={modulo?.icon ?? 'book'} class="size-4 shrink-0" />{modulo?.label ?? g.id}
+              <Icon name={modulo?.icon ?? 'book'} class="size-4 shrink-0" />{g.titulo}
             </button>
           })}
         </nav>
       </aside>
-      {guia ? <Guia key={guia.id} guia={guia} /> : <Card><p class="text-sm text-slate-600">No encontramos guías con esos términos. Probá otra búsqueda.</p></Card>}
-    </div>
+      {guia ? <Guia key={guia.id} guia={guia} /> : <Card><p class="text-sm text-slate-600">{guias.length ? 'No encontramos guías con esos términos. Probá otra búsqueda.' : 'Todavía no hay guías publicadas.'}</p></Card>}
+    </div>}
   </>
 }
 
 function Guia({ guia }: { guia: GuiaEscolar }) {
   const modulo = MODULES.find((m) => m.id === guia.modulo)
-  if (!modulo) return <Alert tone="error">No se encontró el módulo de esta guía.</Alert>
   return <article class="min-w-0 space-y-4">
-    <Card title={modulo.label} action={<a href={href(modulo.path)} class={BTN_SECONDARY}>Abrir módulo <Icon name="external" class="size-4" /></a>}>
+    <Card title={guia.titulo} action={modulo && <a href={href(modulo.path)} class={BTN_SECONDARY}>Abrir módulo <Icon name="external" class="size-4" /></a>}>
       <p class="text-sm text-slate-600">{guia.descripcion}</p>
     </Card>
-    <Captura id={guia.captura} titulo={modulo.label} />
-    {guia.secciones.map((seccion) => <Card key={seccion.titulo} title={seccion.titulo}>
-      <ol class="list-decimal space-y-2 pl-5 text-sm leading-6 text-slate-700">{seccion.pasos.map((paso) => <li key={paso}>{paso}</li>)}</ol>
+    {guia.captura_drive && <Captura id={guia.id} titulo={guia.titulo} />}
+    {guia.secciones.map((seccion, i) => <Card key={i} title={seccion.titulo}>
+      <ol class="list-decimal space-y-2 pl-5 text-sm leading-6 text-slate-700">{seccion.pasos.map((paso, j) => <li key={j}>{paso}</li>)}</ol>
     </Card>)}
   </article>
 }
 
-function Captura({ id, titulo }: { id: string; titulo: string }) {
+export function Captura({ id, titulo }: { id: string; titulo: string }) {
   const [url, setUrl] = useState('')
   const [error, setError] = useState('')
   const [version, setVersion] = useState(0)
@@ -71,14 +84,14 @@ function Captura({ id, titulo }: { id: string; titulo: string }) {
     return () => { activa = false; if (objeto) URL.revokeObjectURL(objeto) }
   }, [id, version])
   return <Card title="Captura de pantalla">
-    <p class="mb-3 text-xs text-slate-500">Ejemplo con datos ficticios. Tocá la imagen para ampliarla.</p>
+    <p class="mb-3 text-xs text-slate-500">Tocá la imagen para ampliarla.</p>
     {error ? <div class="space-y-2"><Alert tone="error">No se pudo cargar la captura: {error}</Alert><button type="button" class={BTN_SECONDARY} onClick={() => setVersion((v) => v + 1)}>Reintentar</button></div>
       : !url ? <Spinner /> : <button type="button" class="block w-full overflow-hidden rounded-lg border border-slate-200 text-left focus:outline-none focus:ring-2 focus:ring-sky-500" aria-label={`Ampliar captura de ${titulo}`} onClick={() => setAmpliada(true)}>
-        <img src={url} alt={`Vista de ${titulo} con datos de ejemplo`} class="block h-auto w-full" />
+        <img src={url} alt={`Captura de ${titulo}`} class="block h-auto w-full" />
       </button>}
     {ampliada && url && <Modal title={`Captura: ${titulo}`} onClose={() => setAmpliada(false)} wide>
       <p class="mb-2 text-xs text-slate-500">Deslizá horizontalmente para recorrer la imagen ampliada.</p>
-      <div class="overflow-x-auto"><img src={url} alt={`Vista ampliada de ${titulo} con datos de ejemplo`} class="block h-auto w-[1100px] max-w-none" /></div>
+      <div class="overflow-x-auto"><img src={url} alt={`Captura ampliada de ${titulo}`} class="block h-auto w-[1100px] max-w-none" /></div>
     </Modal>}
   </Card>
 }
