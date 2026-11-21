@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
-import { buscarGuias } from '../src/lib/ayudaEscolar.ts'
+import { buscarGuias, idVideoYoutube } from '../src/lib/ayudaEscolar.ts'
 import { canAccess, canAccessUser, MODULES, ROLES } from '../src/modules.ts'
 import { agruparMenuDistrital } from '../src/ui/sidebarDistrital.ts'
 
@@ -32,6 +32,11 @@ test('la búsqueda utiliza los textos editados y admite búsquedas sin tildes', 
   assert.equal(buscarGuias(editada, 'termino inexistente').length, 0)
 })
 
+test('acepta enlaces de YouTube legítimos y rechaza enlaces engañosos o inválidos', () => {
+  for (const url of ['https://youtu.be/abcd1234_-Z?t=5', 'https://www.youtube.com/watch?v=abcd1234_-Z', 'https://m.youtube.com/shorts/abcd1234_-Z']) assert.equal(idVideoYoutube(url), 'abcd1234_-Z')
+  for (const url of ['http://youtube.com/watch?v=abcd1234_-Z', 'https://youtube.com.evil.test/watch?v=abcd1234_-Z', 'https://evil.test/?v=abcd1234_-Z', 'https://youtube.com/watch?v=no', 'javascript:alert(1)']) assert.equal(idVideoYoutube(url), null)
+})
+
 function cargarFuncion(nombre, entorno) {
   let handler
   const source = readFileSync(new URL(`../supabase/functions/${nombre}/index.ts`, import.meta.url), 'utf8')
@@ -45,19 +50,22 @@ function cargarFuncion(nombre, entorno) {
   return (body) => handler(new Request('https://example.test', { method: 'POST', headers: { authorization: 'Bearer prueba', 'Content-Type': 'application/json' }, body: JSON.stringify(body) }))
 }
 
-function lectura({ rol = 'escolar', real = rol, avanzado = false, carpeta = true, png = true } = {}) {
-  const bytes = Uint8Array.from(png ? [137, 80, 78, 71, 13, 10, 26, 10] : [1, 2, 3])
+function lectura({ rol = 'escolar', real = rol, avanzado = false, carpeta = true, png = true, jpeg = false } = {}) {
+  const bytes = Uint8Array.from(png ? (jpeg ? [255, 216, 255] : [137, 80, 78, 71, 13, 10, 26, 10]) : [1, 2, 3])
   const llamadas = []
   const user = {
     auth: { getUser: async () => ({ data: { user: { id: 'actor' } }, error: null }) },
     rpc: async (name) => ({ data: name === 'mi_perfil' ? { role: rol } : name === 'real_role' ? real : avanzado, error: null }),
-    from: () => ({ select: () => ({ eq: (_key, id) => ({ maybeSingle: async () => ({ data: seed.find((g) => g.id === id) ?? null, error: null }) }) }) }),
+    from: () => ({ select: () => ({ eq: (_key, id) => ({ maybeSingle: async () => {
+      const guia = seed.find((g) => g.id === id)
+      return { data: guia ? { ...guia, secciones: [{ ...guia.secciones[0], medios: [{ imagen_drive: 'imagen_de_paso_123' }] }] } : null, error: null }
+    } }) }) }),
   }
   const enviar = cargarFuncion('ayuda-captura', {
     user, drive: { tokenDrive: async () => 'ficticio' },
     fetch: async (url) => {
       llamadas.push(url)
-      return url.includes('alt=media') ? new Response(bytes) : Response.json({ mimeType: 'image/png', parents: [carpeta ? '1HChSKnfT-wXedYF98-t08i5vFwCdx5m3' : 'otra'], trashed: false, size: String(bytes.length) })
+      return url.includes('alt=media') ? new Response(bytes) : Response.json({ mimeType: jpeg ? 'image/jpeg' : 'image/png', parents: [carpeta ? '1HChSKnfT-wXedYF98-t08i5vFwCdx5m3' : 'otra'], trashed: false, size: String(bytes.length) })
     },
   })
   return { enviar, llamadas }
@@ -73,6 +81,16 @@ test('las capturas permiten Escolar, simulación y Distrital avanzado; rechazan 
     assert.equal((await s.enviar({ captura: 'inicio' })).status, 403)
     assert.equal(s.llamadas.length, 0)
   }
+})
+
+test('sirve únicamente imágenes pertenecientes a los pasos de la guía autorizada', async () => {
+  const s = lectura({ jpeg: true })
+  assert.equal((await s.enviar({ captura: 'inicio', imagen: 'imagen_de_paso_123' })).status, 200)
+  const ajena = lectura()
+  assert.equal((await ajena.enviar({ captura: 'inicio', imagen: 'archivo_no_asociado' })).status, 404)
+  assert.equal(ajena.llamadas.length, 0)
+  assert.equal((await lectura({ rol: 'areal' }).enviar({ captura: 'inicio', imagen: 'imagen_de_paso_123' })).status, 403)
+  assert.equal((await lectura({ jpeg: true, png: false }).enviar({ captura: 'inicio', imagen: 'imagen_de_paso_123' })).status, 503)
 })
 
 test('las capturas deben existir en la carpeta y contener PNG válido', async () => {
@@ -112,8 +130,8 @@ function gestion({ permitido = true, conflicto = false } = {}) {
   const enviar = cargarFuncion('ayuda-gestionar', {
     user,
     drive: { tokenDrive: async () => 'token', validarImagen: (mime, data) => {
-      if (mime !== 'image/png' || data !== 'png-valido') throw Error('imagen inválida')
-      return Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10])
+      if (!['image/png', 'image/jpeg'].includes(mime) || data !== 'png-valido') throw Error('imagen inválida')
+      return Uint8Array.from(mime === 'image/png' ? [137, 80, 78, 71, 13, 10, 26, 10] : [255, 216, 255])
     }, borrarFirma: async (_token, id) => { borradas.push(id) } },
     fetch: async () => { subidas.push(true); return Response.json({ id: 'captura_nueva_123' }) },
   })
@@ -149,4 +167,29 @@ test('valida contenido, captura y conflictos sin sobrescribir cambios ajenos', a
   const carrera = gestion({ conflicto: true })
   assert.equal((await carrera.enviar({ accion: 'guardar', guia, imagen: { mime: 'image/png', base64: 'png-valido' } })).status, 409)
   assert.deepEqual(carrera.borradas, ['captura_nueva_123'])
+})
+
+test('guarda y conserva la imagen y el video de un paso, sin permitir IDs ajenos', async () => {
+  const s = gestion()
+  const guia = { modulo: 'inicio', titulo: 'Guía', descripcion: 'Descripción', secciones: [{ titulo: 'Sección', pasos: ['Uno', 'Dos'], medios: [{ youtube: 'abcd1234_-Z' }, null] }] }
+  const response = await s.enviar({ accion: 'guardar', guia, imagenes_pasos: [{ seccion: 0, paso: 0, mime: 'image/jpeg', base64: 'png-valido' }] })
+  assert.equal(response.status, 200)
+  const creado = (await response.json()).guia
+  assert.equal(creado.secciones[0].medios[0].imagen_drive, 'captura_nueva_123')
+  assert.equal(creado.secciones[0].medios[0].youtube, 'abcd1234_-Z')
+  const editado = await s.enviar({ accion: 'guardar', guia: { ...creado, titulo: 'Editada' } })
+  assert.equal(editado.status, 200)
+  assert.equal((await editado.json()).guia.secciones[0].medios[0].imagen_drive, 'captura_nueva_123')
+  const ajena = await s.enviar({ accion: 'guardar', guia: { ...guia, secciones: [{ ...guia.secciones[0], medios: [{ imagen_drive: 'archivo_no_asociado' }, null] }] } })
+  assert.equal(ajena.status, 400)
+  const videoMalicioso = await s.enviar({ accion: 'guardar', guia: { ...guia, secciones: [{ ...guia.secciones[0], medios: [{ youtube: 'javascript:alert(1)' }, null] }] } })
+  assert.equal(videoMalicioso.status, 400)
+  assert.equal((await s.enviar({ accion: 'guardar', guia, imagenes_pasos: [{ seccion: 9, paso: 0, mime: 'image/png', base64: 'png-valido' }] })).status, 400)
+})
+
+test('un conflicto concurrente limpia la imagen nueva del paso', async () => {
+  const s = gestion({ conflicto: true })
+  const guia = { ...seed[0], version: 1 }
+  assert.equal((await s.enviar({ accion: 'guardar', guia, imagenes_pasos: [{ seccion: 0, paso: 0, mime: 'image/png', base64: 'png-valido' }] })).status, 409)
+  assert.deepEqual(s.borradas, ['captura_nueva_123'])
 })

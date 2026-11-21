@@ -54,12 +54,24 @@ function Guia({ guia }: { guia: GuiaEscolar }) {
     </Card>
     {guia.captura_drive && <Captura id={guia.id} titulo={guia.titulo} />}
     {guia.secciones.map((seccion, i) => <Card key={i} title={seccion.titulo}>
-      <ol class="list-decimal space-y-2 pl-5 text-sm leading-6 text-slate-700">{seccion.pasos.map((paso, j) => <li key={j}>{paso}</li>)}</ol>
+      <ol class="list-decimal space-y-4 pl-5 text-sm leading-6 text-slate-700">{seccion.pasos.map((paso, j) => {
+        const medio = seccion.medios?.[j]
+        return <li key={j}>
+          <p>{paso}</p>
+          {medio?.imagen_drive && <div class="mt-3"><Captura id={guia.id} titulo={`${guia.titulo}, paso ${j + 1}`} imagen={medio.imagen_drive} /></div>}
+          {medio?.youtube && /^[A-Za-z0-9_-]{11}$/.test(medio.youtube) && <div class="mt-3">
+            <iframe class="aspect-video w-full max-w-3xl rounded-lg" src={`https://www.youtube-nocookie.com/embed/${medio.youtube}`}
+              title={`Video: ${guia.titulo}, paso ${j + 1}`} loading="lazy" referrerPolicy="strict-origin-when-cross-origin"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
+            <a class="text-sky-700 underline" href={`https://www.youtube.com/watch?v=${medio.youtube}`} target="_blank" rel="noopener noreferrer">Abrir video en YouTube</a>
+          </div>}
+        </li>
+      })}</ol>
     </Card>)}
   </article>
 }
 
-export function Captura({ id, titulo }: { id: string; titulo: string }) {
+export function Captura({ id, titulo, imagen }: { id: string; titulo: string; imagen?: string }) {
   const [url, setUrl] = useState('')
   const [error, setError] = useState('')
   const [version, setVersion] = useState(0)
@@ -70,10 +82,12 @@ export function Captura({ id, titulo }: { id: string; titulo: string }) {
     setUrl(''); setError('')
     const cargar = async () => {
       try {
-        const { data, error: fallo } = await supabase.functions.invoke('ayuda-captura', { body: { captura: id } })
+        const { data, error: fallo } = await supabase.functions.invoke('ayuda-captura', { body: { captura: id, imagen } })
         if (fallo) throw fallo
         if (!(data instanceof Blob) || data.type !== 'application/octet-stream') throw new Error('La respuesta no es una captura válida.')
-        objeto = URL.createObjectURL(new Blob([data], { type: 'image/png' }))
+        const firma = new Uint8Array(await data.slice(0, 8).arrayBuffer())
+        const mime = firma[0] === 255 && firma[1] === 216 && firma[2] === 255 ? 'image/jpeg' : 'image/png'
+        objeto = URL.createObjectURL(new Blob([data], { type: mime }))
         if (activa) setUrl(objeto)
         else URL.revokeObjectURL(objeto)
       } catch (e) {
@@ -82,7 +96,7 @@ export function Captura({ id, titulo }: { id: string; titulo: string }) {
     }
     void cargar()
     return () => { activa = false; if (objeto) URL.revokeObjectURL(objeto) }
-  }, [id, version])
+  }, [id, imagen, version])
   return <Card title="Captura de pantalla">
     <p class="mb-3 text-xs text-slate-500">Tocá la imagen para ampliarla.</p>
     {error ? <div class="space-y-2"><Alert tone="error">No se pudo cargar la captura: {error}</Alert><button type="button" class={BTN_SECONDARY} onClick={() => setVersion((v) => v + 1)}>Reintentar</button></div>
