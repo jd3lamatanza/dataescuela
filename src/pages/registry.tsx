@@ -28,6 +28,7 @@ import { Acreditacion } from './Acreditacion'
 import { MapaEscolar } from './MapaEscolar'
 import { CircuitosElectorales, Nudos } from './Nudos'
 import { Disposiciones } from './Disposiciones'
+import { AyudaEscolar } from './AyudaEscolar'
 
 const Pendiente = (titulo: string) => () => (
   <>
@@ -45,6 +46,7 @@ export const PAGES: Record<string, ComponentType> = {
   turnos: Turnos,
   inspectores: Inspectores,
   disposiciones: Disposiciones,
+  'ayuda-escolar': AyudaEscolar,
   perfil: Perfil,
   'agenda-areal': Agenda,
   'agenda-distrito': Agenda,
