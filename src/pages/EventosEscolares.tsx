@@ -3,7 +3,7 @@ import { useAuth } from '../lib/auth'
 import { useAsync } from '../lib/hooks'
 import { setParams, useRoute } from '../lib/router'
 import { supabase } from '../lib/supabase'
-import { escuelaArticulada, escuelaEvento, escuelaRealizacion, leerEscuelasEventos, leerRealizaciones, leerSeguimiento, leerTiposEscolares, tablaSeguimiento, type EscuelaEvento, type RealizacionEscolar, type TipoEventoEscolar } from '../lib/eventosEscolares'
+import { escuelaArticulada, escuelaEvento, escuelaRealizacion, horarioRealizacion, leerEscuelasEventos, leerRealizaciones, leerSeguimiento, leerTiposEscolares, ordenarTiposEscolares, tablaSeguimiento, type EscuelaEvento, type OrdenEventos, type RealizacionEscolar, type TipoEventoEscolar } from '../lib/eventosEscolares'
 import { buildListadoXlsx } from '../lib/escuelasListado'
 import { buildPdf } from '../lib/export'
 import { descargar, XLSX_MIME } from '../lib/download'
@@ -45,27 +45,58 @@ export function EventosEscolares() {
 function Catalogo({ onChange }: { onChange(): void }) {
   const [nombre, setNombre] = useState('')
   const [guardando, setGuardando] = useState(false)
+  const [editando, setEditando] = useState<TipoEventoEscolar | null>(null)
+  const [busqueda, setBusqueda] = useState('')
+  const [orden, setOrden] = useState<OrdenEventos>('nombre-asc')
   const { data, error, loading, reload } = useAsync(leerTiposEscolares, [])
   const guardar = async (e: Event) => {
     e.preventDefault()
     setGuardando(true)
     try {
-      const { error } = await supabase.rpc('eventos_escolares_crear_tipo', { p_nombre: nombre })
+      const { error } = editando
+        ? await supabase.rpc('eventos_escolares_renombrar_tipo', { p_id: editando.id, p_nombre: nombre })
+        : await supabase.rpc('eventos_escolares_crear_tipo', { p_nombre: nombre })
       if (error) throw error
-      setNombre(''); reload(); onChange(); toast.ok('Evento creado')
-    } catch (e) { toast.error(`No se pudo crear el evento: ${mensajeError(e)}`) }
+      setNombre(''); setEditando(null); reload(); onChange(); toast.ok(editando ? 'Evento actualizado' : 'Evento creado')
+    } catch (e) { toast.error(`No se pudo guardar el evento: ${mensajeError(e)}`) }
     finally { setGuardando(false) }
   }
+  const eliminar = async (evento: TipoEventoEscolar) => {
+    if (!(await confirmar('Eliminar evento', { text: `Se eliminará «${evento.nombre}» si no tiene realizaciones registradas.`, ok: 'Eliminar', danger: true }))) return
+    setGuardando(true)
+    try {
+      const { error } = await supabase.rpc('eventos_escolares_eliminar_tipo', { p_id: evento.id })
+      if (error) throw error
+      if (editando?.id === evento.id) { setEditando(null); setNombre('') }
+      reload(); onChange(); toast.ok('Evento eliminado')
+    } catch (e) { toast.error(`No se pudo eliminar el evento: ${mensajeError(e)}`) }
+    finally { setGuardando(false) }
+  }
+  const filas = ordenarTiposEscolares(data ?? [], busqueda, orden)
   return <div class="mt-4 space-y-4">
-    <Card title="Crear evento">
+    <Card title={editando ? 'Editar evento' : 'Crear evento'}>
       <form class="flex flex-wrap items-end gap-3" onSubmit={(e) => void guardar(e)}>
         <div class="min-w-0 flex-1"><Lbl label="Nombre del evento"><input class={FIELD} value={nombre} minLength={2} maxLength={150} required disabled={guardando} onInput={(e) => setNombre(e.currentTarget.value)} /></Lbl></div>
-        <button class={BTN_PRIMARY} disabled={guardando}>{guardando ? 'Guardando…' : 'Crear evento'}</button>
+        {editando && <button type="button" class={BTN_SECONDARY} disabled={guardando} onClick={() => { setEditando(null); setNombre('') }}>Cancelar</button>}
+        <button class={BTN_PRIMARY} disabled={guardando}>{guardando ? 'Guardando…' : editando ? 'Guardar cambios' : 'Crear evento'}</button>
       </form>
+      {editando && <p class="mt-2 text-xs text-slate-500">El nuevo nombre también se mostrará en las realizaciones existentes.</p>}
     </Card>
     <Card title="Eventos disponibles">
+      <div class="mb-3 grid gap-3 sm:grid-cols-2">
+        <Lbl label="Buscar evento"><input type="search" class={FIELD} value={busqueda} onInput={(e) => setBusqueda(e.currentTarget.value)} /></Lbl>
+        <Lbl label="Ordenar por"><select class={FIELD} value={orden} onChange={(e) => setOrden(e.currentTarget.value as OrdenEventos)}>
+          <option value="nombre-asc">Nombre: A a Z</option><option value="nombre-desc">Nombre: Z a A</option>
+          <option value="recientes">Más recientes</option><option value="antiguos">Más antiguos</option>
+        </select></Lbl>
+      </div>
       {error ? <Alert tone="error">{error}</Alert> : loading ? <Spinner /> : !data?.length ? <EmptyState title="Todavía no hay eventos" text="Creá uno para que las escuelas puedan registrarlo." /> :
-        <ul class="divide-y divide-slate-100">{[...data].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map((e) => <li key={e.id} class="py-2 text-sm font-medium text-slate-800">{e.nombre}</li>)}</ul>}
+        !filas.length ? <EmptyState title="Sin resultados" text="No hay eventos con esa búsqueda." /> :
+          <ul class="divide-y divide-slate-100">{filas.map((e) => <li key={e.id} class="flex flex-wrap items-center justify-between gap-2 py-2 text-sm font-medium text-slate-800">
+            <span class="min-w-0 break-words">{e.nombre}</span><span class="flex gap-2">
+              <button type="button" class={BTN_SECONDARY} disabled={guardando} aria-label={`Editar ${e.nombre}`} onClick={() => { setEditando(e); setNombre(e.nombre) }}>Editar</button>
+              <button type="button" class={BTN_SECONDARY} disabled={guardando} aria-label={`Eliminar ${e.nombre}`} onClick={() => void eliminar(e)}>Eliminar</button>
+            </span></li>)}</ul>}
     </Card>
   </div>
 }
@@ -169,7 +200,7 @@ function Realizaciones({ cue, escolar, onChange }: { cue: string | null; escolar
         <div class="space-y-3">{filas.slice((pagina - 1) * TAMANO, pagina * TAMANO).map((r) => <Card key={r.id}>
           <div class="flex flex-wrap items-start justify-between gap-3"><div class="min-w-0 flex-1">
             <h2 class="break-words font-semibold text-slate-900">{r.evento}</h2>
-            <p class="mt-1 text-sm text-slate-600">{fecha(r.fecha)} · {r.hora_inicio.slice(0, 5)} a {r.hora_fin.slice(0, 5)} · {r.lugar}</p>
+            <p class="mt-1 text-sm text-slate-600">{fecha(r.fecha)} · {horarioRealizacion(r)} · {r.lugar}</p>
             <p class="mt-1 text-sm text-slate-600">{escuelaRealizacion(r)}{escuelaArticulada(r) && ` · Articulado con ${escuelaArticulada(r)}`}</p>
           </div><div class="flex flex-wrap gap-2">
             <button type="button" class={BTN_SECONDARY} onClick={() => setParams({ realizacion: r.id })}>Ver detalle</button>
@@ -186,8 +217,9 @@ function Realizaciones({ cue, escolar, onChange }: { cue: string | null; escolar
 function Detalle({ r }: { r: RealizacionEscolar }) {
   const campos = [
     ['Evento', r.evento], ['Escuela que registró', escuelaRealizacion(r)], ['Fecha', fecha(r.fecha)],
-    ['Horario', `${r.hora_inicio.slice(0, 5)} a ${r.hora_fin.slice(0, 5)}`], ['Lugar', r.lugar],
-    ['Articulación', escuelaArticulada(r) || 'No'], ['Objetivos', r.objetivos], ['Observaciones', r.observaciones || 'Sin observaciones'],
+    ['Horario', horarioRealizacion(r)], ['Lugar', r.lugar],
+    ['Articulación', escuelaArticulada(r) || (r.articulacion_informada === false ? 'No informada' : 'No')], ['Objetivos', r.objetivos || 'Sin informar'], ['Observaciones', r.observaciones || 'Sin observaciones'],
+    ...(r.origen_historico ? [['Origen', 'Importación histórica']] : []),
   ]
   return <dl class="grid gap-3 text-sm sm:grid-cols-2">{campos.map(([k, v]) => <div key={k} class="min-w-0">
     <dt class="text-xs font-semibold uppercase text-slate-500">{k}</dt><dd class="whitespace-pre-wrap break-words text-slate-800">{v}</dd>
@@ -201,7 +233,7 @@ function Formulario({ realizacion: r, cue, tipos, escuelas, onClose, onDone }: {
   const [form, setForm] = useState({
     evento: r ? String(r.evento_id) : '', escuela: r ? String(r.escuela_id) : propias.length === 1 ? String(propias[0].id) : '',
     articulada: r?.articulada_id ? String(r.articulada_id) : '', fecha: r?.fecha ?? '', lugar: r?.lugar ?? '',
-    inicio: r?.hora_inicio.slice(0, 5) ?? '', fin: r?.hora_fin.slice(0, 5) ?? '', objetivos: r?.objetivos ?? '', observaciones: r?.observaciones ?? '',
+    inicio: r?.hora_inicio.slice(0, 5) ?? '', fin: r?.hora_fin?.slice(0, 5) ?? '', objetivos: r?.objetivos ?? '', observaciones: r?.observaciones ?? '',
   })
   const [articula, setArticula] = useState(!!r?.articulada_id)
   const [error, setError] = useState('')
@@ -225,6 +257,8 @@ function Formulario({ realizacion: r, cue, tipos, escuelas, onClose, onDone }: {
   return <Modal title={r ? 'Editar evento escolar' : 'Cargar evento escolar'} onClose={() => { if (!guardando) onClose() }} wide>
     <form class="space-y-4" onSubmit={(e) => void guardar(e)}>
       {error && <Alert tone="error">{error}</Alert>}
+      {r?.origen_historico && (!r.hora_fin || !r.objetivos) && <Alert tone="info">Este registro histórico no incluye horario de finalización u objetivos. Completalos para guardar los cambios.</Alert>}
+      {r?.articulacion_informada === false && <Alert tone="info">La articulación no estaba informada en el registro histórico. Al guardar se registrará la opción que selecciones.</Alert>}
       {!propias.length && <Alert tone="error">Tu cuenta no tiene una escuela asociada. Consultá con la Jefatura.</Alert>}
       {!tipos.length && <Alert tone="warning">Todavía no hay eventos disponibles. Consultá con la Jefatura.</Alert>}
       <div class="grid gap-3 sm:grid-cols-2">

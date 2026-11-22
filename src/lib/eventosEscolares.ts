@@ -13,9 +13,22 @@ export interface RealizacionEscolar {
   escuela_clave: string | null; escuela_nombre: string | null; escuela_tipo: string | null; escuela_numero: number | null
   articulada_id: number | null; articulada_cue: string | null; articulada_clave: string | null
   articulada_nombre: string | null; articulada_tipo: string | null; articulada_numero: number | null
-  fecha: string; lugar: string; hora_inicio: string; hora_fin: string
-  objetivos: string; observaciones: string; created_at: string; updated_at: string
+  fecha: string; lugar: string; hora_inicio: string; hora_fin: string | null
+  objetivos: string | null; observaciones: string; created_at: string; updated_at: string; origen_historico: boolean; articulacion_informada: boolean
 }
+
+export type OrdenEventos = 'nombre-asc' | 'nombre-desc' | 'recientes' | 'antiguos'
+export function ordenarTiposEscolares(tipos: readonly TipoEventoEscolar[], busqueda: string, orden: OrdenEventos): TipoEventoEscolar[] {
+  const texto = busqueda.trim().toLocaleLowerCase('es')
+  return tipos.filter((t) => t.nombre.toLocaleLowerCase('es').includes(texto)).sort((a, b) => {
+    if (orden === 'recientes') return b.id - a.id
+    if (orden === 'antiguos') return a.id - b.id
+    return (orden === 'nombre-desc' ? -1 : 1) * a.nombre.localeCompare(b.nombre, 'es') || a.id - b.id
+  })
+}
+
+export const horarioRealizacion = (r: RealizacionEscolar) =>
+  `${r.hora_inicio.slice(0, 5)} a ${r.hora_fin ? r.hora_fin.slice(0, 5) : 'finalización sin informar'}`
 
 export const escuelaEvento = (e: Pick<EscuelaEvento, 'clave' | 'nombre' | 'tipo' | 'numero'>) =>
   [e.clave, [e.tipo, e.numero, e.nombre].filter(Boolean).join(' ')].filter(Boolean).join(' · ')
@@ -48,15 +61,16 @@ export function registrosEventosEscolares(filas: RealizacionEscolar[]): Registro
   return filas.map((r) => {
     const escuela = escuelaRealizacion(r)
     const articulada = escuelaArticulada(r)
-    const horario = `${r.hora_inicio.slice(0, 5)} a ${r.hora_fin.slice(0, 5)}`
+    const horario = horarioRealizacion(r)
     return {
       id: `evento-escolar-${r.id}`, fuente: 'evento-escolar', fecha: r.fecha, nombre: r.evento,
       lugar: r.lugar, descripcion: `${escuela} · ${horario}${articulada ? `\nArticulado con ${articulada}` : ''}`,
       enlace: `/eventos-escolares?realizacion=${r.id}`,
       detalles: [
         { etiqueta: 'Escuela que registró', valor: escuela }, { etiqueta: 'Horario', valor: horario },
-        { etiqueta: 'Lugar', valor: r.lugar }, { etiqueta: 'Articulación', valor: articulada || 'No' },
-        { etiqueta: 'Objetivos', valor: r.objetivos }, { etiqueta: 'Observaciones', valor: r.observaciones },
+        { etiqueta: 'Lugar', valor: r.lugar }, { etiqueta: 'Articulación', valor: articulada || (r.articulacion_informada === false ? 'No informada' : 'No') },
+        { etiqueta: 'Objetivos', valor: r.objetivos || 'Sin informar' }, { etiqueta: 'Observaciones', valor: r.observaciones },
+        ...(r.origen_historico ? [{ etiqueta: 'Origen', valor: 'Importación histórica' }] : []),
         { etiqueta: 'Fecha de carga', valor: r.created_at }, { etiqueta: 'Última actualización', valor: r.updated_at },
       ],
     }

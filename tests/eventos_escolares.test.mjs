@@ -25,7 +25,7 @@ globalThis.__supabaseEventosTest = { rpc(nombre, params) {
   }
   return query
 } }
-const { leerRealizaciones, registrosEventosEscolares, tablaSeguimiento } = await import(dataUrl(codigo))
+const { leerRealizaciones, registrosEventosEscolares, tablaSeguimiento, ordenarTiposEscolares } = await import(dataUrl(codigo))
 
 test('página realizaciones sin truncar y transmite los filtros al servidor', async () => {
   const filas = await leerRealizaciones('2026-03-01', '2026-03-31', undefined, 7)
@@ -56,4 +56,28 @@ test('el seguimiento exportable distingue escuela cargada y pendiente', () => {
   const tabla = tablaSeguimiento([{ ...base, id: 1, cargado: true }, { ...base, id: 2, cargado: false }], 'Jornada', 'Distrito')
   assert.match(tabla.subtitle, /Jornada/)
   assert.deepEqual(tabla.rows.map((r) => r.at(-1)), ['Cargado', 'Pendiente'])
+})
+
+test('catálogo se filtra y ordena sin mutar el original', () => {
+  const tipos = [{ id: 2, nombre: 'Zorzal' }, { id: 3, nombre: 'Árbol' }, { id: 1, nombre: 'Aula' }]
+  assert.deepEqual(ordenarTiposEscolares(tipos, '', 'nombre-asc').map((x) => x.id), [3, 1, 2])
+  assert.deepEqual(ordenarTiposEscolares(tipos, '', 'nombre-desc').map((x) => x.id), [2, 1, 3])
+  assert.deepEqual(ordenarTiposEscolares(tipos, ' AU ', 'recientes').map((x) => x.id), [1])
+  assert.deepEqual(ordenarTiposEscolares(tipos, '', 'antiguos').map((x) => x.id), [1, 2, 3])
+  assert.deepEqual(tipos.map((x) => x.id), [2, 3, 1])
+})
+
+test('calendario identifica datos históricos ausentes y conserva articulación informada', () => {
+  const base = {
+    id: 1, evento: 'Jornada', fecha: '2026-03-07', escuela_clave: 'EP1',
+    escuela_tipo: 'EP', escuela_numero: 1, escuela_nombre: 'Primaria', articulada_id: null,
+    lugar: 'Patio', hora_inicio: '09:30:00', hora_fin: null, objetivos: null, observaciones: '',
+    created_at: '2026-03-01', updated_at: '2026-03-01', origen_historico: true, articulacion_informada: false,
+  }
+  const [registro] = registrosEventosEscolares([base])
+  assert.match(registro.descripcion, /finalización sin informar/)
+  assert.ok(registro.detalles.some((c) => c.etiqueta === 'Objetivos' && c.valor === 'Sin informar'))
+  assert.ok(registro.detalles.some((c) => c.etiqueta === 'Articulación' && c.valor === 'No informada'))
+  const [editado] = registrosEventosEscolares([{ ...base, articulacion_informada: true }])
+  assert.ok(editado.detalles.some((c) => c.etiqueta === 'Articulación' && c.valor === 'No'))
 })

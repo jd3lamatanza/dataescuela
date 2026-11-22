@@ -118,3 +118,36 @@ do $$ declare rechazado boolean := false; begin
   if not rechazado then raise exception 'Regional puede leer la tabla directamente'; end if;
 end $$;
 reset role;
+-- Edición del catálogo y datos históricos sin autor ni datos inventados.
+insert into public.eventos_escolares_realizaciones(evento_id, escuela_id, fecha, lugar, hora_inicio, observaciones, origen_historico, articulacion_informada)
+  select tipo, escuela1, '2026-07-09', 'Patio', '09:00', 'Texto histórico', true, false from evento_test;
+select set_config('request.jwt.claim.sub', (select distrital::text from evento_test), true);
+set local role authenticated;
+select public.eventos_escolares_renombrar_tipo((select tipo from evento_test), 'Evento renombrado');
+do $$ declare rechazado boolean := false; begin
+  if not exists (select 1 from public.eventos_escolares_listar(p_evento => (select tipo from evento_test))
+    where evento = 'Evento renombrado' and hora_fin is null and objetivos is null and origen_historico and not articulacion_informada) then
+    raise exception 'La realización histórica no conserva los datos y el nombre';
+  end if;
+  begin perform public.eventos_escolares_eliminar_tipo((select tipo from evento_test)); exception when raise_exception then rechazado := true; end;
+  if not rechazado then raise exception 'Se pudo eliminar un evento con realizaciones'; end if;
+end $$;
+update evento_test set tipo = public.eventos_escolares_crear_tipo('Otro evento ficticio');
+do $$ declare rechazado boolean := false; begin
+  begin perform public.eventos_escolares_renombrar_tipo((select tipo from evento_test), ' evento renombrado '); exception when raise_exception then rechazado := true; end;
+  if not rechazado then raise exception 'Se pudo renombrar a un nombre duplicado'; end if;
+end $$;
+select public.eventos_escolares_eliminar_tipo((select tipo from evento_test));
+reset role;
+select set_config('request.jwt.claim.sub', (select escolar::text from evento_test), true);
+set local role authenticated;
+do $$ declare rechazado boolean := false; v_id bigint; v_tipo bigint; begin
+  begin perform public.eventos_escolares_renombrar_tipo((select tipo from evento_test), 'Prohibido'); exception when raise_exception then rechazado := true; end;
+  if not rechazado then raise exception 'Una escuela puede modificar el catálogo'; end if;
+  select id, evento_id into v_id, v_tipo from public.eventos_escolares_listar() where origen_historico and escuela_id = (select escuela1 from evento_test);
+  perform public.eventos_escolares_guardar(v_id, v_tipo, (select escuela1 from evento_test), null, '2026-07-09', 'Patio', '09:00', '10:00', 'Objetivo', 'Texto histórico');
+  if not exists (select 1 from public.eventos_escolares_listar(p_id => v_id) where articulacion_informada and hora_fin = '10:00' and objetivos = 'Objetivo') then
+    raise exception 'La edición histórica no registra los datos completados';
+  end if;
+end $$;
+reset role;
