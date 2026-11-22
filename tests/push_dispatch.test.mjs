@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
-import { createHmac, webcrypto } from 'node:crypto'
+import { createDecipheriv, createECDH, createHmac, hkdfSync, randomBytes, webcrypto } from 'node:crypto'
 import ts from 'typescript'
 
 const encode = (buffer) => Buffer.from(buffer).toString('base64url')
@@ -20,7 +20,7 @@ async function servicio(envios, responder = async () => new Response(null, { sta
   runInNewContext(js, {
     Deno: { env: { get: (name) => ({ PUSH_DISPATCH_SECRET: 'secreto-prueba', PUSH_VAPID_PUBLIC: pub, PUSH_VAPID_PRIVATE: jwk.d, SUPABASE_URL: 'https://example.test', SUPABASE_SERVICE_ROLE_KEY: 'ficticio' })[name] }, serve: (fn) => { handler = fn } },
     createClient: () => ({ rpc: async (name, args) => {
-      if (name === 'push_tomar') return { data: envios, error: null }
+      if (name === 'push_tomar') return { data: envios.map((e) => ({ p256dh: null, auth_key: null, titulo: 'Nueva notificación', ...e })), error: null }
       finales.push(args)
       return { error: null }
     } }),
@@ -35,7 +35,7 @@ async function servicio(envios, responder = async () => new Response(null, { sta
   return { llamar, finales, llamadas, keys }
 }
 
-test('requiere firma válida y envía sin datos sensibles usando VAPID', async () => {
+test('requiere firma válida y conserva avisos sin contenido para suscripciones antiguas', async () => {
   const s = await servicio([{ id: 1, endpoint: 'https://fcm.googleapis.com/fcm/send/prueba' }])
   assert.equal((await s.llamar(false)).status, 401)
   assert.equal(s.llamadas.length, 0)
@@ -49,6 +49,44 @@ test('requiere firma válida y envía sin datos sensibles usando VAPID', async (
   assert.equal(JSON.parse(Buffer.from(payload, 'base64url')).aud, url.origin)
   assert.ok(await webcrypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, s.keys.publicKey, Buffer.from(signature, 'base64url'), new TextEncoder().encode(`${header}.${payload}`)))
   assert.equal(s.finales[0].p_resultado, 'enviado')
+})
+
+test('cifra el título para cada dispositivo con el formato Web Push aes128gcm', async () => {
+  const receptor = createECDH('prime256v1')
+  receptor.generateKeys()
+  const publica = receptor.getPublicKey()
+  const auth = randomBytes(16)
+  const titulo = 'Nueva labor de Inspector Ejemplo'
+  const s = await servicio([{ id: 8, endpoint: 'https://fcm.googleapis.com/fcm/send/prueba',
+    p256dh: encode(publica), auth_key: encode(auth), titulo }])
+  assert.equal((await s.llamar()).status, 200)
+  const { options } = s.llamadas[0]
+  assert.equal(options.headers['Content-Encoding'], 'aes128gcm')
+  const body = Buffer.from(options.body)
+  assert.equal(body.includes(Buffer.from(titulo)), false)
+  assert.equal(body.readUInt32BE(16), 4096)
+  assert.equal(body[20], 65)
+  const salt = body.subarray(0, 16)
+  const emisor = body.subarray(21, 86)
+  const shared = receptor.computeSecret(emisor)
+  const derive = (ikm, s, info, n) => Buffer.from(hkdfSync('sha256', ikm, s, info, n))
+  const ikm = derive(shared, auth, Buffer.concat([Buffer.from('WebPush: info\0'), publica, emisor]), 32)
+  const cek = derive(ikm, salt, Buffer.from('Content-Encoding: aes128gcm\0'), 16)
+  const nonce = derive(ikm, salt, Buffer.from('Content-Encoding: nonce\0'), 12)
+  const cifrado = body.subarray(86)
+  const decipher = createDecipheriv('aes-128-gcm', cek, nonce)
+  decipher.setAuthTag(cifrado.subarray(-16))
+  const texto = Buffer.concat([decipher.update(cifrado.subarray(0, -16)), decipher.final()])
+  assert.equal(texto.at(-1), 2)
+  assert.deepEqual(JSON.parse(texto.subarray(0, -1).toString('utf8')), { titulo })
+  assert.equal(s.finales[0].p_resultado, 'enviado')
+})
+
+test('no envía sin cifrar cuando hay claves inválidas', async () => {
+  const s = await servicio([{ id: 2, endpoint: 'https://fcm.googleapis.com/fcm/send/prueba', p256dh: 'invalida', auth_key: 'invalida', titulo: 'Nueva salida educativa de Escuela Ejemplo' }])
+  await s.llamar()
+  assert.equal(s.llamadas.length, 0)
+  assert.equal(s.finales[0].p_resultado, 'reintentar')
 })
 
 test('elimina suscripciones vencidas, reintenta fallos y bloquea destinos ajenos', async () => {

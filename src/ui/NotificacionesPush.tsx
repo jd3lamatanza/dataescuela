@@ -15,6 +15,18 @@ function claveBytes(clave: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(binario, (c) => c.charCodeAt(0))
 }
 
+async function registrarSuscripcion(suscripcion: PushSubscription) {
+  const publico = suscripcion.getKey('p256dh')
+  const secreto = suscripcion.getKey('auth')
+  if (!publico || !secreto) throw new Error('El navegador no proporcionó las claves de notificaciones.')
+  const base64url = (buffer: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buffer)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const r = await supabase.rpc('push_registrar_claves', {
+    p_endpoint: suscripcion.endpoint, p_p256dh: base64url(publico), p_auth: base64url(secreto),
+  })
+  if (r.error) throw new Error(r.error.message)
+}
+
 export function NotificacionesPush({ simulando }: { simulando: boolean }) {
   const [estado, setEstado] = useState<Estado>('comprobando')
   const [clave, setClave] = useState('')
@@ -43,6 +55,7 @@ export function NotificacionesPush({ simulando }: { simulando: boolean }) {
           const r = await supabase.rpc('push_estado', { p_endpoint: suscripcion.endpoint })
           if (r.error) throw new Error(r.error.message)
           activo = r.data === true
+          if (activo && Notification.permission === 'granted') await registrarSuscripcion(suscripcion)
         }
         if (vigente) {
           setRegistro(sw)
@@ -71,8 +84,7 @@ export function NotificacionesPush({ simulando }: { simulando: boolean }) {
       const suscripcion = await lista.pushManager.getSubscription() ?? await lista.pushManager.subscribe({
         userVisibleOnly: true, applicationServerKey: claveBytes(clave),
       })
-      const r = await supabase.rpc('push_registrar', { p_endpoint: suscripcion.endpoint })
-      if (r.error) throw new Error(r.error.message)
+      await registrarSuscripcion(suscripcion)
       setEstado('activo')
     } catch (error) {
       console.error('Error al activar notificaciones push:', error)
@@ -92,7 +104,7 @@ export function NotificacionesPush({ simulando }: { simulando: boolean }) {
     <p class="font-semibold text-slate-900">Notificaciones en este dispositivo</p>
     <p class="mt-1">{textos[estado]}</p>
     {simulando && <p class="mt-1 text-xs">Durante el ingreso simulado, la activación corresponde a tu cuenta real.</p>}
-    {estado === 'activar' && <p class="mt-1 text-xs">Si varias cuentas las activan en este dispositivo, los avisos genéricos de todas seguirán llegando al cerrar sesión.</p>}
+    {estado === 'activar' && <p class="mt-1 text-xs">Los avisos pueden mostrar el tipo y el nombre de la escuela, inspector o remitente, incluso con la sesión cerrada o la pantalla bloqueada. Si varias cuentas los activan en este dispositivo, llegarán los de todas.</p>}
     {estado === 'activar' && <button type="button" class={`${BTN_PRIMARY} mt-3`} disabled={ocupado} onClick={() => void activar()}>{ocupado ? 'Activando…' : 'Activar notificaciones'}</button>}
     {(estado === 'bloqueado' || estado === 'error') && <button type="button" class={`${BTN_SECONDARY} mt-3`} onClick={() => setRevision((n) => n + 1)}>Volver a comprobar</button>}
   </section>
