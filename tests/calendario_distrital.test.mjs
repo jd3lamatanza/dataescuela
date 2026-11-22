@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fechaPosesion, leerPaginas, registrosDistritales, sinEventosDeSalidas } from '../src/lib/calendarioDistrital.ts'
+import { fechaPosesion, leerPaginas, mostrarEventoCalendario, mostrarRegistroCalendario, registrosDistritales, sinEventosDeSalidas } from '../src/lib/calendarioDistrital.ts'
 
 const datos = {
   acreditaciones: [{ id: 'a', nombre: 'Capacitación', fecha: '2026-03-05', lugar: 'Sede', descripcion: 'Reunión', hora_inicio: '09:00:00', hora_fin: '11:00:00', estado: 'activo' }],
@@ -29,6 +29,18 @@ test('incluye cada fuente y fecha administrativa dentro del rango con su estado 
 
 test('no duplica salidas vinculadas y conserva eventos no relacionados', () => {
   assert.deepEqual(sinEventosDeSalidas([{ id: 8 }, { id: 9 }], [8]), [{ id: 9 }])
+})
+
+test('los filtros ocultan cada fuente y también los eventos de salidas no vinculados', () => {
+  const salida = { id: 4, nombre: 'Salida Educativa' }
+  const reunion = { id: 5, nombre: 'Reunión' }
+  const ocultos = ['fuente-salida', 'evento-5']
+  assert.equal(mostrarEventoCalendario(salida, ocultos, true), false)
+  assert.equal(mostrarRegistroCalendario('salida', ocultos), false)
+  assert.equal(mostrarEventoCalendario(reunion, ocultos, true), false)
+  assert.equal(mostrarRegistroCalendario('contingencia', ocultos), true)
+  assert.equal(mostrarEventoCalendario(salida, ocultos, false), true)
+  assert.equal(mostrarEventoCalendario(salida, [], true), true)
 })
 
 test('interpreta fechas de posesión y rechaza fechas imposibles', () => {

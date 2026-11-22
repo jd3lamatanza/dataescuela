@@ -18,6 +18,15 @@ export interface TomaEquipo { id: number; apellido_nombre: string; toma_posesion
 export interface TomaInspector { id: number; nombre: string | null; fecha_toma_posesion: string; activo: boolean }
 export interface DatosDistritales { acreditaciones: Acreditacion[]; salidas: Salida[]; labores: Labor[]; disposiciones: Disposicion[]; periodos: Periodo[]; directivos: TomaEquipo[]; orientacion: TomaEquipo[]; inspectores: TomaInspector[] }
 
+export function mostrarEventoCalendario(tipo: { id: number; nombre: string }, ocultos: readonly string[], unificarSalidas: boolean): boolean {
+  const clave = unificarSalidas && tipo.nombre === 'Salida Educativa' ? 'fuente-salida' : `evento-${tipo.id}`
+  return !ocultos.includes(clave)
+}
+
+export function mostrarRegistroCalendario(fuente: FuenteCalendario, ocultos: readonly string[]): boolean {
+  return !ocultos.includes(`fuente-${fuente}`)
+}
+
 export function sinEventosDeSalidas<T extends { id: number }>(eventos: T[], vinculados: readonly number[]): T[] {
   const ids = new Set(vinculados)
   return eventos.filter((evento) => !ids.has(evento.id))

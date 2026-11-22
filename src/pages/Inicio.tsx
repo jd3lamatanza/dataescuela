@@ -13,7 +13,7 @@ export function Inicio() {
     <>
       <PageHeader title={`Hola, ${user.name}`} subtitle={`Rol: ${ROLE_LABELS[user.role]}`} />
       <section aria-label="Calendario"><Calendario /></section>
-      <h2 class="mb-2 mt-6 text-sm font-semibold uppercase text-slate-500">Módulos</h2>
+      {user.role !== 'distrital' && <><h2 class="mb-2 mt-6 text-sm font-semibold uppercase text-slate-500">Módulos</h2>
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {mods.map((m) => (
           <a key={m.id} href={href(m.path)} class="group">
@@ -25,7 +25,7 @@ export function Inicio() {
             </Card>
           </a>
         ))}
-      </div>
+      </div></>}
     </>
   )
 }

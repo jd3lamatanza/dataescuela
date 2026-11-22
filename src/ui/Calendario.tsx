@@ -3,9 +3,9 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useAsync } from '../lib/hooks'
 import { ROLE_LABELS, type Role } from '../modules'
-import { Alert, Card, BTN_PRIMARY, BTN_SECONDARY, FIELD, Lbl, Modal, RowMenu, Spinner, confirmar, toast } from './kit'
+import { Alert, Card, BTN_PRIMARY, BTN_SECONDARY, FIELD, Lbl, Modal, RowMenu, Spinner, Toggle, confirmar, toast } from './kit'
 import { Icon, iconOr } from './Icon'
-import { leerPaginas, sinEventosDeSalidas, type FuenteCalendario, type RegistroCalendario } from '../lib/calendarioDistrital'
+import { leerPaginas, mostrarEventoCalendario, mostrarRegistroCalendario, sinEventosDeSalidas, type FuenteCalendario, type RegistroCalendario } from '../lib/calendarioDistrital'
 import { cargarCalendarioDistrital } from '../lib/calendarioDistritalDatos'
 import { leerContingencias, registrosContingencias } from '../lib/contingencias'
 import { href } from '../lib/router'
@@ -67,6 +67,8 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
   const [detalle, setDetalle] = useState<Evento | null>(null)
   const [detalleRegistro, setDetalleRegistro] = useState<RegistroCalendario | null>(null)
   const [edit, setEdit] = useState<Partial<Evento> | null>(null)
+  const [configurar, setConfigurar] = useState(false)
+  const [ocultos, setOcultos] = useState<string[]>([])
 
   const celdas = useMemo(() => {
     const offset = (new Date(ym.y, ym.m, 1).getDay() + 6) % 7
@@ -100,10 +102,13 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
   const porDia = useMemo(() => {
     const m = new Map<string, Entrada[]>()
     const agregar = (e: Entrada) => { const fecha = fechaEntrada(e); const lista = m.get(fecha); if (lista) lista.push(e); else m.set(fecha, [e]) }
-    for (const e of dataActual?.eventos ?? []) if (tipos.some((t) => t.id === e.tipo_id) && (!ctl?.filtro || ctl.filtro(e))) agregar({ clase: 'evento', evento: e })
-    for (const r of dataActual?.registros ?? []) agregar({ clase: 'registro', registro: r })
+    for (const e of dataActual?.eventos ?? []) {
+      const tipo = tipos.find((t) => t.id === e.tipo_id)
+      if (tipo && mostrarEventoCalendario(tipo, ocultos, user?.role === 'distrital' && !ctl) && (!ctl?.filtro || ctl.filtro(e))) agregar({ clase: 'evento', evento: e })
+    }
+    for (const r of dataActual?.registros ?? []) if (mostrarRegistroCalendario(r.fuente, ocultos)) agregar({ clase: 'registro', registro: r })
     return m
-  }, [dataActual, ctl?.filtro, tipoFijo])
+  }, [dataActual, ctl?.filtro, tipoFijo, ocultos])
   const tipoEntrada = (e: Entrada) => e.clase === 'evento' ? tipoDe(e.evento.tipo_id) : FUENTES[e.registro.fuente]
   const resumen = (evs: Entrada[]) => {
     const m = new Map<string, { nombre: string; icono: string; color: string; n: number }>()
@@ -137,10 +142,11 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
     <Card>
       <div class="mb-3 flex flex-wrap items-center gap-2">
         <h2 class="text-base font-semibold capitalize text-slate-900">{mesLabel(ym.y, ym.m)}</h2>
-        <div class="ml-auto flex items-center gap-1.5">
+        <div class="ml-auto flex flex-wrap items-center justify-end gap-1.5">
           <button type="button" class="flex size-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-100" aria-label="Mes anterior" onClick={() => ir(-1)}><Icon name="chevl" /></button>
           <button type="button" class="min-h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 hover:bg-slate-100" onClick={irHoy}>Hoy</button>
           <button type="button" class="flex size-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-100" aria-label="Mes siguiente" onClick={() => ir(1)}><Icon name="chevr" /></button>
+          {!ctl && user?.role === 'distrital' && <button type="button" class={BTN_SECONDARY} aria-label="Configurar calendario" onClick={() => setConfigurar(true)}><Icon name="settings" />Configurar</button>}
           {propios.length > 0 && <button type="button" class={BTN_PRIMARY} onClick={() => setEdit({ fecha: hoy })}>Nuevo evento</button>}
         </div>
       </div>
@@ -177,6 +183,14 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
         </ul>
       )}
 
+    {configurar && <Modal title="Configurar calendario" onClose={() => setConfigurar(false)}>
+      <p class="mb-3 text-sm text-slate-600">Elegí qué tipos de eventos y registros mostrar.</p>
+      <div class="grid gap-3 sm:grid-cols-2">
+        {[...tipos.filter((t) => t.nombre !== 'Salida Educativa').map((t) => ({ id: `evento-${t.id}`, nombre: t.nombre })), ...Object.entries(FUENTES).map(([id, t]) => ({ id: `fuente-${id}`, nombre: t.nombre }))].map((opcion) =>
+          <Toggle key={opcion.id} label={opcion.nombre} checked={!ocultos.includes(opcion.id)} onChange={(checked) => setOcultos((actual) => checked ? actual.filter((id) => id !== opcion.id) : [...actual, opcion.id])} />)}
+      </div>
+      <div class="mt-4 flex justify-end"><button type="button" class={BTN_PRIMARY} onClick={() => setConfigurar(false)}>Listo</button></div>
+    </Modal>}
     {dia && !edit && (
         <Modal title={detalle?.nombre ?? detalleRegistro?.nombre ?? diaLabel(dia).replace(/^./, (c) => c.toUpperCase())} onClose={() => { setDia(null); setDetalle(null); setDetalleRegistro(null) }}>
           {detalleRegistro ? <div class="space-y-4">
