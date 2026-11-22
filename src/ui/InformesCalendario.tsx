@@ -4,6 +4,7 @@ import { useAsync } from '../lib/hooks'
 import { cargarCalendarioDistrital } from '../lib/calendarioDistritalDatos'
 import { leerPaginas, mostrarEventoCalendario, mostrarRegistroCalendario, sinEventosDeSalidas, type FuenteCalendario } from '../lib/calendarioDistrital'
 import { leerContingencias, registrosContingencias } from '../lib/contingencias'
+import { leerRealizaciones, registrosEventosEscolares } from '../lib/eventosEscolares'
 import { agruparPorTipo, fechaArgentina, informeEvento, informeRegistro, ordenarInforme, type EntradaInforme, type EstiloInforme } from '../lib/calendarioInforme'
 import { completarInforme } from '../lib/calendarioInformeDatos'
 import { buildCalendarioPdf, fechaLarga, type FormatoInforme } from '../lib/calendarioInformePdf'
@@ -39,11 +40,12 @@ export function InformesCalendario({ usuario, ano, mes, mesNombre, entradasMes, 
   }, [])
 
   const informe = useAsync(async () => {
-    const [eventos, tipos, extra, contingencias] = await Promise.all([
+    const [eventos, tipos, extra, contingencias, escolares] = await Promise.all([
       leerPaginas<Evento>((a, b) => supabase.from('eventos').select('*').eq('fecha', hoy).order('id').range(a, b)),
       supabase.from('evento_tipos').select('*').order('id'),
       cargarCalendarioDistrital(hoy, hoy),
       leerContingencias(supabase, { busqueda: '', tipo: '', suspension: '', desde: hoy, hasta: hoy }),
+      leerRealizaciones(hoy, hoy),
     ])
     if (tipos.error) throw tipos.error
     if (!tipos.data) throw new Error('No se pudieron consultar los tipos de evento.')
@@ -53,7 +55,7 @@ export function InformesCalendario({ usuario, ano, mes, mesNombre, entradasMes, 
       const tipo = porTipo.get(evento.tipo_id)
       if (tipo && mostrarEventoCalendario(tipo, ocultos, true)) entradas.push(informeEvento(evento, tipo.nombre, tipo))
     }
-    for (const registro of [...extra.registros, ...registrosContingencias(contingencias)]) {
+    for (const registro of [...extra.registros, ...registrosContingencias(contingencias), ...registrosEventosEscolares(escolares)]) {
       if (mostrarRegistroCalendario(registro.fuente, ocultos)) {
         const tipo = fuentes[registro.fuente]
         entradas.push(informeRegistro(registro, tipo.nombre, tipo))

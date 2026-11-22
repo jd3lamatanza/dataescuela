@@ -1,4 +1,4 @@
-export type FuenteCalendario = 'acreditacion' | 'salida' | 'labor' | 'disposicion' | 'matricula' | 'posesion' | 'contingencia'
+export type FuenteCalendario = 'acreditacion' | 'salida' | 'labor' | 'disposicion' | 'matricula' | 'posesion' | 'contingencia' | 'evento-escolar'
 export interface RegistroCalendario {
   id: string
   fuente: FuenteCalendario

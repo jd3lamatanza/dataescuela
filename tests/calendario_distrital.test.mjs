@@ -39,6 +39,8 @@ test('los filtros ocultan cada fuente y también los eventos de salidas no vincu
   assert.equal(mostrarRegistroCalendario('salida', ocultos), false)
   assert.equal(mostrarEventoCalendario(reunion, ocultos, true), false)
   assert.equal(mostrarRegistroCalendario('contingencia', ocultos), true)
+  assert.equal(mostrarRegistroCalendario('evento-escolar', ['fuente-evento-escolar']), false)
+  assert.equal(mostrarRegistroCalendario('evento-escolar', []), true)
   assert.equal(mostrarEventoCalendario(salida, ocultos, false), true)
   assert.equal(mostrarEventoCalendario(salida, [], true), true)
 })

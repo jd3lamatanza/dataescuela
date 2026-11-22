@@ -84,7 +84,7 @@ export async function completarInforme(entradas: readonly EntradaInforme[]): Pro
 
   return entradas.map((entrada) => {
     const r = entrada.registro
-    if (!r || r.fuente === 'contingencia') return entrada
+    if (!r || r.fuente === 'contingencia' || r.fuente === 'evento-escolar') return entrada
     const id = identificador(r)
     let extra: CampoInforme[] = []
     if (r.fuente === 'acreditacion') {

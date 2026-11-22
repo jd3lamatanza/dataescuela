@@ -154,6 +154,18 @@ test('un registro inaccesible produce un error y no un informe incompleto', asyn
   await assert.rejects(() => servicio.completar([entrada]), /No se pudo acceder a todos los registros de labores/)
 })
 
+test('el analítico conserva los detalles de eventos escolares ya cargados', async () => {
+  const servicio = cargador({})
+  const entrada = modelo.informeRegistro({
+    id: 'evento-escolar-7', fuente: 'evento-escolar', fecha: '2026-01-03', nombre: 'Jornada',
+    descripcion: 'Escuela A', enlace: '/eventos-escolares?realizacion=7',
+    detalles: [{ etiqueta: 'Objetivos', valor: 'Trabajo conjunto' }],
+  }, 'Eventos Escolares')
+  const [resultado] = await servicio.completar([entrada])
+  assert.equal(resultado.detalles[0].valor, 'Trabajo conjunto')
+  assert.equal(servicio.consultas.length, 0)
+})
+
 test('distingue equipos directivos y de orientación con el mismo identificador', async () => {
   const servicio = cargador({
     equipo_directivo: [{ id: 8, email: 'directivo@example.test', cargo_base: 'Directivo', cargo: null, revista: null }],

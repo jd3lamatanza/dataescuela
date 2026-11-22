@@ -8,6 +8,7 @@ import { Icon, iconOr } from './Icon'
 import { leerPaginas, mostrarEventoCalendario, mostrarRegistroCalendario, sinEventosDeSalidas, type FuenteCalendario, type RegistroCalendario } from '../lib/calendarioDistrital'
 import { cargarCalendarioDistrital } from '../lib/calendarioDistritalDatos'
 import { leerContingencias, registrosContingencias } from '../lib/contingencias'
+import { leerRealizaciones, registrosEventosEscolares } from '../lib/eventosEscolares'
 import { href } from '../lib/router'
 import { informeEvento, informeRegistro } from '../lib/calendarioInforme'
 import { InformesCalendario } from './InformesCalendario'
@@ -28,6 +29,7 @@ const FUENTES: Record<FuenteCalendario, { nombre: string; color: string; icono: 
   matricula: { nombre: 'Matrícula', color: 'orange', icono: 'chart' },
   posesion: { nombre: 'Toma de posesión', color: 'slate', icono: 'users' },
   contingencia: { nombre: 'Contingencias', color: 'red', icono: 'alert' },
+  'evento-escolar': { nombre: 'Eventos Escolares', color: 'blue', icono: 'school' },
 }
 type Entrada = { clase: 'evento'; evento: Evento } | { clase: 'registro'; registro: RegistroCalendario }
 const fechaEntrada = (e: Entrada) => e.clase === 'evento' ? e.evento.fecha : e.registro.fecha
@@ -72,7 +74,7 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
   const desde = key(celdas[0]); const hasta = key(celdas[celdas.length - 1])
 
   const { data, error, loading, reload } = useAsync(async () => {
-    const [eventos, t, resultadoExtra, contingencias] = await Promise.all([
+    const [eventos, t, resultadoExtra, contingencias, escolares] = await Promise.all([
       leerPaginas<Evento>((a, b) => supabase.from('eventos').select('*').gte('fecha', desde).lte('fecha', hasta).order('id').range(a, b)),
       supabase.from('evento_tipos').select('*').order('id'),
       !ctl && user?.role === 'distrital'
@@ -82,9 +84,13 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
         ? leerContingencias(supabase, { busqueda: '', tipo: '', suspension: '', desde, hasta })
           .then((filas) => ({ filas, error: '' })).catch((e: unknown) => ({ filas: [], error: e instanceof Error ? e.message : 'Error desconocido' }))
         : Promise.resolve({ filas: [], error: '' }),
+      !ctl && (user?.role === 'escolar' || user?.role === 'areal' || user?.role === 'distrital')
+        ? leerRealizaciones(desde, hasta).then((filas) => ({ filas, error: '' }))
+          .catch((e: unknown) => ({ filas: [], error: e instanceof Error ? e.message : 'Error desconocido' }))
+        : Promise.resolve({ filas: [], error: '' }),
     ])
     if (t.error) throw t.error
-    return { desde, hasta, usuario: user?.id, rol: user?.role, controlado: !!ctl, eventos: sinEventosDeSalidas(eventos, resultadoExtra.datos?.eventosSalidas ?? []), tipos: t.data as TipoEvento[], registros: [...(resultadoExtra.datos?.registros ?? []), ...registrosContingencias(contingencias.filas)], errorExtra: [resultadoExtra.error && `Registros distritales: ${resultadoExtra.error}`, contingencias.error && `Contingencias: ${contingencias.error}`].filter(Boolean).join(' · ') }
+    return { desde, hasta, usuario: user?.id, rol: user?.role, controlado: !!ctl, eventos: sinEventosDeSalidas(eventos, resultadoExtra.datos?.eventosSalidas ?? []), tipos: t.data as TipoEvento[], registros: [...(resultadoExtra.datos?.registros ?? []), ...registrosContingencias(contingencias.filas), ...registrosEventosEscolares(escolares.filas)], errorExtra: [resultadoExtra.error && `Registros distritales: ${resultadoExtra.error}`, contingencias.error && `Contingencias: ${contingencias.error}`, escolares.error && `Eventos escolares: ${escolares.error}`].filter(Boolean).join(' · ') }
   }, [desde, hasta, ctl?.version, user?.id, user?.role, !!ctl])
 
   const dataActual = data?.desde === desde && data.hasta === hasta && data.usuario === user?.id && data.rol === user?.role && data.controlado === !!ctl ? data : null
@@ -179,11 +185,12 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
         })}
       </div>
 
-      {(tipos.length > 0 || (!ctl && (user?.role === 'distrital' || user?.role === 'areal'))) && (
+      {(tipos.length > 0 || (!ctl && (user?.role === 'distrital' || user?.role === 'areal' || user?.role === 'escolar'))) && (
         <ul class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600" aria-label="Referencias">
           {tipos.map((t) => <li key={t.id} class="flex items-center gap-1.5"><span class={`size-2.5 rounded-full ${col(t.color).dot}`} />{t.nombre}</li>)}
           {!ctl && user?.role === 'distrital' && Object.entries(FUENTES).filter(([fuente]) => fuente !== 'salida' || !tipos.some((t) => t.nombre === 'Salida Educativa')).map(([fuente, t]) => <li key={fuente} class="flex items-center gap-1.5"><span class={`size-2.5 rounded-full ${col(t.color).dot}`} />{t.nombre}</li>)}
           {!ctl && user?.role === 'areal' && <li class="flex items-center gap-1.5"><span class={`size-2.5 rounded-full ${col(FUENTES.contingencia.color).dot}`} />Contingencias</li>}
+          {!ctl && (user?.role === 'areal' || user?.role === 'escolar') && <li class="flex items-center gap-1.5"><span class={`size-2.5 rounded-full ${col(FUENTES['evento-escolar'].color).dot}`} />Eventos Escolares</li>}
         </ul>
       )}
 

@@ -57,6 +57,7 @@ export const MODULES: readonly AppModule[] = [
   { id: 'usuarios', label: 'Usuarios', path: '/usuarios', icon: 'users', roles: ['admin'], primary: true },
   { id: 'salidas', label: 'Salida Educativa', path: '/salidas', icon: 'bus', roles: ['escolar'], primary: true },
   { id: 'contingencias', label: 'Contingencias', path: '/contingencias', icon: 'alert', roles: ['escolar', 'areal', 'distrital'] },
+  { id: 'eventos-escolares', label: 'Eventos Escolares', path: '/eventos-escolares', icon: 'calendar', roles: ['escolar', 'areal', 'distrital'] },
   { id: 'mis-proyectos', label: 'Mis Proyectos', path: '/mis-proyectos', icon: 'book', roles: ['escolar'] },
   { id: 'salidas-distrito', label: 'Salida Educativa', path: '/salidas-distrito', icon: 'bus', roles: ['distrital'], primary: true },
   { id: 'salidas-areal', label: 'Salida Educativa', path: '/salidas-areal', icon: 'bus', roles: ['areal'], primary: true },

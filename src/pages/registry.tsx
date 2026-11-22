@@ -9,6 +9,7 @@ import { Perfil } from './Perfil'
 import { Agenda } from './Agenda'
 import { Salidas } from './Salidas'
 import { Contingencias } from './Contingencias'
+import { EventosEscolares } from './EventosEscolares'
 import { MisProyectos } from './MisProyectos'
 import { Labores } from './Labores'
 import { EscuelaVerano } from './EscuelaVerano'
@@ -60,6 +61,7 @@ export const PAGES: Record<string, ComponentType> = {
   'labores-distrito': Labores,
   salidas: Salidas,
   contingencias: Contingencias,
+  'eventos-escolares': EventosEscolares,
   'mis-proyectos': MisProyectos,
   'salidas-distrito': Salidas,
   'salidas-areal': Salidas,
