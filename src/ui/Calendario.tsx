@@ -7,6 +7,7 @@ import { Alert, Card, BTN_PRIMARY, BTN_SECONDARY, FIELD, Lbl, Modal, RowMenu, Sp
 import { Icon, iconOr } from './Icon'
 import { leerPaginas, sinEventosDeSalidas, type FuenteCalendario, type RegistroCalendario } from '../lib/calendarioDistrital'
 import { cargarCalendarioDistrital } from '../lib/calendarioDistritalDatos'
+import { leerContingencias, registrosContingencias } from '../lib/contingencias'
 import { href } from '../lib/router'
 
 export interface TipoEvento { id: number; nombre: string; icono: string; color: string; rol: Role; activo: boolean }
@@ -34,6 +35,7 @@ const FUENTES: Record<FuenteCalendario, { nombre: string; color: string; icono: 
   disposicion: { nombre: 'Disposición', color: 'amber', icono: 'clipboard' },
   matricula: { nombre: 'Matrícula', color: 'orange', icono: 'chart' },
   posesion: { nombre: 'Toma de posesión', color: 'slate', icono: 'users' },
+  contingencia: { nombre: 'Contingencias', color: 'red', icono: 'alert' },
 }
 type Entrada = { clase: 'evento'; evento: Evento } | { clase: 'registro'; registro: RegistroCalendario }
 const fechaEntrada = (e: Entrada) => e.clase === 'evento' ? e.evento.fecha : e.registro.fecha
@@ -75,15 +77,19 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
   const desde = key(celdas[0]); const hasta = key(celdas[celdas.length - 1])
 
   const { data, error, reload } = useAsync(async () => {
-    const [eventos, t, resultadoExtra] = await Promise.all([
+    const [eventos, t, resultadoExtra, contingencias] = await Promise.all([
       leerPaginas<Evento>((a, b) => supabase.from('eventos').select('*').gte('fecha', desde).lte('fecha', hasta).order('id').range(a, b)),
       supabase.from('evento_tipos').select('*').order('id'),
       !ctl && user?.role === 'distrital'
         ? cargarCalendarioDistrital(desde, hasta).then((datos) => ({ datos, error: '' })).catch((e: unknown) => ({ datos: null, error: e instanceof Error ? e.message : 'Error desconocido' }))
         : Promise.resolve({ datos: null, error: '' }),
+      !ctl && (user?.role === 'areal' || user?.role === 'distrital')
+        ? leerContingencias(supabase, { busqueda: '', tipo: '', suspension: '', desde, hasta })
+          .then((filas) => ({ filas, error: '' })).catch((e: unknown) => ({ filas: [], error: e instanceof Error ? e.message : 'Error desconocido' }))
+        : Promise.resolve({ filas: [], error: '' }),
     ])
     if (t.error) throw t.error
-    return { desde, hasta, usuario: user?.id, rol: user?.role, controlado: !!ctl, eventos: sinEventosDeSalidas(eventos, resultadoExtra.datos?.eventosSalidas ?? []), tipos: t.data as TipoEvento[], registros: resultadoExtra.datos?.registros ?? [], errorExtra: resultadoExtra.error }
+    return { desde, hasta, usuario: user?.id, rol: user?.role, controlado: !!ctl, eventos: sinEventosDeSalidas(eventos, resultadoExtra.datos?.eventosSalidas ?? []), tipos: t.data as TipoEvento[], registros: [...(resultadoExtra.datos?.registros ?? []), ...registrosContingencias(contingencias.filas)], errorExtra: [resultadoExtra.error && `Registros distritales: ${resultadoExtra.error}`, contingencias.error && `Contingencias: ${contingencias.error}`].filter(Boolean).join(' · ') }
   }, [desde, hasta, ctl?.version, user?.id, user?.role, !!ctl])
 
   const dataActual = data?.desde === desde && data.hasta === hasta && data.usuario === user?.id && data.rol === user?.role && data.controlado === !!ctl ? data : null
@@ -138,7 +144,7 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
           {propios.length > 0 && <button type="button" class={BTN_PRIMARY} onClick={() => setEdit({ fecha: hoy })}>Nuevo evento</button>}
         </div>
       </div>
-      {(error || dataActual?.errorExtra) && <div class="mb-2 space-y-2"><Alert tone="error">{error ? `No se pudo cargar el calendario: ${error}` : `No se pudieron cargar todos los registros distritales: ${dataActual?.errorExtra}`}</Alert><button type="button" class={BTN_SECONDARY} onClick={reload}>Reintentar</button></div>}
+      {(error || dataActual?.errorExtra) && <div class="mb-2 space-y-2"><Alert tone="error">{error ? `No se pudo cargar el calendario: ${error}` : `No se pudieron cargar todos los registros: ${dataActual?.errorExtra}`}</Alert><button type="button" class={BTN_SECONDARY} onClick={reload}>Reintentar</button></div>}
       {!dataActual && !error && <p class="mb-2 text-sm text-slate-500">Cargando calendario…</p>}
 
       <div class="grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 text-center">
@@ -163,10 +169,11 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
         })}
       </div>
 
-      {(tipos.length > 0 || (!ctl && user?.role === 'distrital')) && (
+      {(tipos.length > 0 || (!ctl && (user?.role === 'distrital' || user?.role === 'areal'))) && (
         <ul class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600" aria-label="Referencias">
           {tipos.map((t) => <li key={t.id} class="flex items-center gap-1.5"><span class={`size-2.5 rounded-full ${col(t.color).dot}`} />{t.nombre}</li>)}
           {!ctl && user?.role === 'distrital' && Object.entries(FUENTES).filter(([fuente]) => fuente !== 'salida' || !tipos.some((t) => t.nombre === 'Salida Educativa')).map(([fuente, t]) => <li key={fuente} class="flex items-center gap-1.5"><span class={`size-2.5 rounded-full ${col(t.color).dot}`} />{t.nombre}</li>)}
+          {!ctl && user?.role === 'areal' && <li class="flex items-center gap-1.5"><span class={`size-2.5 rounded-full ${col(FUENTES.contingencia.color).dot}`} />Contingencias</li>}
         </ul>
       )}
 

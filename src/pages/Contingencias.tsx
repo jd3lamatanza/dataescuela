@@ -2,21 +2,18 @@ import { useState } from 'preact/hooks'
 import { useAuth } from '../lib/auth'
 import { useAsync } from '../lib/hooks'
 import { supabase } from '../lib/supabase'
+import { TIPOS, SUSPENSIONES, type Suspension } from '../lib/contingencias'
+import { ContingenciasSupervision } from './ContingenciasSupervision'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, Spinner, Toggle, toast } from '../ui/kit'
 
-const TIPOS = ['Falta de Agua', 'Falta de Electricidad', 'Falta de Gas', 'Inclemencia Climática', 'Riesgo Edilicio', 'Medida de Fuerza', 'Duelo', 'Otro'] as const
-const SUSPENSIONES = {
-  sin: 'Sin Suspensión de Actividad',
-  parcial: 'Con Suspensión Parcial',
-  total: 'Con Suspensión Total',
-} as const
-type Suspension = keyof typeof SUSPENSIONES
 type Turno = { id: number; nombre: string; activo: boolean }
 type Contingencia = {
   id: number
   tipos: string[]
   suspension: Suspension
   observaciones: string
+  fecha: string
+  fecha_estimada: boolean
   created_at: string
   contingencia_turnos: { turno_id: number }[]
 }
@@ -25,7 +22,7 @@ const fecha = (s: string) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'shor
 
 export function Contingencias() {
   const { user } = useAuth()
-  return <Listado key={user?.id} />
+  return user?.role === 'escolar' ? <Listado key={user.id} /> : <ContingenciasSupervision key={user?.id} />
 }
 
 function Listado() {
@@ -33,7 +30,7 @@ function Listado() {
   const [editando, setEditando] = useState<Contingencia | 'nueva' | null>(null)
   const { data, error, loading, reload } = useAsync(async () => {
     const [c, t] = await Promise.all([
-      supabase.from('contingencias').select('id,tipos,suspension,observaciones,created_at,contingencia_turnos(turno_id)', { count: 'exact' })
+      supabase.from('contingencias').select('id,tipos,suspension,observaciones,fecha,fecha_estimada,created_at,contingencia_turnos(turno_id)', { count: 'exact' })
         .order('created_at', { ascending: false }).order('id', { ascending: false }).range((pagina - 1) * TAMANO, pagina * TAMANO - 1),
       supabase.from('turnos').select('id,nombre,activo').order('hora_desde').order('nombre'),
     ])
@@ -56,6 +53,7 @@ function Listado() {
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
               <p class="font-semibold text-slate-900">{c.tipos.join(' · ')}</p>
+              <p class="mt-1 text-sm text-slate-600">Fecha de contingencia: {c.fecha.split('-').reverse().join('/')}{c.fecha_estimada ? ' (fecha de carga; revisá la fecha)' : ''}</p>
               <p class="mt-1 text-sm text-slate-600">{SUSPENSIONES[c.suspension]}</p>
               <p class="mt-1 text-sm text-slate-600">Turnos: {c.contingencia_turnos.map((t) => nombreTurno(t.turno_id)).join(', ')}</p>
               {c.observaciones && <p class="mt-2 whitespace-pre-wrap break-words text-sm text-slate-700">{c.observaciones}</p>}
@@ -75,6 +73,7 @@ function Formulario({ contingencia, turnos, onClose, onDone }: {
   contingencia: Contingencia | null; turnos: Turno[]; onClose(): void; onDone(): void
 }) {
   const [tipos, setTipos] = useState<string[]>(contingencia?.tipos ?? [])
+  const [fechaContingencia, setFechaContingencia] = useState(contingencia?.fecha ?? '')
   const [suspension, setSuspension] = useState<string>(contingencia?.suspension ?? '')
   const anteriores = contingencia?.contingencia_turnos.map((t) => t.turno_id) ?? []
   const [seleccionados, setSeleccionados] = useState<number[]>(anteriores)
@@ -85,6 +84,7 @@ function Formulario({ contingencia, turnos, onClose, onDone }: {
   const guardar = async (e: Event) => {
     e.preventDefault()
     if (!tipos.length) return setError('Seleccioná al menos un tipo de contingencia.')
+    if (!fechaContingencia) return setError('Seleccioná la fecha de contingencia.')
     if (!suspension) return setError('Seleccioná una opción de suspensión.')
     if (!seleccionados.length) return setError('Seleccioná al menos un turno afectado.')
     setError(null)
@@ -92,7 +92,7 @@ function Formulario({ contingencia, turnos, onClose, onDone }: {
     try {
       const { error: err } = await supabase.rpc('contingencia_guardar', {
         p_id: contingencia?.id ?? null, p_tipos: tipos, p_suspension: suspension,
-        p_turnos: seleccionados, p_observaciones: observaciones,
+        p_turnos: seleccionados, p_observaciones: observaciones, p_fecha: fechaContingencia,
       })
       if (err) throw new Error(err.message)
       toast.ok(contingencia ? 'Contingencia actualizada' : 'Contingencia registrada')
@@ -107,6 +107,8 @@ function Formulario({ contingencia, turnos, onClose, onDone }: {
   return <Modal title={contingencia ? 'Editar contingencia' : 'Nueva contingencia'} onClose={() => { if (!guardando) onClose() }}>
     <form class="space-y-4" onSubmit={guardar}>
       {error && <Alert tone="error">{error}</Alert>}
+      {contingencia?.fecha_estimada && <Alert tone="warning">La fecha indicada corresponde a la carga anterior. Revisala y confirmá la fecha de la contingencia.</Alert>}
+      <Lbl label="Fecha de contingencia"><input type="date" class={FIELD} value={fechaContingencia} required disabled={guardando} onInput={(e) => setFechaContingencia(e.currentTarget.value)} /></Lbl>
       <fieldset disabled={guardando}>
         <legend class="mb-2 text-sm font-medium text-slate-700">Tipos de contingencia</legend>
         <div class="grid gap-3 sm:grid-cols-2">{TIPOS.map((tipo) =>

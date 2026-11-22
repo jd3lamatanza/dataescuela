@@ -97,8 +97,8 @@ set local role authenticated;
 do $$
 declare rechazado boolean := false;
 begin
-  if exists (select 1 from public.contingencias where id in (select contingencia1 from contingencias_test union all select contingencia2 from contingencias_test)) then
-    raise exception 'Otro rol puede ver contingencias';
+  if (select count(*) from public.contingencias where id in (select contingencia1 from contingencias_test union all select contingencia2 from contingencias_test)) <> 2 then
+    raise exception 'Distrital no puede ver todas las contingencias';
   end if;
   begin perform public.contingencia_guardar(null, array['Duelo'], 'sin', array[(select turno2 from contingencias_test)], '');
   exception when raise_exception then rechazado := true; end;
