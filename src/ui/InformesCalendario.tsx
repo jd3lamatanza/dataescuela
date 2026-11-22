@@ -4,14 +4,15 @@ import { useAsync } from '../lib/hooks'
 import { cargarCalendarioDistrital } from '../lib/calendarioDistritalDatos'
 import { leerPaginas, mostrarEventoCalendario, mostrarRegistroCalendario, sinEventosDeSalidas, type FuenteCalendario } from '../lib/calendarioDistrital'
 import { leerContingencias, registrosContingencias } from '../lib/contingencias'
-import { fechaArgentina, informeEvento, informeRegistro, ordenarInforme, type EntradaInforme } from '../lib/calendarioInforme'
+import { agruparPorTipo, fechaArgentina, informeEvento, informeRegistro, ordenarInforme, type EntradaInforme, type EstiloInforme } from '../lib/calendarioInforme'
 import { completarInforme } from '../lib/calendarioInformeDatos'
 import { buildCalendarioPdf, fechaLarga, type FormatoInforme } from '../lib/calendarioInformePdf'
 import { descargar } from '../lib/download'
 import { href } from '../lib/router'
 import type { Evento, TipoEvento } from './Calendario'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, FIELD, Lbl, Spinner, toast } from './kit'
-import { Icon } from './Icon'
+import { Icon, iconOr } from './Icon'
+import { col } from './coloresCalendario'
 
 interface Props {
   usuario: string
@@ -22,7 +23,7 @@ interface Props {
   ocultos: string[]
   disponible: boolean
   revision: number
-  fuentes: Record<FuenteCalendario, { nombre: string }>
+  fuentes: Record<FuenteCalendario, { nombre: string } & EstiloInforme>
 }
 
 export function InformesCalendario({ usuario, ano, mes, mesNombre, entradasMes, ocultos, disponible, revision, fuentes }: Props) {
@@ -50,10 +51,13 @@ export function InformesCalendario({ usuario, ano, mes, mesNombre, entradasMes, 
     const entradas: EntradaInforme[] = []
     for (const evento of sinEventosDeSalidas(eventos, extra.eventosSalidas)) {
       const tipo = porTipo.get(evento.tipo_id)
-      if (tipo && mostrarEventoCalendario(tipo, ocultos, true)) entradas.push(informeEvento(evento, tipo.nombre))
+      if (tipo && mostrarEventoCalendario(tipo, ocultos, true)) entradas.push(informeEvento(evento, tipo.nombre, tipo))
     }
     for (const registro of [...extra.registros, ...registrosContingencias(contingencias)]) {
-      if (mostrarRegistroCalendario(registro.fuente, ocultos)) entradas.push(informeRegistro(registro, fuentes[registro.fuente].nombre))
+      if (mostrarRegistroCalendario(registro.fuente, ocultos)) {
+        const tipo = fuentes[registro.fuente]
+        entradas.push(informeRegistro(registro, tipo.nombre, tipo))
+      }
     }
     return { fecha: hoy, filtros, revision, usuario, entradas: ordenarInforme(await completarInforme(entradas)) }
   }, [hoy, filtros, revision, usuario])
@@ -71,8 +75,7 @@ export function InformesCalendario({ usuario, ano, mes, mesNombre, entradasMes, 
     } finally { setExportando(false) }
   }
 
-  const cantidades = new Map<string, number>()
-  for (const entrada of actual?.entradas ?? []) cantidades.set(entrada.tipo, (cantidades.get(entrada.tipo) ?? 0) + 1)
+  const grupos = agruparPorTipo(actual?.entradas ?? [])
 
   return <div class="mt-4 space-y-4">
     <Card title="Exportar calendario">
@@ -99,12 +102,19 @@ export function InformesCalendario({ usuario, ano, mes, mesNombre, entradasMes, 
       </div> : actual && <>
         <div class="mb-4 flex flex-wrap gap-2 text-xs text-slate-600">
           <span class="rounded-full bg-sky-50 px-2 py-1 font-semibold text-sky-800">{actual.entradas.length} eventos</span>
-          {[...cantidades].map(([tipo, cantidad]) => <span key={tipo} class="rounded-full bg-slate-100 px-2 py-1">{tipo}: {cantidad}</span>)}
+          {grupos.map((grupo) => <span key={grupo[0].tipo} class={`inline-flex items-center gap-1 rounded-full px-2 py-1 font-medium ${col(grupo[0].estilo.color).chip}`}>
+            <Icon name={iconOr(grupo[0].estilo.icono)} class="size-3.5" />{grupo[0].tipo}: {grupo.length}
+          </span>)}
         </div>
         {!actual.entradas.length ? <p class="text-sm text-slate-500">No hay eventos para hoy con los filtros seleccionados.</p> :
-          <div class="space-y-3">{actual.entradas.map((entrada) => <article key={entrada.id} class="rounded-lg border border-slate-200 p-3">
-            <p class="text-xs font-semibold uppercase text-sky-700">{entrada.tipo}</p>
-            <h3 class="mt-1 break-words font-semibold text-slate-900">{entrada.titulo}</h3>
+          <div class="space-y-5">{grupos.map((grupo) => <section key={grupo[0].tipo} aria-label={grupo[0].tipo}>
+            <div class={`mb-2 flex items-center gap-2 rounded-lg border px-3 py-2 ${col(grupo[0].estilo.color).card}`}>
+              <Icon name={iconOr(grupo[0].estilo.icono)} class="size-4 shrink-0" />
+              <h3 class="min-w-0 flex-1 break-words text-sm font-semibold">{grupo[0].tipo}</h3>
+              <span class={`rounded-full px-2 py-0.5 text-xs font-semibold ${col(grupo[0].estilo.color).chip}`}>{grupo.length}</span>
+            </div>
+            <div class="space-y-2">{grupo.map((entrada) => <article key={entrada.id} class="rounded-lg border border-slate-200 bg-white p-3">
+            <h4 class="break-words font-semibold text-slate-900">{entrada.titulo}</h4>
             <dl class="mt-3 grid gap-2 text-sm sm:grid-cols-2">
               {entrada.detalles.map((detalle, i) => <div key={`${detalle.etiqueta}-${i}`} class="min-w-0">
                 <dt class="text-xs font-semibold text-slate-500">{detalle.etiqueta}</dt>
@@ -112,7 +122,7 @@ export function InformesCalendario({ usuario, ano, mes, mesNombre, entradasMes, 
               </div>)}
             </dl>
             {entrada.enlace && <a class="mt-3 inline-block text-sm font-medium text-sky-700 hover:underline" href={href(entrada.enlace)}>Abrir módulo</a>}
-          </article>)}</div>}
+          </article>)}</div></section>)}</div>}
       </>}
     </Card>
   </div>

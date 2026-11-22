@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
+import { PDFDocument, PDFArray, PDFRawStream, decodePDFRawStream } from 'pdf-lib'
 
 const compilar = (ruta) => ts.transpileModule(readFileSync(new URL(ruta, import.meta.url), 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
@@ -56,6 +57,40 @@ test('el PDF mensual agrupa por día, distingue formatos y no trunca descripcion
   assert.ok(analitico.indexOf('domingo, 1 de febrero') < analitico.indexOf('martes, 3 de febrero'))
   assert.match(analitico, /sábado, 28 de febrero/)
   assert.match(analitico, /Página 2 de/)
+})
+
+test('ordena cada día por tipo y presenta grupos coloreados en ambos informes PDF', async () => {
+  const crear = (id, fecha, nombre, tipo, color) => modelo.informeEvento({
+    id, fecha, nombre, tipo_id: id, rol: 'distrital', autor: 'Ana', para_roles: [], descripcion: '',
+  }, tipo, { color, icono: 'calendar' })
+  const entradas = [
+    crear(1, '2026-02-03', 'Alfa salida', 'Salida', 'green'),
+    crear(2, '2026-02-03', 'Zulu agenda', 'Agenda', 'blue'),
+    crear(3, '2026-02-03', 'Beta agenda', 'Agenda', 'blue'),
+    crear(4, '2026-02-04', 'Alfa agenda', 'Agenda', 'blue'),
+  ]
+  const ordenadas = modelo.ordenarInforme(entradas)
+  assert.deepEqual(ordenadas.map((e) => e.id), ['evento-3', 'evento-2', 'evento-1', 'evento-4'])
+  assert.deepEqual(modelo.agruparPorTipo(ordenadas.slice(0, 3)).map((g) => [g[0].tipo, g.length]), [['Agenda', 2], ['Salida', 1]])
+  assert.equal(ordenadas[0].estilo.color, 'blue')
+  for (const formato of ['resumido', 'analitico']) {
+    const bytes = await buildCalendarioPdf(2026, 1, entradas, formato)
+    const texto = textoPdf(bytes)
+    assert.match(texto, /Agenda · 2 eventos/)
+    assert.match(texto, /Salida · 1 evento/)
+    assert.ok(texto.indexOf('Beta agenda') < texto.indexOf('Zulu agenda'))
+    assert.ok(texto.indexOf('Zulu agenda') < texto.indexOf('Alfa salida'))
+    assert.ok(texto.indexOf('Alfa salida') < texto.indexOf('Alfa agenda'))
+    const pdf = await PDFDocument.load(bytes)
+    const streams = pdf.getPages().flatMap((page) => {
+      const contents = page.node.Contents()
+      const refs = contents instanceof PDFArray ? contents.asArray() : [contents]
+      return refs.map((ref) => pdf.context.lookup(ref)).filter((stream) => stream instanceof PDFRawStream)
+        .map((stream) => Buffer.from(decodePDFRawStream(stream).decode()).toString('utf8'))
+    }).join('\n')
+    assert.match(streams, /0\.91 0\.94 1 rg/)
+    assert.match(streams, /0\.9 0\.97 0\.91 rg/)
+  }
 })
 
 function cargador(filas) {

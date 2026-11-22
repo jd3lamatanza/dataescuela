@@ -2,11 +2,13 @@ import type { Evento } from '../ui/Calendario'
 import type { RegistroCalendario } from './calendarioDistrital'
 
 export interface CampoInforme { etiqueta: string; valor: string }
+export interface EstiloInforme { color: string; icono: string }
 export interface EntradaInforme {
   id: string
   fecha: string
   titulo: string
   tipo: string
+  estilo: EstiloInforme
   enlace?: string
   resumen: CampoInforme[]
   detalles: CampoInforme[]
@@ -22,23 +24,23 @@ export function campo(etiqueta: string, valor: string | number | boolean | null 
   return [{ etiqueta, valor: protegerCuil(typeof valor === 'boolean' ? (valor ? 'Sí' : 'No') : String(valor)) }]
 }
 
-export function informeEvento(e: Evento, tipo: string): EntradaInforme {
+export function informeEvento(e: Evento, tipo: string, estilo: EstiloInforme = { color: 'slate', icono: 'calendar' }): EntradaInforme {
   const resumen = [
     ...campo('Hora', e.hora?.slice(0, 5)), ...campo('Lugar', e.lugar),
     ...campo('Autor', e.autor), ...campo('Descripción', e.descripcion),
   ]
   return {
-    id: `evento-${e.id}`, fecha: e.fecha, titulo: protegerCuil(e.nombre), tipo, resumen,
+    id: `evento-${e.id}`, fecha: e.fecha, titulo: protegerCuil(e.nombre), tipo, estilo, resumen,
     detalles: [...resumen, ...campo('Rol del autor', e.rol),
       ...campo('Asignado a', e.para_roles.join(', ')), ...campo('CUE', e.cue),
       ...campo('Fecha de creación', e.created_at), ...campo('Agenda histórica', e.agenda_historica)],
   }
 }
 
-export function informeRegistro(r: RegistroCalendario, tipo: string): EntradaInforme {
+export function informeRegistro(r: RegistroCalendario, tipo: string, estilo: EstiloInforme = { color: 'slate', icono: 'calendar' }): EntradaInforme {
   const resumen = [...campo('Estado', r.estado), ...campo('Lugar', r.lugar), ...campo('Detalle', r.descripcion)]
   const detalles = r.detalles ? r.detalles.flatMap((c) => campo(c.etiqueta, c.valor)) : [...resumen]
-  return { id: r.id, fecha: r.fecha, titulo: protegerCuil(r.nombre), tipo, enlace: r.enlace, resumen, detalles, registro: r }
+  return { id: r.id, fecha: r.fecha, titulo: protegerCuil(r.nombre), tipo, estilo, enlace: r.enlace, resumen, detalles, registro: r }
 }
 
 export function fechasDelMes(ano: number, mes: number): string[] {
@@ -47,7 +49,17 @@ export function fechasDelMes(ano: number, mes: number): string[] {
 }
 
 export function ordenarInforme(entradas: readonly EntradaInforme[]): EntradaInforme[] {
-  return [...entradas].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.titulo.localeCompare(b.titulo, 'es') || a.id.localeCompare(b.id))
+  return [...entradas].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.tipo.localeCompare(b.tipo, 'es') || a.titulo.localeCompare(b.titulo, 'es') || a.id.localeCompare(b.id))
+}
+
+export function agruparPorTipo(entradas: readonly EntradaInforme[]): EntradaInforme[][] {
+  const grupos = new Map<string, EntradaInforme[]>()
+  for (const entrada of entradas) {
+    const grupo = grupos.get(entrada.tipo)
+    if (grupo) grupo.push(entrada)
+    else grupos.set(entrada.tipo, [entrada])
+  }
+  return [...grupos.values()]
 }
 
 export function fechaArgentina(fecha = new Date()): string {
