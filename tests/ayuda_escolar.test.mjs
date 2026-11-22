@@ -9,9 +9,11 @@ import { agruparMenuDistrital } from '../src/ui/sidebarDistrital.ts'
 
 const migration = readFileSync(new URL('../supabase/migrations/0064_ayuda_escolar.sql', import.meta.url), 'utf8')
 const contingencias = readFileSync(new URL('../supabase/migrations/0068_contingencias.sql', import.meta.url), 'utf8')
+const proyectos = readFileSync(new URL('../supabase/migrations/0069_mis_proyectos.sql', import.meta.url), 'utf8')
 const seed = [
   ...JSON.parse(migration.match(/\$ayuda\$([\s\S]*?)\$ayuda\$/)[1]),
   ...JSON.parse(contingencias.match(/\$ayuda_contingencias\$([\s\S]*?)\$ayuda_contingencias\$/)[1]),
+  ...JSON.parse(proyectos.match(/\$ayuda_proyectos\$([\s\S]*?)\$ayuda_proyectos\$/)[1]),
 ]
 
 test('se conservan todas las guías actuales y el editor requiere permiso avanzado en Sistema', () => {
