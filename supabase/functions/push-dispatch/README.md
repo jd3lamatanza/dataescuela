@@ -1,8 +1,8 @@
 # Notificaciones Web Push
 
-Cada inserción en `notifications` genera una tarea por suscripción registrada en ese momento. Un trabajo de `pg_cron` invoca el despachador cada minuto; procesa hasta 100 tareas por ejecución y reintenta los errores con espera exponencial de hasta una hora. Los proveedores y el sistema operativo pueden retrasar o no entregar un aviso. Un fallo después del envío y antes de confirmarlo puede generar un duplicado.
+Cada notificación o mensaje recibido genera una tarea por suscripción registrada del destinatario en ese momento. En el buzón compartido de JD3, se avisa a los usuarios distritales activos; no se avisa al remitente por la copia enviada. Un trabajo de `pg_cron` invoca el despachador cada minuto; procesa hasta 100 tareas por ejecución y reintenta los errores con espera exponencial de hasta una hora. Los proveedores y el sistema operativo pueden retrasar o no entregar un aviso. Un fallo después del envío y antes de confirmarlo puede generar un duplicado.
 
-El aviso no contiene datos de la notificación: el usuario debe abrir DataEscuela e iniciar sesión para consultar su bandeja. Las suscripciones permanecen al cerrar sesión y se registran para la cuenta real, también durante el ingreso simulado. Las suscripciones vencidas se eliminan; si un navegador renueva o pierde la suscripción, hay que activarla nuevamente.
+El aviso no contiene datos de la notificación o del mensaje: el usuario debe abrir DataEscuela e iniciar sesión para consultar su bandeja. Las suscripciones permanecen al cerrar sesión y se registran para la cuenta real, también durante el ingreso simulado. Las suscripciones vencidas se eliminan; si un navegador renueva o pierde la suscripción, hay que activarla nuevamente.
 
 ## Configuración
 

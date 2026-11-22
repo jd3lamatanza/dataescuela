@@ -1,6 +1,6 @@
 self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification('DataEscuela', {
-    body: 'Tenés una nueva notificación. Abrí la aplicación para verla.',
+    body: 'Tenés una nueva notificación o mensaje. Abrí la aplicación para verlo.',
     icon: new URL('icon-192.png', self.registration.scope).href,
     badge: new URL('icon-192.png', self.registration.scope).href,
   }))

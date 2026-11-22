@@ -33,6 +33,7 @@ test('cada push muestra un aviso genérico sin información privada', async () =
   await sw.dispatch('push')
   assert.equal(sw.avisos.length, 2)
   assert.equal(sw.avisos[0].title, 'DataEscuela')
+  assert.match(sw.avisos[0].options.body, /notificación o mensaje/)
   assert.doesNotMatch(sw.avisos[0].options.body, /privado/)
 })
 
