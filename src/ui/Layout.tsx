@@ -11,6 +11,7 @@ import { Bandeja } from './Bandeja'
 import { AvisoSimulado } from './AvisoSimulado'
 import { agruparMenuDistrital, type CategoriaDistrital } from './sidebarDistrital'
 import { Modal, toast } from './kit'
+import { NotificacionesPush } from './NotificacionesPush'
 import type { AppModule } from '../modules'
 
 export const Logo = ({ class: cls = 'size-10' }: { class?: string }) => (
@@ -133,7 +134,7 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
       </nav>
 
       <main class={`px-3 py-5 sm:px-6 ${collapsed ? 'lg:pl-24' : 'lg:pl-72'}`}>
-        <div class="w-full">{children}</div>
+        <div class="w-full"><NotificacionesPush key={`${user.id}:${path === '/' ? 'inicio' : 'sesion'}`} simulando={!!user.simulador} />{children}</div>
         {user.role === 'distrital' && <div class="hidden h-14 lg:block" />}
       </main>
       {user.role === 'distrital' && <BarraServidor collapsed={collapsed} />}
