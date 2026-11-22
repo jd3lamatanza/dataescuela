@@ -8,7 +8,11 @@ import { canAccess, canAccessUser, MODULES, ROLES } from '../src/modules.ts'
 import { agruparMenuDistrital } from '../src/ui/sidebarDistrital.ts'
 
 const migration = readFileSync(new URL('../supabase/migrations/0064_ayuda_escolar.sql', import.meta.url), 'utf8')
-const seed = JSON.parse(migration.match(/\$ayuda\$([\s\S]*?)\$ayuda\$/)[1])
+const contingencias = readFileSync(new URL('../supabase/migrations/0068_contingencias.sql', import.meta.url), 'utf8')
+const seed = [
+  ...JSON.parse(migration.match(/\$ayuda\$([\s\S]*?)\$ayuda\$/)[1]),
+  ...JSON.parse(contingencias.match(/\$ayuda_contingencias\$([\s\S]*?)\$ayuda_contingencias\$/)[1]),
+]
 
 test('se conservan todas las guías actuales y el editor requiere permiso avanzado en Sistema', () => {
   const ayuda = MODULES.find((m) => m.id === 'ayuda-escolar')
