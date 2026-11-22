@@ -11,6 +11,8 @@ import { Salidas } from './Salidas'
 import { Contingencias } from './Contingencias'
 import { EventosEscolares } from './EventosEscolares'
 import { MisProyectos } from './MisProyectos'
+import { ProyectosAreales } from './ProyectosAreales'
+import { useAuth } from '../lib/auth'
 import { Labores } from './Labores'
 import { EscuelaVerano } from './EscuelaVerano'
 import { EscuelaVeranoEscolar } from './EscuelaVeranoEscolar'
@@ -41,6 +43,11 @@ const Pendiente = (titulo: string) => () => (
   </>
 )
 
+const MisProyectosPropios = () => {
+  const { user } = useAuth()
+  return user?.role === 'areal' ? <ProyectosAreales /> : <MisProyectos />
+}
+
 /** id de módulo (src/modules.ts) → página. Los módulos sin página muestran "en construcción". */
 export const PAGES: Record<string, ComponentType> = {
   inicio: Inicio,
@@ -62,8 +69,9 @@ export const PAGES: Record<string, ComponentType> = {
   salidas: Salidas,
   contingencias: Contingencias,
   'eventos-escolares': EventosEscolares,
-  'mis-proyectos': MisProyectos,
+  'mis-proyectos': MisProyectosPropios,
   'proyectos-escolares': MisProyectos,
+  'proyectos-areales': ProyectosAreales,
   'salidas-distrito': Salidas,
   'salidas-areal': Salidas,
   planes: Planes,
