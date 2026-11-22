@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { canAccess, canAccessUser, modulesFor, modulesForUser, ROLES } from '../src/modules.ts'
-import { agruparMenuDistrital, ordenarMenu } from '../src/ui/sidebarDistrital.ts'
+import { agruparMenuDistrital, ordenarModulosSidebar } from '../src/ui/sidebarDistrital.ts'
 import { ESTILOS_CATEGORIAS, ESTILOS_MODULOS, ESTILO_TEMA } from '../src/ui/sidebarMenu.ts'
 
 test('el menú distrital agrupa todos los módulos una sola vez', () => {
@@ -16,11 +16,14 @@ test('el menú distrital agrupa todos los módulos una sola vez', () => {
   assert.ok(grupos.find((g) => g.id === 'utilidades').modulos.some((m) => m.id === 'acreditacion'))
 })
 
-test('todos los menús se ordenan alfabéticamente sin cambiar los módulos originales', () => {
+test('Home y Mensajes quedan arriba y los demás módulos se ordenan alfabéticamente', () => {
   for (const role of ROLES) {
     const modulos = modulesForUser({ role, permiso_avanzado: true })
-    const ordenados = ordenarMenu([...modulos, { label: 'Modo oscuro' }])
-    assert.deepEqual(ordenados.map((x) => x.label), ordenados.map((x) => x.label).toSorted((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' })))
+    const ordenados = ordenarModulosSidebar(modulos)
+    assert.equal(ordenados[0].id, 'inicio')
+    if (modulos.some((m) => m.id === 'mensajes')) assert.equal(ordenados[1].id, 'mensajes')
+    const resto = ordenados.filter((m) => !['inicio', 'mensajes'].includes(m.id)).map((m) => m.label)
+    assert.deepEqual(resto, resto.toSorted((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' })))
     assert.deepEqual(modulos, modulesForUser({ role, permiso_avanzado: true }))
   }
   for (const grupo of agruparMenuDistrital(modulesForUser({ role: 'distrital', permiso_avanzado: true }))) {

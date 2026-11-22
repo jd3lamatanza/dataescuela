@@ -45,7 +45,7 @@ export function RegistroAcreditacion({ id }: { id: string }) {
   }
   const evento = data?.evento, escuelas = data?.escuelas ?? []
   return <main class="eav-public"><div class="eav-page">
-    <header class="eav-header"><div class="eav-logos"><img src={`${import.meta.env.BASE_URL}pba-logo.png`} alt="Gobierno de la Provincia de Buenos Aires" /><img src={`${import.meta.env.BASE_URL}icon-192.png`} alt="DataEscuela" /></div>
+    <header class="eav-header"><div class="eav-logos"><img src={`${import.meta.env.BASE_URL}pba-logo.png`} alt="Gobierno de la Provincia de Buenos Aires" /><img src={`${import.meta.env.BASE_URL}icon-192.png?v=2`} alt="DataEscuela" /></div>
       <div class="eav-header-copy"><span class="eav-kicker">Jefatura Distrital 3</span><h1>Acreditación de asistencia</h1><p class="eav-area">La Matanza</p></div></header>
     {loading && <p>Cargando evento…</p>}
     {error && <Alert tone="error">{error}</Alert>}

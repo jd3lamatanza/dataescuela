@@ -86,7 +86,7 @@ function Listado() {
       const tabla = tablaEscuelas(rows, { localidad, nivel, busqueda: q.trim() }, BRAND.org, user?.role === 'distrital' ? cupos : undefined)
       if (tipo === 'xlsx') descargar(await buildEscuelasXlsx(tabla, BRAND.name), 'listado-escuelas.xlsx', XLSX_MIME)
       else {
-        const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
+        const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png?v=2`)
         if (!respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
         const pdf = await buildPdf(tabla, { brand: { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) }, maxCellLines: 12 })
         descargar(pdf, 'listado-escuelas.pdf', 'application/pdf')

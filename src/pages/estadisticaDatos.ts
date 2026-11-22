@@ -105,7 +105,7 @@ export async function descargarTabla(tipo: FormatoEstadistica, archivo: string, 
     descargar(bytes, `${archivo}.pptx`, PPTX_MIME)
     return
   }
-  const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
+  const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png?v=2`)
   if (!respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
   const pdf = await buildPdf({ title: titulo, subtitle: subtitulo, headers, widths, rows: pdfFilas }, { brand: { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) } })
   descargar(pdf, `${archivo}.pdf`, 'application/pdf')

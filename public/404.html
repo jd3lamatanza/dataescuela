@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0758b3" />
+    <title>Página no encontrada · DataEscuela</title>
+    <script>
+      const base = document.createElement('base')
+      const repo = location.pathname.split('/').filter(Boolean)[0]
+      base.href = location.hostname.endsWith('.github.io') && repo ? `/${repo}/` : '/'
+      document.head.append(base)
+      try {
+        if (localStorage.getItem('dw-theme') === 'dark') document.documentElement.classList.add('dark')
+      } catch {
+        console.warn('No se pudo leer la preferencia de apariencia.')
+      }
+    </script>
+    <link rel="icon" href="./favicon.ico?v=2" sizes="any" />
+    <style>
+      body { margin: 0; background: #fff; color: #0f172a; font-family: system-ui, sans-serif; }
+      .dark body { background: #172235; color: #f1f5f9; }
+      main { box-sizing: border-box; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem 1rem; text-align: center; }
+      h1 { margin: 0; font-size: 1.5rem; }
+      p { margin: .5rem 0 0; color: #475569; }
+      .dark p { color: #cbd5e1; }
+      img { display: block; width: min(100%, 512px); height: auto; margin: 1rem 0; }
+      a { display: inline-flex; min-height: 44px; align-items: center; padding: 0 1rem; border-radius: .375rem; background: #0369a1; color: #fff; font-weight: 600; text-decoration: none; }
+      a:focus-visible { outline: 3px solid #38bdf8; outline-offset: 3px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Página no encontrada</h1>
+      <p>La página que buscás no existe.</p>
+      <img src="./error-acceso.png" width="840" height="768" alt="" />
+      <a href="./">Volver al inicio</a>
+    </main>
+  </body>
+</html>

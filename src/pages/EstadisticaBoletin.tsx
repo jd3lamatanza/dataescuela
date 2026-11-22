@@ -74,7 +74,7 @@ export function BoletinDigital({ distrito }: { distrito: boolean }) {
         XLSX.utils.book_append_sheet(libro, hoja, 'Boletín Digital')
         descargar(new Uint8Array(XLSX.write(libro, { type: 'array', bookType: 'xlsx' })), 'boletin-digital.xlsx', XLSX_MIME)
       } else {
-        const respuesta = tipo === 'pdf' ? await fetch(`${import.meta.env.BASE_URL}icon-192.png`) : null
+        const respuesta = tipo === 'pdf' ? await fetch(`${import.meta.env.BASE_URL}icon-192.png?v=2`) : null
         if (respuesta && !respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
         const seleccionado = distrito && inspector ? data?.inspectores.find((i) => String(i.id) === inspector) : undefined
         const agrupamiento = data?.grupos.find((g) => String(g.id) === grupo)

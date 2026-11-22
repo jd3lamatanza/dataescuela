@@ -125,7 +125,7 @@ function Seguimiento() {
       const tabla = tablaSeguimiento(filas, nombre, BRAND.org)
       if (formato === 'xlsx') descargar(await buildListadoXlsx(tabla, BRAND.name, 'Seguimiento'), 'eventos-escolares.xlsx', XLSX_MIME)
       else {
-        const logo = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
+        const logo = await fetch(`${import.meta.env.BASE_URL}icon-192.png?v=2`)
         if (!logo.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
         descargar(await buildPdf(tabla, { brand: { name: BRAND.name, logo: new Uint8Array(await logo.arrayBuffer()) }, maxCellLines: 10 }), 'eventos-escolares.pdf', 'application/pdf')
       }

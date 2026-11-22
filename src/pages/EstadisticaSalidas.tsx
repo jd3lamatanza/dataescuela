@@ -30,7 +30,7 @@ async function descargarTabla(tipo: FormatoEstadistica, archivo: string, titulo:
     descargar(new Uint8Array(XLSX.write(libro, { type: 'array', bookType: 'xlsx' })), `${archivo}.xlsx`, XLSX_MIME)
     return
   }
-  const respuesta = tipo === 'pdf' ? await fetch(`${import.meta.env.BASE_URL}icon-192.png`) : null
+  const respuesta = tipo === 'pdf' ? await fetch(`${import.meta.env.BASE_URL}icon-192.png?v=2`) : null
   if (respuesta && !respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
   const pdf = await buildInforme(tipo, { title: titulo, subtitle: subtitulo, headers, widths, rows: filas.map((f) => f.map(String)) },
     { brand: respuesta ? { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) } : undefined })

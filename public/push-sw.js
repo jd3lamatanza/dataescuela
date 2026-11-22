@@ -21,8 +21,8 @@ self.addEventListener('push', (event) => {
   }
   event.waitUntil(self.registration.showNotification(title, {
     body,
-    icon: new URL('icon-192.png', self.registration.scope).href,
-    badge: new URL('icon-192.png', self.registration.scope).href,
+    icon: new URL('icon-192.png?v=2', self.registration.scope).href,
+    badge: new URL('icon-192.png?v=2', self.registration.scope).href,
   }))
 })
 

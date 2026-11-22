@@ -208,7 +208,7 @@ function Personas({ evento, manual, areal = false, refreshKey = 0, envioOcupado 
       const nombre = `acreditados-${evento.fecha}-${evento.id}`
       if (tipo === 'xlsx') descargar(await buildListadoXlsx(tabla, BRAND.name, 'Acreditados'), `${nombre}.xlsx`, XLSX_MIME)
       else {
-        const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
+        const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png?v=2`)
         if (!respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
         descargar(await buildPdf(tabla, { brand: { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) }, maxCellLines: 60 }), `${nombre}.pdf`, 'application/pdf')
       }

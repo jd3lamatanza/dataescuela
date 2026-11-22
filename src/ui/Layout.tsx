@@ -9,14 +9,14 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { Bandeja } from './Bandeja'
 import { AvisoSimulado } from './AvisoSimulado'
-import { agruparMenuDistrital, ordenarMenu, type CategoriaDistrital } from './sidebarDistrital'
+import { agruparMenuDistrital, ordenarModulosSidebar, type CategoriaDistrital } from './sidebarDistrital'
 import { ESTILOS_CATEGORIAS, ESTILO_TEMA, estiloModulo } from './sidebarMenu'
 import { Modal, toast } from './kit'
 import { NotificacionesPush } from './NotificacionesPush'
 import type { AppModule } from '../modules'
 
 export const Logo = ({ class: cls = 'size-10' }: { class?: string }) => (
-  <img src="./icon-192.png" alt="DataEscuela v2" width="64" height="64" class={`shrink-0 rounded-xl ${cls}`} />
+  <img src={`${import.meta.env.BASE_URL}icon-192.png?v=2`} alt="DataEscuela v2" width="64" height="64" class={`shrink-0 rounded-xl ${cls}`} />
 )
 
 /** Login a dos paneles: marca a la izquierda (≥lg) y formulario a la derecha. */
@@ -96,17 +96,10 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
       </span>
     </button>
   )
-  const menuPlano = ordenarMenu([
-    ...mods.map((modulo) => ({ tipo: 'modulo' as const, label: modulo.label, modulo })),
-    { tipo: 'tema' as const, label: 'Modo oscuro' },
-  ])
-  const menuDistrital = ordenarMenu([
-    ...mods.filter((m) => m.id === 'inicio' || m.id === 'mensajes').map((modulo) => ({ tipo: 'modulo' as const, label: modulo.label, modulo })),
-    ...categorias.map((categoria) => ({ tipo: 'categoria' as const, label: categoria.label, categoria })),
-    { tipo: 'tema' as const, label: 'Modo oscuro' },
-  ])
-  const listaPlana = <ul class="space-y-0.5">{menuPlano.map((item) =>
-    <li key={item.tipo === 'modulo' ? item.modulo.id : 'tema'}>{item.tipo === 'modulo' ? enlace(item.modulo) : tema}</li>)}</ul>
+  const ordenados = ordenarModulosSidebar(mods)
+  const destacados = ordenados.filter((m) => m.id === 'inicio' || m.id === 'mensajes')
+  const listaPlana = <ul class="space-y-0.5">{ordenados.map((modulo) =>
+    <li key={modulo.id}>{enlace(modulo)}</li>)}<li>{tema}</li></ul>
   const categoriaMenu = (categoria: (typeof categorias)[number]) => {
     const apariencia = ESTILOS_CATEGORIAS[categoria.id]
     return <section key={categoria.id}>
@@ -141,8 +134,9 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
         {user.role !== 'distrital' ? listaPlana : <>
           <div class={collapsed ? 'lg:hidden' : ''}>
             <div class="space-y-0.5">
-              {menuDistrital.map((item) => item.tipo === 'modulo' ? <div key={item.modulo.id}>{enlace(item.modulo)}</div>
-                : item.tipo === 'tema' ? <div key="tema">{tema}</div> : categoriaMenu(item.categoria))}
+              {destacados.map((modulo) => <div key={modulo.id}>{enlace(modulo)}</div>)}
+              {categorias.map(categoriaMenu)}
+              {tema}
             </div>
           </div>
           {collapsed && <div class="hidden lg:block">{listaPlana}</div>}

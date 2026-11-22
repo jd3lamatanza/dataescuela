@@ -27,7 +27,6 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_KEY: ${{ vars.VITE_SUPABASE_KEY }}
-      - run: cp dist/index.html dist/404.html
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist

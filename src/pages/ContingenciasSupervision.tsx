@@ -39,7 +39,7 @@ export function ContingenciasSupervision() {
       const tabla = tablaContingencias(filas, actuales, BRAND.org)
       if (tipo === 'xlsx') descargar(await buildListadoXlsx(tabla, BRAND.name, 'Contingencias'), 'contingencias.xlsx', XLSX_MIME)
       else {
-        const logo = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
+        const logo = await fetch(`${import.meta.env.BASE_URL}icon-192.png?v=2`)
         if (!logo.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
         descargar(await buildPdf(tabla, { brand: { name: BRAND.name, logo: new Uint8Array(await logo.arrayBuffer()) }, maxCellLines: 30 }), 'contingencias.pdf', 'application/pdf')
       }

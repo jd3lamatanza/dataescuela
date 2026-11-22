@@ -72,7 +72,7 @@ function Agrupaciones({ tipo }: { tipo: TipoAgrupacion }) {
       const tabla = tablaNudos(grupos, filtros, BRAND.org, tipo)
       if (formato === 'xlsx') descargar(await buildListadoXlsx(tabla, BRAND.name, tipo === 'nudo' ? 'Nudos' : 'Circuitos'), `escuelas-por-${tipo}.xlsx`, XLSX_MIME)
       else {
-        const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png`)
+        const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png?v=2`)
         if (!respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
         descargar(await buildPdf(tabla, { brand: { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) }, maxCellLines: 60 }), `escuelas-por-${tipo}.pdf`, 'application/pdf')
       }

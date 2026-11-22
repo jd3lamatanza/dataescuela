@@ -3,6 +3,11 @@ import type { AppModule, IconName } from '../modules'
 export const ordenarMenu = <T extends { label: string }>(items: readonly T[]): T[] =>
   [...items].sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }))
 
+export const ordenarModulosSidebar = (modulos: readonly AppModule[]): AppModule[] => {
+  const destacados = ['inicio', 'mensajes'].flatMap((id) => modulos.filter((modulo) => modulo.id === id))
+  return [...destacados, ...ordenarMenu(modulos.filter((modulo) => modulo.id !== 'inicio' && modulo.id !== 'mensajes'))]
+}
+
 export type CategoriaDistrital = 'escuelas' | 'inspectores' | 'estadistica' | 'utilidades' | 'sistema'
 
 export const CATEGORIAS_DISTRITALES: readonly { id: CategoriaDistrital; label: string; icon: IconName }[] = [
