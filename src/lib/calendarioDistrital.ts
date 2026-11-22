@@ -8,6 +8,7 @@ export interface RegistroCalendario {
   lugar?: string | null
   estado?: string
   enlace: string
+  detalles?: { etiqueta: string; valor: string }[]
 }
 export interface Acreditacion { id: string; nombre: string; fecha: string; lugar: string; descripcion: string; hora_inicio: string; hora_fin: string; estado: string }
 export interface Salida { id: number; titulo: string; fecha: string; destino: string; escuela: string; clave: string | null; evento_id: number | null; estado: { nombre: string } | null }

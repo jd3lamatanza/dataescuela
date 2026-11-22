@@ -9,11 +9,13 @@ import { leerPaginas, mostrarEventoCalendario, mostrarRegistroCalendario, sinEve
 import { cargarCalendarioDistrital } from '../lib/calendarioDistritalDatos'
 import { leerContingencias, registrosContingencias } from '../lib/contingencias'
 import { href } from '../lib/router'
+import { informeEvento, informeRegistro } from '../lib/calendarioInforme'
+import { InformesCalendario } from './InformesCalendario'
 
 export interface TipoEvento { id: number; nombre: string; icono: string; color: string; rol: Role; activo: boolean }
 export interface Evento {
   id: number; fecha: string; tipo_id: number; nombre: string; descripcion: string | null; lugar?: string | null; hora?: string | null; agenda_historica?: boolean
-  user_id: string; rol: Role; autor: string; para_roles: Role[]
+  user_id: string; rol: Role; autor: string; para_roles: Role[]; cue?: string | null; created_at?: string
 }
 
 // Clases completas para que Tailwind las detecte
@@ -69,6 +71,7 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
   const [edit, setEdit] = useState<Partial<Evento> | null>(null)
   const [configurar, setConfigurar] = useState(false)
   const [ocultos, setOcultos] = useState<string[]>([])
+  const [revision, setRevision] = useState(0)
 
   const celdas = useMemo(() => {
     const offset = (new Date(ym.y, ym.m, 1).getDay() + 6) % 7
@@ -78,7 +81,7 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
   }, [ym])
   const desde = key(celdas[0]); const hasta = key(celdas[celdas.length - 1])
 
-  const { data, error, reload } = useAsync(async () => {
+  const { data, error, loading, reload } = useAsync(async () => {
     const [eventos, t, resultadoExtra, contingencias] = await Promise.all([
       leerPaginas<Evento>((a, b) => supabase.from('eventos').select('*').gte('fecha', desde).lte('fecha', hasta).order('id').range(a, b)),
       supabase.from('evento_tipos').select('*').order('id'),
@@ -130,16 +133,27 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
   }
   const irHoy = () => { const d = new Date(); setYm({ y: d.getFullYear(), m: d.getMonth() }) }
   const esAutor = (e: Evento) => !ctl?.tipoNombre && e.user_id === user?.id
+  const actualizar = () => { reload(); setRevision((n) => n + 1) }
+  const inicioMes = key(new Date(ym.y, ym.m, 1))
+  const finMes = key(new Date(ym.y, ym.m + 1, 0))
+  const entradasMes = [...porDia.entries()]
+    .filter(([fecha]) => fecha >= inicioMes && fecha <= finMes)
+    .flatMap(([, entradas]) => entradas.map((entrada) => {
+      const tipo = tipoEntrada(entrada)
+      return entrada.clase === 'evento'
+        ? informeEvento(entrada.evento, tipo?.nombre ?? 'Evento')
+        : informeRegistro(entrada.registro, tipo?.nombre ?? 'Registro')
+    }))
 
   const eliminar = async (e: Evento) => {
     if (!(await confirmar('Eliminar evento', { text: `Se eliminará "${e.nombre}".`, ok: 'Eliminar', danger: true }))) return
     const { error } = await supabase.rpc('evento_eliminar', { p_id: e.id })
     if (error) toast.error(error.message)
-    else { toast.ok('Evento eliminado'); setDetalle(null); reload() }
+    else { toast.ok('Evento eliminado'); setDetalle(null); actualizar() }
   }
 
   return (
-    <Card>
+    <><Card>
       <div class="mb-3 flex flex-wrap items-center gap-2">
         <h2 class="text-base font-semibold capitalize text-slate-900">{mesLabel(ym.y, ym.m)}</h2>
         <div class="ml-auto flex flex-wrap items-center justify-end gap-1.5">
@@ -254,8 +268,11 @@ export function Calendario({ ctl }: { ctl?: CalendarioCtl } = {}) {
           )}
         </Modal>
       )}
-      {edit && <Form e={edit} tipos={propios} rol={user!.role} onClose={() => setEdit(null)} onDone={() => { setEdit(null); setDetalle(null); reload() }} />}
+      {edit && <Form e={edit} tipos={propios} rol={user!.role} onClose={() => setEdit(null)} onDone={() => { setEdit(null); setDetalle(null); actualizar() }} />}
     </Card>
+    {!ctl && user?.role === 'distrital' && <InformesCalendario key={user.id} usuario={user.id} ano={ym.y} mes={ym.m} mesNombre={mesLabel(ym.y, ym.m)}
+      entradasMes={entradasMes} ocultos={ocultos} disponible={!!dataActual && !loading && !error && !dataActual.errorExtra} revision={revision} fuentes={FUENTES} />}
+    </>
   )
 }
 

@@ -20,6 +20,13 @@ export function registrosContingencias(filas: ContingenciaSupervision[]): Regist
     descripcion: [`${c.clave || c.cue} ${c.escuela}`.trim(), `Turnos: ${c.turnos.join(', ')}`,
       c.fecha_estimada ? 'Fecha de carga, pendiente de revisión' : '', c.observaciones].filter(Boolean).join('\n'),
     estado: SUSPENSIONES[c.suspension], enlace: `/contingencias?contingencia=${c.id}`,
+    detalles: [
+      { etiqueta: 'Escuela', valor: c.escuela }, { etiqueta: 'Clave provincial', valor: c.clave },
+      { etiqueta: 'CUE', valor: c.cue }, { etiqueta: 'Tipos', valor: c.tipos.join(', ') },
+      { etiqueta: 'Suspensión', valor: SUSPENSIONES[c.suspension] }, { etiqueta: 'Turnos', valor: c.turnos.join(', ') },
+      { etiqueta: 'Fecha estimada', valor: c.fecha_estimada ? 'Sí, fecha de carga pendiente de revisión' : 'No' },
+      { etiqueta: 'Observaciones', valor: c.observaciones }, { etiqueta: 'Fecha de carga', valor: c.created_at },
+    ],
   }))
 }
 
