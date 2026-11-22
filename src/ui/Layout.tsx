@@ -9,7 +9,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { Bandeja } from './Bandeja'
 import { AvisoSimulado } from './AvisoSimulado'
-import { agruparMenuDistrital, type CategoriaDistrital } from './sidebarDistrital'
+import { agruparMenuDistrital, ordenarMenu, type CategoriaDistrital } from './sidebarDistrital'
+import { ESTILOS_CATEGORIAS, ESTILO_TEMA, estiloModulo } from './sidebarMenu'
 import { Modal, toast } from './kit'
 import { NotificacionesPush } from './NotificacionesPush'
 import type { AppModule } from '../modules'
@@ -81,10 +82,46 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
   const enlace = (m: AppModule) => (
     <a href={href(m.path)} title={m.label} onClick={() => setDrawer(false)} aria-current={active(m.path) ? 'page' : undefined}
       class={`relative flex min-h-11 items-center gap-2.5 rounded-md px-3 text-sm ${collapsed ? 'lg:justify-center lg:px-0' : ''} ${active(m.path) ? 'bg-sky-50 font-semibold text-slate-900 before:absolute before:-left-2 before:bottom-2 before:top-2 before:w-1 before:rounded-full before:bg-cyan-500' : 'text-slate-700 hover:bg-slate-200/60'}`}>
-      <Icon name={m.icon} class={`size-[18px] shrink-0 ${active(m.path) ? 'text-sky-600' : 'text-slate-500'}`} />
+      <span class="shrink-0" style={{ color: dark ? estiloModulo(m).oscuro : estiloModulo(m).claro }}><Icon name={estiloModulo(m).icon} class="size-[18px]" /></span>
       <span class={`truncate ${collapsed ? 'lg:hidden' : ''}`}>{m.label}</span>
     </a>
   )
+  const tema = (
+    <button type="button" role="switch" aria-label="Modo oscuro" aria-checked={dark} title="Modo oscuro" onClick={cambiarTema}
+      class={`flex min-h-11 w-full items-center gap-2.5 rounded-md px-3 text-left text-sm text-slate-700 hover:bg-slate-200/60 ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
+      <span class="shrink-0" style={{ color: dark ? ESTILO_TEMA.oscuro : ESTILO_TEMA.claro }}><Icon name={ESTILO_TEMA.icon} class="size-[18px]" /></span>
+      <span class={`flex-1 ${collapsed ? 'lg:hidden' : ''}`}>Modo oscuro</span>
+      <span aria-hidden="true" class={`relative h-5 w-9 shrink-0 rounded-full ${dark ? 'bg-sky-600' : 'bg-slate-300'} ${collapsed ? 'lg:hidden' : ''}`}>
+        <span class={`theme-thumb absolute top-0.5 size-4 rounded-full bg-white transition-transform ${dark ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+      </span>
+    </button>
+  )
+  const menuPlano = ordenarMenu([
+    ...mods.map((modulo) => ({ tipo: 'modulo' as const, label: modulo.label, modulo })),
+    { tipo: 'tema' as const, label: 'Modo oscuro' },
+  ])
+  const menuDistrital = ordenarMenu([
+    ...mods.filter((m) => m.id === 'inicio' || m.id === 'mensajes').map((modulo) => ({ tipo: 'modulo' as const, label: modulo.label, modulo })),
+    ...categorias.map((categoria) => ({ tipo: 'categoria' as const, label: categoria.label, categoria })),
+    { tipo: 'tema' as const, label: 'Modo oscuro' },
+  ])
+  const listaPlana = <ul class="space-y-0.5">{menuPlano.map((item) =>
+    <li key={item.tipo === 'modulo' ? item.modulo.id : 'tema'}>{item.tipo === 'modulo' ? enlace(item.modulo) : tema}</li>)}</ul>
+  const categoriaMenu = (categoria: (typeof categorias)[number]) => {
+    const apariencia = ESTILOS_CATEGORIAS[categoria.id]
+    return <section key={categoria.id}>
+      <button type="button" aria-expanded={!!abiertas[categoria.id]} aria-controls={`menu-distrital-${categoria.id}`}
+        onClick={() => setAbiertas((actual) => ({ ...actual, [categoria.id]: !actual[categoria.id] }))}
+        class="flex min-h-11 w-full items-center gap-2.5 rounded-md px-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-200/60">
+        <span class="shrink-0" style={{ color: dark ? apariencia.oscuro : apariencia.claro }}><Icon name={apariencia.icon} class="size-[18px]" /></span>
+        <span class="flex-1">{categoria.label}</span>
+        <Icon name="chevr" class={`size-4 text-slate-500 transition-transform ${abiertas[categoria.id] ? 'rotate-90' : ''}`} />
+      </button>
+      <ul id={`menu-distrital-${categoria.id}`} hidden={!abiertas[categoria.id]} class="ml-4 space-y-0.5 border-l border-slate-200 pl-2">
+        {categoria.modulos.map((m) => <li key={m.id}>{enlace(m)}</li>)}
+      </ul>
+    </section>
+  }
 
   return (
     <div class="min-h-full bg-white">
@@ -101,36 +138,15 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
       </header>
 
       <nav class={`fixed inset-y-0 left-0 z-40 w-64 -translate-x-full overflow-y-auto border-r border-slate-200 bg-slate-50 p-2 pt-16 transition-transform lg:z-10 lg:translate-x-0 lg:pt-16 ${drawer ? '!translate-x-0' : ''} ${collapsed ? 'lg:w-16' : ''}`}>
-        {user.role !== 'distrital' ? <ul class="space-y-0.5">{mods.map((m) => <li key={m.id}>{enlace(m)}</li>)}</ul> : <>
+        {user.role !== 'distrital' ? listaPlana : <>
           <div class={collapsed ? 'lg:hidden' : ''}>
-            {mods.filter((m) => m.id === 'inicio' || m.id === 'mensajes').map((m) => <div key={m.id}>{enlace(m)}</div>)}
-            <div class="mt-2 space-y-1">
-              {categorias.map((categoria) => <section key={categoria.id}>
-                <button type="button" aria-expanded={!!abiertas[categoria.id]} aria-controls={`menu-distrital-${categoria.id}`}
-                  onClick={() => setAbiertas((actual) => ({ ...actual, [categoria.id]: !actual[categoria.id] }))}
-                  class="flex min-h-11 w-full items-center gap-2.5 rounded-md px-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-200/60">
-                  <Icon name={categoria.icon} class="size-[18px] shrink-0 text-slate-500" />
-                  <span class="flex-1">{categoria.label}</span>
-                  <Icon name="chevr" class={`size-4 text-slate-500 transition-transform ${abiertas[categoria.id] ? 'rotate-90' : ''}`} />
-                </button>
-                <ul id={`menu-distrital-${categoria.id}`} hidden={!abiertas[categoria.id]} class="ml-4 space-y-0.5 border-l border-slate-200 pl-2">
-                  {categoria.modulos.map((m) => <li key={m.id}>{enlace(m)}</li>)}
-                </ul>
-              </section>)}
+            <div class="space-y-0.5">
+              {menuDistrital.map((item) => item.tipo === 'modulo' ? <div key={item.modulo.id}>{enlace(item.modulo)}</div>
+                : item.tipo === 'tema' ? <div key="tema">{tema}</div> : categoriaMenu(item.categoria))}
             </div>
           </div>
-          {collapsed && <ul class="hidden space-y-0.5 lg:block">{mods.map((m) => <li key={m.id}>{enlace(m)}</li>)}</ul>}
+          {collapsed && <div class="hidden lg:block">{listaPlana}</div>}
         </>}
-        <div class="mt-4 border-t border-slate-200 pt-2">
-          <button type="button" role="switch" aria-label="Modo oscuro" aria-checked={dark} title="Modo oscuro" onClick={cambiarTema}
-            class={`flex min-h-11 w-full items-center gap-2.5 rounded-md px-3 text-left text-sm text-slate-700 hover:bg-slate-200/60 ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
-            <Icon name={dark ? 'sun' : 'moon'} class="size-[18px] shrink-0 text-slate-500" />
-            <span class={`flex-1 ${collapsed ? 'lg:hidden' : ''}`}>Modo oscuro</span>
-            <span aria-hidden="true" class={`relative h-5 w-9 shrink-0 rounded-full ${dark ? 'bg-sky-600' : 'bg-slate-300'} ${collapsed ? 'lg:hidden' : ''}`}>
-              <span class={`theme-thumb absolute top-0.5 size-4 rounded-full bg-white transition-transform ${dark ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
-            </span>
-          </button>
-        </div>
       </nav>
 
       <main class={`px-3 py-5 sm:px-6 ${collapsed ? 'lg:pl-24' : 'lg:pl-72'}`}>

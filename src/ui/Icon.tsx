@@ -1,6 +1,6 @@
 import type { IconName } from '../modules'
 
-const PATHS: Record<IconName | 'moon' | 'menu' | 'logout' | 'x' | 'grid' | 'mail' | 'sidebar' | 'plus' | 'dots' | 'edit' | 'trash' | 'list' | 'note' | 'external' | 'eye' | 'key' | 'lock' | 'unlock' | 'copy' | 'power' | 'download' | 'move' | 'drag' | 'ban' | 'flag' | 'chevl' | 'chevr' | 'arrow-up' | 'arrow-down' | 'equals' | 'inbox' | 'send' | 'star' | 'archive' | 'attachment' | 'reply' | 'info', string> = {
+const PATHS: Record<IconName | 'moon' | 'menu' | 'logout' | 'x' | 'grid' | 'mail' | 'sidebar' | 'plus' | 'dots' | 'edit' | 'trash' | 'list' | 'note' | 'external' | 'eye' | 'key' | 'lock' | 'unlock' | 'copy' | 'power' | 'download' | 'move' | 'drag' | 'ban' | 'flag' | 'chevl' | 'chevr' | 'arrow-up' | 'arrow-down' | 'equals' | 'inbox' | 'send' | 'star' | 'archive' | 'attachment' | 'reply' | 'info' | 'network' | 'id-card' | 'books' | 'folder-star' | 'document-seal' | 'calendar-clock' | 'clipboard-check' | 'chart-bars' | 'user-settings' | 'sliders' | 'help' | 'theme', string> = {
   org: 'M9 3h6v5H9V3ZM3 16h6v5H3v-5Zm12 0h6v5h-6v-5ZM12 8v4M6 16v-4h12v4',
   home: 'm2.25 12 8.955-8.955a1.5 1.5 0 0 1 2.09 0L22.25 12M4.5 9.75V21h5v-6h5v6h5V9.75',
   users: 'M15 19.13a9.4 9.4 0 0 0 4.12-.9 4 4 0 0 0-7.1-2.6M15 19.13V19.13a8 8 0 0 1-.01.4A12 12 0 0 1 8.5 21c-2.4 0-4.65-.7-6.5-1.87v-.1a6.4 6.4 0 0 1 11.96-3.2M12 7a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Zm8.5 2a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z',
@@ -61,6 +61,18 @@ const PATHS: Record<IconName | 'moon' | 'menu' | 'logout' | 'x' | 'grid' | 'mail
   chevl: 'm15 6-6 6 6 6',
   chevr: 'm9 6 6 6-6 6',
   shield: 'M12 3 4 6v6c0 4.5 3.4 8.4 8 9 4.6-.6 8-4.5 8-9V6l-8-3Zm-3 9 2.5 2.5L15.5 10',
+  network: 'M12 5v5M6 17l4-5m8 5-4-5M12 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM4 17a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm12 0a2 2 0 1 1 4 0 2 2 0 0 1-4 0ZM10 12a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z',
+  'id-card': 'M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm4 5a2 2 0 1 0 4 0 2 2 0 0 0-4 0Zm-1 6c.4-1.6 1.4-2.5 3-2.5s2.6.9 3 2.5m2-6h3m-3 4h3',
+  books: 'M3 5h4v15H3V5Zm5-2h4v17H8V3Zm5 3 3-1 4 14-3 1-4-14ZM3 17h4m1 0h4',
+  'folder-star': 'M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3V7Zm9 3 1 2 2.2.3-1.6 1.6.4 2.2-2-1.1-2 1.1.4-2.2-1.6-1.6L11 12l1-2Z',
+  'document-seal': 'M6 3h8l4 4v7M14 3v4h4M6 3v18h5M9 10h6M9 13h4m3 2 1 1.5 1.8.4-.8 1.7.2 1.8-1.8-.4-1.4 1.1-.7-1.7-1.5-.9 1.3-1.3.2-1.8 1.7-.4Z',
+  'calendar-clock': 'M7 3v3m10-3v3M4 8h16M4 16V6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v4M5 20h5m5-5v3l2 1m4-1a5 5 0 1 1-10 0 5 5 0 0 1 10 0Z',
+  'clipboard-check': 'M9 4h6v3H9V4ZM8 6H6v14h12v-8M16 5h2v3M8 12h4m-4 4h3m2 1 2 2 5-5',
+  'chart-bars': 'M4 20V4m0 16h17M7 16h3v-5H7v5Zm5 0h3V7h-3v9Zm5 0h3V4h-3v12Z',
+  'user-settings': 'M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 20a7 7 0 0 1 8-7m5 1v2m0 4v2m-4-4h2m4 0h2m-6.8-2.8 1.4 1.4m2.8 2.8 1.4 1.4m0-5.6-1.4 1.4m-2.8 2.8-1.4 1.4M17 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z',
+  sliders: 'M4 7h3m4 0h9M4 17h9m4 0h3M7 5h4v4H7V5Zm6 10h4v4h-4v-4Z',
+  help: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm-2-12a2.5 2.5 0 1 1 4.2 1.8c-1.1.9-2.2 1.3-2.2 2.7M12 17h.01',
+  theme: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 0v18m0-18a9 9 0 0 1 0 18',
 }
 
 export type IconKey = keyof typeof PATHS

@@ -1,5 +1,8 @@
 import type { AppModule, IconName } from '../modules'
 
+export const ordenarMenu = <T extends { label: string }>(items: readonly T[]): T[] =>
+  [...items].sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }))
+
 export type CategoriaDistrital = 'escuelas' | 'inspectores' | 'estadistica' | 'utilidades' | 'sistema'
 
 export const CATEGORIAS_DISTRITALES: readonly { id: CategoriaDistrital; label: string; icon: IconName }[] = [
@@ -37,8 +40,8 @@ const CATEGORIA_POR_MODULO: Record<string, CategoriaDistrital> = {
 }
 
 export function agruparMenuDistrital(modulos: readonly AppModule[]) {
-  return CATEGORIAS_DISTRITALES.map((categoria) => ({
+  return ordenarMenu(CATEGORIAS_DISTRITALES.map((categoria) => ({
     ...categoria,
-    modulos: modulos.filter((modulo) => modulo.id !== 'inicio' && modulo.id !== 'mensajes' && (CATEGORIA_POR_MODULO[modulo.id] ?? 'sistema') === categoria.id),
-  })).filter((categoria) => categoria.modulos.length > 0)
+    modulos: ordenarMenu(modulos.filter((modulo) => modulo.id !== 'inicio' && modulo.id !== 'mensajes' && (CATEGORIA_POR_MODULO[modulo.id] ?? 'sistema') === categoria.id)),
+  })).filter((categoria) => categoria.modulos.length > 0))
 }
