@@ -19,6 +19,7 @@ const CATEGORIA_POR_MODULO: Record<string, CategoriaDistrital> = {
   matriculas: 'escuelas',
   'salidas-distrito': 'escuelas',
   contingencias: 'escuelas',
+  'eventos-escolares': 'escuelas',
   eav: 'escuelas',
   inspectores: 'inspectores',
   disposiciones: 'inspectores',

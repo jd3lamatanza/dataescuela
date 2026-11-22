@@ -52,6 +52,18 @@ test('Disposiciones está disponible para Distrital, Areal y Escolar', () => {
   assert.ok(agruparMenuDistrital([m]).find((g) => g.id === 'inspectores')?.modulos.includes(m))
 })
 
+test('Eventos Escolares aparece en Escuelas para todo usuario distrital', () => {
+  for (const permiso_avanzado of [false, true]) {
+    const modulos = modulesForUser({ role: 'distrital', permiso_avanzado })
+    const modulo = modulos.find((m) => m.id === 'eventos-escolares')
+    assert.ok(modulo)
+    const grupos = agruparMenuDistrital(modulos)
+    assert.ok(grupos.find((g) => g.id === 'escuelas').modulos.includes(modulo))
+    assert.ok(!grupos.find((g) => g.id === 'sistema')?.modulos.includes(modulo))
+  }
+  for (const role of ['areal', 'escolar']) assert.ok(modulesFor(role).some((m) => m.id === 'eventos-escolares'))
+})
+
 test('un módulo distrital nuevo no desaparece del menú', () => {
   const extra = { id: 'nuevo', label: 'Nuevo', path: '/nuevo', icon: 'home', roles: ['distrital'] }
   const grupos = agruparMenuDistrital([...modulesFor('distrital'), extra])
