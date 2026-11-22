@@ -48,8 +48,8 @@ reset role;
 select set_config('request.jwt.claim.sub', (select supervisor::text from proyectos_test), true);
 set local role authenticated;
 do $$ begin
-  if exists (select 1 from public.proyectos_escolares where id in (select id1 from proyectos_test union all select id2 from proyectos_test)) then
-    raise exception 'Otro rol puede ver proyectos escolares';
+  if (select count(*) from public.proyectos_escolares where id in (select id1 from proyectos_test union all select id2 from proyectos_test)) <> 2 then
+    raise exception 'Distrital no ve todos los proyectos';
   end if;
 end $$;
 reset role;

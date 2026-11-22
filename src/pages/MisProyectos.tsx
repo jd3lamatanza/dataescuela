@@ -1,11 +1,13 @@
-import { useState } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import { esPdf, MAX_PROYECTO, TIPOS_PROYECTO } from '../../supabase/functions/_shared/proyectos'
 import { useAuth } from '../lib/auth'
-import { useAsync } from '../lib/hooks'
+import { useAsync, useDebounced } from '../lib/hooks'
 import { supabase } from '../lib/supabase'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, Spinner, confirmar, toast } from '../ui/kit'
 
 type Proyecto = { id: string; tipo: string; otro_tipo: string | null; nombre: string; bytes: number; created_at: string }
+type ProyectoSupervision = Proyecto & { cue: string; clave: string; escuela: string; escuela_tipo: string; escuela_numero: number | null }
+type ProyectoListado = Proyecto & Partial<ProyectoSupervision>
 const TAMANO = 15
 const fecha = (s: string) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'short' }).format(new Date(s))
 
@@ -28,31 +30,53 @@ async function llamar(body: FormData | Record<string, unknown>): Promise<Respons
 
 export function MisProyectos() {
   const { user } = useAuth()
-  return <Listado key={user?.id} />
+  if (!user || !['escolar', 'areal', 'distrital'].includes(user.role)) return null
+  return <Listado key={`${user.id}:${user.role}`} supervision={user.role !== 'escolar'} areal={user.role === 'areal'} />
 }
 
-function Listado() {
+function Listado({ supervision, areal }: { supervision: boolean; areal: boolean }) {
   const [pagina, setPagina] = useState(1)
   const [subiendo, setSubiendo] = useState(false)
   const [ocupado, setOcupado] = useState<string | null>(null)
+  const [busqueda, setBusqueda] = useState('')
+  const [tipo, setTipo] = useState('')
+  const [orden, setOrden] = useState('recientes')
+  const [previa, setPrevia] = useState<{ nombre: string; url: string } | null>(null)
+  const montado = useRef(true)
+  const buscar = useDebounced(busqueda)
+  useEffect(() => { montado.current = true; return () => { montado.current = false } }, [])
+  useEffect(() => () => { if (previa) URL.revokeObjectURL(previa.url) }, [previa])
   const { data, error, loading, reload } = useAsync(async () => {
+    if (supervision) {
+      const r = await supabase.rpc('proyectos_supervision', {
+        p_busqueda: buscar, p_tipo: tipo, p_orden: orden, p_lim: TAMANO, p_offset: (pagina - 1) * TAMANO,
+      })
+      if (r.error) throw r.error
+      if (!r.data || !Array.isArray(r.data.filas) || !Number.isSafeInteger(r.data.total)) throw new Error('Respuesta inválida al consultar proyectos.')
+      return { filas: r.data.filas as ProyectoSupervision[], total: r.data.total as number, pagina, buscar, tipo, orden }
+    }
     const r = await supabase.from('proyectos_escolares').select('id,tipo,otro_tipo,nombre,bytes,created_at', { count: 'exact' })
       .order('created_at', { ascending: false }).order('id', { ascending: false }).range((pagina - 1) * TAMANO, pagina * TAMANO - 1)
     if (r.error) throw r.error
     if (r.count == null) throw new Error('No se pudo contar los proyectos.')
-    return { filas: r.data as Proyecto[], total: r.count, pagina }
-  }, [pagina])
-  const actual = !error && !loading && data?.pagina === pagina ? data : null
+    return { filas: r.data as ProyectoListado[], total: r.count, pagina, buscar, tipo, orden }
+  }, [pagina, supervision, buscar, tipo, orden])
+  const actual = !error && !loading && buscar === busqueda && data?.pagina === pagina && data.buscar === buscar && data.tipo === tipo && data.orden === orden ? data : null
 
-  const descargar = async (p: Proyecto) => {
+  const abrir = async (p: Proyecto, vista: boolean) => {
     setOcupado(p.id)
     try {
       const r = await llamar({ action: 'download', id: p.id })
       const url = URL.createObjectURL(new Blob([await r.arrayBuffer()], { type: 'application/pdf' }))
-      const a = Object.assign(document.createElement('a'), { href: url, download: p.nombre })
-      document.body.append(a); a.click(); a.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 10000)
-    } catch (e) { toast.error(e instanceof Error ? e.message : String(e)) } finally { setOcupado(null) }
+      if (!montado.current) { URL.revokeObjectURL(url); return }
+      if (vista) setPrevia({ nombre: p.nombre, url })
+      else {
+        const a = Object.assign(document.createElement('a'), { href: url, download: p.nombre })
+        document.body.append(a); a.click(); a.remove()
+        setTimeout(() => URL.revokeObjectURL(url), 10000)
+      }
+    } catch (e) { if (montado.current) toast.error(e instanceof Error ? e.message : String(e)) }
+    finally { if (montado.current) setOcupado(null) }
   }
   const eliminar = async (p: Proyecto) => {
     if (!(await confirmar('Eliminar proyecto', { text: `Se eliminará «${p.nombre}» de Google Drive. Esta acción no se puede deshacer.`, ok: 'Eliminar', danger: true }))) return
@@ -66,24 +90,38 @@ function Listado() {
   }
 
   return <>
-    <PageHeader title="Mis Proyectos" subtitle="Proyectos de tu escuela."
-      actions={<button type="button" class={BTN_PRIMARY} disabled={!actual} onClick={() => setSubiendo(true)}>Subir proyecto</button>} />
-    <Alert>Subí solamente los proyectos que se aplican al nivel y la modalidad de tu escuela. Se aceptan archivos PDF de hasta 5 MB; podés subir más de uno por tipo.</Alert>
+    <PageHeader title={supervision ? 'Proyectos Escolares' : 'Mis Proyectos'}
+      subtitle={supervision ? areal ? 'Proyectos de tus escuelas asignadas.' : 'Proyectos registrados por las escuelas.' : 'Proyectos de tu escuela.'}
+      actions={!supervision && <button type="button" class={BTN_PRIMARY} disabled={!actual} onClick={() => setSubiendo(true)}>Subir proyecto</button>} />
+    {!supervision && <Alert>Subí solamente los proyectos que se aplican al nivel y la modalidad de tu escuela. Se aceptan archivos PDF de hasta 5 MB; podés subir más de uno por tipo.</Alert>}
+    {supervision && <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <Lbl label="Buscar escuela, clave, CUE o proyecto"><input type="search" class={FIELD} value={busqueda} onInput={(e) => { setBusqueda(e.currentTarget.value); setPagina(1) }} /></Lbl>
+      <Lbl label="Tipo de proyecto"><select class={FIELD} value={tipo} onChange={(e) => { setTipo(e.currentTarget.value); setPagina(1) }}>
+        <option value="">Todos los tipos</option>{TIPOS_PROYECTO.map((t) => <option key={t} value={t}>{t}</option>)}
+      </select></Lbl>
+      <Lbl label="Ordenar por"><select class={FIELD} value={orden} onChange={(e) => { setOrden(e.currentTarget.value); setPagina(1) }}>
+        <option value="recientes">Más recientes</option><option value="antiguos">Más antiguos</option>
+        <option value="escuela">Escuela</option><option value="tipo">Tipo de proyecto</option><option value="archivo">Nombre del archivo</option>
+      </select></Lbl>
+    </div>}
     <div class="mt-4">
-      {error && <Alert tone="error">{error}</Alert>}
-      {loading && <Spinner />}
+      {error && <div class="space-y-2"><Alert tone="error">{error}</Alert><button type="button" class={BTN_SECONDARY} onClick={reload}>Reintentar</button></div>}
+      {!actual && !error && <Spinner />}
       {actual && <>
-        {!actual.filas.length ? <Card><EmptyState title="Sin proyectos" text="Elegí «Subir proyecto» para cargar un archivo." /></Card> :
+        {supervision && <p class="mb-3 text-sm text-slate-500">{actual.total} proyecto(s)</p>}
+        {!actual.filas.length ? <Card><EmptyState title="Sin proyectos" text={supervision ? 'No hay proyectos con esos filtros.' : 'Elegí «Subir proyecto» para cargar un archivo.'} /></Card> :
           <div class="space-y-3">{actual.filas.map((p) => <Card key={p.id}>
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="min-w-0 flex-1">
                 <p class="font-semibold text-slate-900">{p.tipo === 'Otro' ? p.otro_tipo : p.tipo}</p>
                 <p class="mt-1 break-all text-sm text-slate-700">{p.nombre}</p>
+                {p.cue && <p class="mt-1 break-words text-sm text-slate-600">{[p.clave, [p.escuela_tipo, p.escuela_numero, p.escuela].filter(Boolean).join(' ')].filter(Boolean).join(' · ') || 'Escuela sin identificar'} · CUE {p.cue}</p>}
                 <p class="mt-1 text-xs text-slate-500">{(p.bytes / 1024 / 1024).toFixed(2)} MB · {fecha(p.created_at)}</p>
               </div>
               <div class="flex flex-wrap gap-2">
-                <button type="button" class={BTN_SECONDARY} disabled={!!ocupado} onClick={() => void descargar(p)}>Descargar</button>
-                <button type="button" class={BTN_SECONDARY} disabled={!!ocupado} onClick={() => void eliminar(p)}>Eliminar</button>
+                <button type="button" class={BTN_SECONDARY} disabled={!!ocupado} onClick={() => void abrir(p, true)}>{ocupado === p.id ? 'Cargando…' : 'Previsualizar'}</button>
+                <button type="button" class={BTN_SECONDARY} disabled={!!ocupado} onClick={() => void abrir(p, false)}>Descargar</button>
+                {!supervision && <button type="button" class={BTN_SECONDARY} disabled={!!ocupado} onClick={() => void eliminar(p)}>Eliminar</button>}
               </div>
             </div>
           </Card>)}</div>}
@@ -91,6 +129,13 @@ function Listado() {
       </>}
     </div>
     {subiendo && <Formulario onClose={() => setSubiendo(false)} onDone={() => { setSubiendo(false); if (pagina !== 1) setPagina(1); else reload() }} />}
+    {previa && <Modal title={`Vista previa: ${previa.nombre}`} onClose={() => setPrevia(null)} wide>
+      <iframe src={previa.url} title={`Vista previa de ${previa.nombre}`} class="h-[65vh] w-full rounded border border-slate-200" />
+      <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
+        <span>Si no se muestra el PDF, abrilo en otra pestaña o descargalo.</span>
+        <a class={BTN_SECONDARY} href={previa.url} target="_blank" rel="noopener noreferrer">Abrir en otra pestaña</a>
+      </div>
+    </Modal>}
   </>
 }
 

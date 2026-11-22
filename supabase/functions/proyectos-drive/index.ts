@@ -69,14 +69,18 @@ Deno.serve(async (req) => {
     if (who.error || !who.data.user) throw new HttpError(401, 'Sesión inválida.')
     const perfil = await user.rpc('mi_perfil')
     if (perfil.error) throw new Error('No se pudo verificar el perfil.')
-    if (perfil.data?.role !== 'escolar' || typeof perfil.data.cue !== 'string' || !perfil.data.cue.trim()) throw new HttpError(403, 'Solo la escuela puede gestionar sus proyectos.')
-    const cue: string = perfil.data.cue
+    const rol = perfil.data?.role
+    if (!['escolar', 'areal', 'distrital'].includes(rol)) throw new HttpError(403, 'Sin permiso para acceder a proyectos.')
     const multipart = (req.headers.get('Content-Type') ?? '').toLowerCase().startsWith('multipart/form-data')
     let form: FormData | null = null
     let body: Record<string, unknown> = {}
     try { if (multipart) form = await req.formData(); else body = await req.json() } catch { throw new HttpError(400, 'Solicitud inválida.') }
     const action = form ? form.get('action') : body.action
+    if ((action === 'upload' || action === 'remove') && (rol !== 'escolar' || typeof perfil.data.cue !== 'string' || !perfil.data.cue.trim())) {
+      throw new HttpError(403, 'Solo la escuela puede gestionar sus proyectos.')
+    }
     if (action === 'upload') {
+      const cue: string = perfil.data.cue
       if (!form) throw new HttpError(400, 'Elegí un archivo PDF.')
       const archivo = form.get('archivo'), tipo = form.get('tipo'), otro = form.get('otro_tipo')
       if (!(archivo instanceof File) || !/\.pdf$/i.test(archivo.name) || !archivo.name.trim() || archivo.name.length > 255
@@ -133,9 +137,11 @@ Deno.serve(async (req) => {
     if (action === 'download' || action === 'remove') {
       const id = body.id
       if (typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new HttpError(400, 'Proyecto inválido.')
-      const proyecto = await user.from('proyectos_escolares').select('id,drive_file_id').eq('id', id).maybeSingle()
+      const proyecto = await user.from('proyectos_escolares').select('id,cue,drive_file_id').eq('id', id).maybeSingle()
       if (proyecto.error) throw new Error('No se pudo consultar el proyecto.')
       if (!proyecto.data || !driveId(proyecto.data.drive_file_id)) throw new HttpError(404, 'Proyecto inexistente.')
+      const cue: string = proyecto.data.cue
+      if (action === 'remove' && cue !== perfil.data.cue) throw new HttpError(403, 'Solo la escuela puede eliminar sus proyectos.')
       const carpeta = await admin.from('proyecto_carpetas').select('drive_folder_id').eq('cue', cue).maybeSingle()
       if (carpeta.error || !driveId(carpeta.data?.drive_folder_id)) throw new Error('No se pudo consultar la carpeta de la escuela.')
       const token = await tokenDrive()

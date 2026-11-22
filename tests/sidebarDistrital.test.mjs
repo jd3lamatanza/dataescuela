@@ -64,6 +64,16 @@ test('Eventos Escolares aparece en Escuelas para todo usuario distrital', () => 
   for (const role of ['areal', 'escolar']) assert.ok(modulesFor(role).some((m) => m.id === 'eventos-escolares'))
 })
 
+test('Proyectos Escolares está en Escuelas para supervisión y Mis Proyectos sigue siendo escolar', () => {
+  const normal = modulesForUser({ role: 'distrital', permiso_avanzado: false })
+  const supervision = normal.find((m) => m.id === 'proyectos-escolares')
+  assert.ok(supervision)
+  assert.ok(agruparMenuDistrital(normal).find((g) => g.id === 'escuelas').modulos.includes(supervision))
+  for (const role of ROLES) assert.equal(canAccess(supervision, role), ['areal', 'distrital'].includes(role))
+  assert.ok(modulesFor('escolar').some((m) => m.id === 'mis-proyectos'))
+  assert.ok(!modulesFor('escolar').some((m) => m.id === 'proyectos-escolares'))
+})
+
 test('un módulo distrital nuevo no desaparece del menú', () => {
   const extra = { id: 'nuevo', label: 'Nuevo', path: '/nuevo', icon: 'home', roles: ['distrital'] }
   const grupos = agruparMenuDistrital([...modulesFor('distrital'), extra])

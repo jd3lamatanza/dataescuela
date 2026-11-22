@@ -18,7 +18,7 @@ function servicio({ rol = 'escolar', visible = true, registroFalla = false, arch
     rpc: async () => ({ data: { role: rol, cue: 'cue-ficticio' }, error: null }),
     from: (tabla) => ({ select: () => ({ eq: () => tabla === 'escuelas'
       ? Promise.resolve({ data: [{ clave: 'EP 999' }, { clave: 'EP 999' }], error: null })
-      : { maybeSingle: async () => ({ data: visible ? { id: ID, drive_file_id: 'archivo_ficticio' } : null, error: null }) } }) }),
+      : { maybeSingle: async () => ({ data: visible ? { id: ID, cue: 'cue-ficticio', drive_file_id: 'archivo_ficticio' } : null, error: null }) } }) }),
   }
   const admin = {
     rpc: async (name, args) => {
@@ -97,7 +97,24 @@ test('acepta un PDF de exactamente 5 MB', async () => {
   assert.equal(s.registros[0].bytes, MAX_PROYECTO)
 })
 
-test('solo escolar puede gestionar y solo puede descargar o eliminar proyectos visibles', async () => {
+test('supervisión descarga solo proyectos visibles y no puede modificarlos', async () => {
+  for (const rol of ['areal', 'distrital']) {
+    const s = servicio({ rol })
+    assert.equal((await s.llamar(formulario())).status, 403)
+    assert.equal((await s.llamar({ action: 'remove', id: ID })).status, 403)
+    assert.equal(s.authTokens(), 0)
+    assert.equal((await s.llamar({ action: 'download', id: ID })).status, 200)
+    assert.equal(s.eliminados(), 0)
+    const ajeno = servicio({ rol, visible: false })
+    assert.equal((await ajeno.llamar({ action: 'download', id: ID })).status, 404)
+    assert.equal(ajeno.authTokens(), 0)
+  }
+  const regional = servicio({ rol: 'regional' })
+  assert.equal((await regional.llamar({ action: 'download', id: ID })).status, 403)
+  assert.equal(regional.authTokens(), 0)
+})
+
+test('escuela solo puede descargar o eliminar proyectos visibles', async () => {
   const otroRol = servicio({ rol: 'areal' })
   assert.equal((await otroRol.llamar(formulario())).status, 403)
   assert.equal(otroRol.authTokens(), 0)

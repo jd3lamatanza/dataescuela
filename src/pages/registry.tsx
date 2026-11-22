@@ -63,6 +63,7 @@ export const PAGES: Record<string, ComponentType> = {
   contingencias: Contingencias,
   'eventos-escolares': EventosEscolares,
   'mis-proyectos': MisProyectos,
+  'proyectos-escolares': MisProyectos,
   'salidas-distrito': Salidas,
   'salidas-areal': Salidas,
   planes: Planes,
