@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'preact/hooks'
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
+import { createPortal } from 'preact/compat'
 import type { ComponentChildren } from 'preact'
 import { Icon, type IconKey as IconName } from './Icon'
 
@@ -133,27 +134,57 @@ const ICONOS: [RegExp, IconName][] = [
   [/intervenci[oó]n|nota/i, 'note'], [/fuera de/i, 'external'], [/confirmar|destino/i, 'check'], [/ficha|equipo|referentes/i, 'clipboard'],
 ]
 const iconoDe = (i: MenuItem): IconName => i.icon ?? ICONOS.find(([r]) => r.test(i.label))?.[1] ?? 'list'
-export function RowMenu({ items }: { items: MenuItem[] }) {
+export function RowMenu({ items, flotante = false }: { items: MenuItem[]; flotante?: boolean }) {
   const [open, setOpen] = useState(false)
-  useEffect(() => {
+  const boton = useRef<HTMLButtonElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
     if (!open) return
     const c = () => setOpen(false)
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
     addEventListener('click', c)
-    return () => removeEventListener('click', c)
+    addEventListener('keydown', k)
+    return () => { removeEventListener('click', c); removeEventListener('keydown', k) }
   }, [open])
+  useLayoutEffect(() => {
+    if (!open || !flotante) return
+    const ubicar = () => {
+      if (!boton.current || !panel.current) return
+      const rect = boton.current.getBoundingClientRect()
+      if (rect.bottom <= 0 || rect.top >= window.innerHeight || rect.right <= 0 || rect.left >= window.innerWidth) {
+        setOpen(false)
+        return
+      }
+      const ancho = Math.min(240, window.innerWidth - 16)
+      panel.current.style.width = `${ancho}px`
+      panel.current.style.maxHeight = `${window.innerHeight - 16}px`
+      const alto = Math.min(panel.current.scrollHeight, window.innerHeight - 16)
+      const abajo = window.innerHeight - rect.bottom - 8
+      const arriba = rect.top - 8
+      const top = abajo >= alto || abajo >= arriba ? rect.bottom + 4 : rect.top - alto - 4
+      panel.current.style.left = `${Math.max(8, Math.min(rect.right - ancho, window.innerWidth - ancho - 8))}px`
+      panel.current.style.top = `${Math.max(8, Math.min(top, window.innerHeight - alto - 8))}px`
+    }
+    const alDesplazar = (e: Event) => { if (e.target !== panel.current) setOpen(false) }
+    ubicar()
+    addEventListener('resize', ubicar)
+    addEventListener('scroll', alDesplazar, true)
+    return () => { removeEventListener('resize', ubicar); removeEventListener('scroll', alDesplazar, true) }
+  }, [open, flotante])
+  const contenido = open && (
+    <div ref={panel} class={`${flotante ? 'fixed z-50 overflow-y-auto' : 'absolute right-0 z-40 mt-1 w-60'} rounded-lg border border-slate-200 bg-white py-1 shadow-xl`}>
+      {items.filter((i) => !i.hidden).map((i) => (
+        <>
+          {i.sep && <div class="my-1 border-t border-slate-100" />}
+          <button type="button" onClick={() => { setOpen(false); i.onClick() }} class={`flex min-h-10 w-full items-center gap-2.5 px-3 text-left text-sm hover:bg-slate-50 ${i.danger ? 'text-red-600' : 'text-slate-700'}`}><Icon name={iconoDe(i)} class={`size-4 shrink-0 ${i.danger ? 'text-red-500' : 'text-slate-500'}`} />{i.label}</button>
+        </>
+      ))}
+    </div>
+  )
   return (
     <div class="relative">
-      <button type="button" aria-label="Acciones" onClick={(e) => { e.stopPropagation(); setOpen(!open) }} class="flex size-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 shadow-sm hover:border-slate-400 hover:bg-slate-100 hover:text-slate-900"><Icon name="dots" class="size-5" /></button>
-      {open && (
-        <div class="absolute right-0 z-40 mt-1 w-60 rounded-lg border border-slate-200 bg-white py-1 shadow-xl">
-          {items.filter((i) => !i.hidden).map((i) => (
-            <>
-              {i.sep && <div class="my-1 border-t border-slate-100" />}
-              <button type="button" onClick={() => { setOpen(false); i.onClick() }} class={`flex min-h-10 w-full items-center gap-2.5 px-3 text-left text-sm hover:bg-slate-50 ${i.danger ? 'text-red-600' : 'text-slate-700'}`}><Icon name={iconoDe(i)} class={`size-4 shrink-0 ${i.danger ? 'text-red-500' : 'text-slate-500'}`} />{i.label}</button>
-            </>
-          ))}
-        </div>
-      )}
+      <button ref={boton} type="button" aria-label="Acciones" aria-expanded={open} onClick={(e) => { e.stopPropagation(); setOpen(!open) }} class="flex size-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 shadow-sm hover:border-slate-400 hover:bg-slate-100 hover:text-slate-900"><Icon name="dots" class="size-5" /></button>
+      {flotante && contenido ? createPortal(contenido, document.body) : contenido}
     </div>
   )
 }

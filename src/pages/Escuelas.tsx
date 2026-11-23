@@ -113,7 +113,7 @@ function Listado() {
     toast.ok(on ? `Carga de matrícula habilitada para ${e.clave}` : `Carga de matrícula deshabilitada para ${e.clave}`)
   }
   const Menu = ({ e }: { e: any }) => (
-    <RowMenu items={[
+    <RowMenu flotante items={[
       { label: 'Ficha de Escuela', onClick: () => ver(e.id) },
       { label: 'Equipo Directivo', onClick: () => ver(e.id, 'directivo') },
       { label: 'Equipo de Orientación', onClick: () => ver(e.id, 'orientacion') },
