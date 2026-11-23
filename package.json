@@ -12,6 +12,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
     "fflate": "^0.8.2",
+    "html2canvas-pro": "^2.6.4",
     "leaflet": "^1.9.4",
     "leaflet.markercluster": "^1.5.3",
     "pdf-lib": "^1.17.1",
