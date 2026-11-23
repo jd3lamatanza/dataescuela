@@ -36,3 +36,6 @@ verify_jwt = false
 
 [functions.reportes-error]
 verify_jwt = false
+
+[functions.ayuda-video]
+verify_jwt = false

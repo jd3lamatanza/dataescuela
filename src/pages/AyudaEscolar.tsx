@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'preact/hooks'
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { buscarGuias, type GuiaEscolar } from '../lib/ayudaEscolar'
 import { cargarGuias } from '../lib/ayudaEscolarDatos'
+import { urlVideo } from '../lib/ayudaVideo'
 import { href } from '../lib/router'
 import { supabase } from '../lib/supabase'
 import { MODULES } from '../modules'
@@ -59,6 +60,7 @@ function Guia({ guia }: { guia: GuiaEscolar }) {
         return <li key={j}>
           <p>{paso}</p>
           {medio?.imagen_drive && <div class="mt-3"><Captura id={guia.id} titulo={`${guia.titulo}, paso ${j + 1}`} imagen={medio.imagen_drive} /></div>}
+          {medio?.video_drive && <VideoAyuda guia={guia.id} video={medio.video_drive} titulo={`${guia.titulo}, paso ${j + 1}`} />}
           {medio?.youtube && /^[A-Za-z0-9_-]{11}$/.test(medio.youtube) && <div class="mt-3">
             <iframe class="aspect-video w-full max-w-3xl rounded-lg" src={`https://www.youtube-nocookie.com/embed/${medio.youtube}`}
               title={`Video: ${guia.titulo}, paso ${j + 1}`} loading="lazy" referrerPolicy="strict-origin-when-cross-origin"
@@ -69,6 +71,44 @@ function Guia({ guia }: { guia: GuiaEscolar }) {
       })}</ol>
     </Card>)}
   </article>
+}
+
+function VideoAyuda({ guia, video, titulo }: { guia: string; video: string; titulo: string }) {
+  const [url, setUrl] = useState('')
+  const [error, setError] = useState('')
+  const [intento, setIntento] = useState(0)
+  const elemento = useRef<HTMLVideoElement>(null)
+  const continuar = useRef<{ tiempo: number; reproducir: boolean } | null>(null)
+  useEffect(() => {
+    let activa = true
+    let timer: ReturnType<typeof setTimeout>
+    setError(''); setUrl('')
+    const autorizar = async () => {
+      try {
+        const siguiente = await urlVideo(guia, video)
+        if (!activa) return
+        if (elemento.current?.currentSrc) continuar.current = { tiempo: elemento.current.currentTime, reproducir: !elemento.current.paused }
+        setUrl(siguiente); setError('')
+        timer = setTimeout(autorizar, 8 * 60_000)
+      } catch (e) {
+        if (activa) setError(e instanceof Error ? e.message : 'No se pudo autorizar el video.')
+      }
+    }
+    void autorizar()
+    return () => { activa = false; clearTimeout(timer); continuar.current = null }
+  }, [guia, video, intento])
+  return <div class="mt-3 max-w-3xl">
+    {error && <div class="mb-2 space-y-2"><Alert tone="error">{error}</Alert><button type="button" class={BTN_SECONDARY} onClick={() => setIntento((i) => i + 1)}>Reintentar video</button></div>}
+    {url ? <video ref={elemento} controls playsInline preload="metadata" class="aspect-video w-full rounded-lg bg-black" aria-label={`Video: ${titulo}`} src={url}
+      onLoadedMetadata={(e) => {
+        const estado = continuar.current
+        if (!estado) return
+        continuar.current = null
+        e.currentTarget.currentTime = Math.min(estado.tiempo, Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : estado.tiempo)
+        if (estado.reproducir) void e.currentTarget.play().catch(() => setError('Tocá reproducir para continuar el video.'))
+      }}
+      onError={() => setError('No se pudo reproducir el video. Verificá la conexión o el formato e intentá nuevamente.')} /> : !error && <Spinner />}
+  </div>
 }
 
 export function Captura({ id, titulo, imagen }: { id: string; titulo: string; imagen?: string }) {

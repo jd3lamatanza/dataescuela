@@ -107,7 +107,7 @@ test('las capturas deben existir en la carpeta y contener PNG válido', async ()
   assert.equal((await lectura({ png: false }).enviar({ captura: 'inicio' })).status, 503)
 })
 
-function gestion({ permitido = true, conflicto = false } = {}) {
+function gestion({ permitido = true, conflicto = false, carpetaVideo = true } = {}) {
   const rows = new Map(seed.map((g) => [g.id, { ...g, version: 1 }]))
   const borradas = [], subidas = []
   const user = {
@@ -139,7 +139,10 @@ function gestion({ permitido = true, conflicto = false } = {}) {
       if (!['image/png', 'image/jpeg'].includes(mime) || data !== 'png-valido') throw Error('imagen inválida')
       return Uint8Array.from(mime === 'image/png' ? [137, 80, 78, 71, 13, 10, 26, 10] : [255, 216, 255])
     }, borrarFirma: async (_token, id) => { borradas.push(id) } },
-    fetch: async () => { subidas.push(true); return Response.json({ id: 'captura_nueva_123' }) },
+    fetch: async (url) => {
+      if (String(url).includes('fields=mimeType,parents,trashed,size')) return Response.json({ mimeType: 'video/mp4', parents: [carpetaVideo ? '1jZz36lronDDYJ3FcpcIXvehQjeQbJD3T' : 'otra'], trashed: false, size: '123' })
+      subidas.push(true); return Response.json({ id: 'captura_nueva_123' })
+    },
   })
   return { enviar, rows, subidas, borradas }
 }
@@ -198,4 +201,17 @@ test('un conflicto concurrente limpia la imagen nueva del paso', async () => {
   const guia = { ...seed[0], version: 1 }
   assert.equal((await s.enviar({ accion: 'guardar', guia, imagenes_pasos: [{ seccion: 0, paso: 0, mime: 'image/png', base64: 'png-valido' }] })).status, 409)
   assert.deepEqual(s.borradas, ['captura_nueva_123'])
+})
+
+test('publica y conserva videos de la carpeta de ayuda, pero rechaza archivos ajenos', async () => {
+  const guia = { modulo: 'inicio', titulo: 'Guía', descripcion: 'Descripción', secciones: [{ titulo: 'Sección', pasos: ['Uno'], medios: [{ video_drive: 'video_de_prueba_123', youtube: 'abcd1234_-Z' }] }] }
+  const s = gestion()
+  const creado = await s.enviar({ accion: 'guardar', guia })
+  assert.equal(creado.status, 200)
+  const nueva = (await creado.json()).guia
+  assert.equal(nueva.secciones[0].medios[0].video_drive, 'video_de_prueba_123')
+  assert.equal(nueva.secciones[0].medios[0].youtube, 'abcd1234_-Z')
+  const editada = await s.enviar({ accion: 'guardar', guia: { ...nueva, titulo: 'Editada' } })
+  assert.equal((await editada.json()).guia.secciones[0].medios[0].video_drive, 'video_de_prueba_123')
+  assert.equal((await gestion({ carpetaVideo: false }).enviar({ accion: 'guardar', guia })).status, 400)
 })

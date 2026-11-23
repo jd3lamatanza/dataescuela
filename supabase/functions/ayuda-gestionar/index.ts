@@ -63,15 +63,16 @@ Deno.serve(async (req) => {
             && seccion.medios.every((m: unknown) => {
               if (m === null) return true
               if (!m || typeof m !== 'object' || Array.isArray(m)) return false
-              const medio = m as { youtube?: unknown; imagen_drive?: unknown }
+              const medio = m as { youtube?: unknown; imagen_drive?: unknown; video_drive?: unknown }
               return (medio.youtube == null || (typeof medio.youtube === 'string' && /^[A-Za-z0-9_-]{11}$/.test(medio.youtube)))
                 && (medio.imagen_drive == null || (typeof medio.imagen_drive === 'string' && /^[A-Za-z0-9_-]{10,100}$/.test(medio.imagen_drive)))
+                && (medio.video_drive == null || (typeof medio.video_drive === 'string' && /^[A-Za-z0-9_-]{10,100}$/.test(medio.video_drive)))
             })))
       })) return respuesta({ error: 'Completá el título, descripción y al menos una sección con sus pasos.' }, 400)
-    type Seccion = { titulo: string; pasos: string[]; medios?: ({ youtube?: string | null; imagen_drive?: string | null } | null)[] }
+    type Seccion = { titulo: string; pasos: string[]; medios?: ({ youtube?: string | null; imagen_drive?: string | null; video_drive?: string | null } | null)[] }
     const secciones = (g.secciones as Seccion[]).map((s) => ({
       titulo: s.titulo, pasos: s.pasos, medios: s.pasos.map((_, i) => ({
-        youtube: s.medios?.[i]?.youtube ?? null, imagen_drive: s.medios?.[i]?.imagen_drive ?? null,
+        youtube: s.medios?.[i]?.youtube ?? null, imagen_drive: s.medios?.[i]?.imagen_drive ?? null, video_drive: s.medios?.[i]?.video_drive ?? null,
       })),
     }))
     let bytes: Uint8Array | undefined
@@ -90,6 +91,17 @@ Deno.serve(async (req) => {
     }
     const permitidas = new Set(anteriores.flatMap((s) => (s.medios ?? []).map((m) => m?.imagen_drive).filter((v): v is string => !!v)))
     if (secciones.some((s) => s.medios.some((m) => m.imagen_drive && !permitidas.has(m.imagen_drive)))) return respuesta({ error: 'La imagen de un paso no pertenece a esta guía.' }, 400)
+    const videosAnteriores = new Set(anteriores.flatMap((s) => (s.medios ?? []).map((m) => m?.video_drive).filter((v): v is string => !!v)))
+    const videosNuevos = [...new Set(secciones.flatMap((s) => s.medios.map((m) => m.video_drive).filter((v): v is string => !!v && !videosAnteriores.has(v))))]
+    if (videosNuevos.length) {
+      const tokenVideo = await tokenDrive()
+      for (const video of videosNuevos) {
+        const r = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(video)}?supportsAllDrives=true&fields=mimeType,parents,trashed,size`, { headers: { Authorization: `Bearer ${tokenVideo}` } })
+        if (!r.ok) return respuesta({ error: 'No se pudo verificar el video en Drive.' }, 400)
+        const archivo = await r.json()
+        if (archivo.trashed || !['video/mp4', 'video/webm'].includes(archivo.mimeType) || !archivo.parents?.includes('1jZz36lronDDYJ3FcpcIXvehQjeQbJD3T') || !Number.isSafeInteger(Number(archivo.size)) || Number(archivo.size) < 1) return respuesta({ error: 'El video no pertenece a la carpeta de ayuda o no tiene un formato compatible.' }, 400)
+      }
+    }
     if (body.imagenes_pasos !== undefined && !Array.isArray(body.imagenes_pasos)) return respuesta({ error: 'Imágenes de pasos inválidas.' }, 400)
     const imagenes: { seccion: number; paso: number; mime: string; bytes: Uint8Array }[] = []
     const posiciones = new Set<string>()

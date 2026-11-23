@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import type { JSX } from 'preact'
 import { idVideoYoutube, type GuiaEscolar, type ImagenPaso } from '../lib/ayudaEscolar'
 import { cargarGuias, gestionarGuia } from '../lib/ayudaEscolarDatos'
+import { subirVideo } from '../lib/ayudaVideo'
 import { MODULES, canAccess } from '../modules'
 import { Alert, BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, Card, confirmar, FIELD, Lbl, PageHeader, Spinner, toast } from '../ui/kit'
 import { Captura } from './AyudaEscolar'
@@ -78,6 +79,8 @@ function Editor({ inicial, onSucio, onGuardada, onEliminada, onCancelar }: {
   const [archivo, setArchivo] = useState<File | null>(null)
   const [imagenesPasos, setImagenesPasos] = useState<(File | null)[][]>(() => inicial.secciones.map((s) => s.pasos.map(() => null)))
   const [videos, setVideos] = useState<string[][]>(() => inicial.secciones.map((s) => s.pasos.map((_, j) => s.medios?.[j]?.youtube ? `https://www.youtube.com/watch?v=${s.medios[j]!.youtube}` : '')))
+  const [archivosVideo, setArchivosVideo] = useState<(File | null)[][]>(() => inicial.secciones.map((s) => s.pasos.map(() => null)))
+  const [progresoVideo, setProgresoVideo] = useState('')
   const archivoInput = useRef<HTMLInputElement>(null)
   const [quitar, setQuitar] = useState(false)
   const [ocupado, setOcupado] = useState(false)
@@ -109,11 +112,20 @@ function Editor({ inicial, onSucio, onGuardada, onEliminada, onCancelar }: {
         if (f) imagenes_pasos.push({ seccion: i, paso: j, mime: f.type, base64: await leerImagen(f) })
       }
       const secciones = guia.secciones.map((s, i) => ({ ...s, medios: s.pasos.map((_, j) => ({ ...s.medios?.[j], youtube: ids[i][j] })) }))
+      for (let i = 0; i < archivosVideo.length; i++) for (let j = 0; j < archivosVideo[i].length; j++) {
+        const f = archivosVideo[i][j]
+        if (!f) continue
+        setProgresoVideo(`Subiendo ${f.name}: 0 %`)
+        const video = await subirVideo(f, (pct) => setProgresoVideo(`Subiendo ${f.name}: ${pct} %`))
+        secciones[i].medios[j].video_drive = video
+        setGuia((g) => ({ ...g, secciones: g.secciones.map((s, k) => k === i ? { ...s, medios: s.pasos.map((_, n) => n === j ? { ...s.medios?.[n], video_drive: video } : s.medios?.[n] ?? null) } : s) }))
+        setArchivosVideo((v) => v.map((a, k) => k === i ? a.map((x, n) => n === j ? null : x) : a))
+      }
       const result = await gestionarGuia({ accion: 'guardar', guia: { ...guia, secciones }, imagen, quitar_captura: quitar, imagenes_pasos })
       if (!result?.guia) throw new Error('El servidor no devolvió la guía guardada.')
       onGuardada(result.guia); toast.ok('Guía guardada y publicada.')
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar la guía.') }
-    finally { setOcupado(false) }
+    finally { setProgresoVideo(''); setOcupado(false) }
   }
   const eliminar = async () => {
     if (!guia.id || !await confirmar('Eliminar guía', { text: 'La guía dejará de mostrarse a las escuelas. Los archivos permanecerán en Drive.', ok: 'Eliminar', danger: true })) return
@@ -137,13 +149,16 @@ function Editor({ inicial, onSucio, onGuardada, onEliminada, onCancelar }: {
         <Lbl label="Descripción"><textarea required maxLength={2000} rows={3} class={FIELD} value={guia.descripcion} onInput={(e) => cambiar({ descripcion: e.currentTarget.value })} /></Lbl>
       </div>
     </Card>
-    {guia.secciones.map((s, i) => <Card key={i} title={`Sección ${i + 1}`} action={<button type="button" disabled={ocupado || guia.secciones.length === 1} class={BTN_SECONDARY} onClick={() => { cambiar({ secciones: guia.secciones.filter((_, j) => j !== i) }); setImagenesPasos((v) => v.filter((_, j) => j !== i)); setVideos((v) => v.filter((_, j) => j !== i)) }}>Quitar sección</button>}>
+    {guia.secciones.map((s, i) => <Card key={i} title={`Sección ${i + 1}`} action={<button type="button" disabled={ocupado || guia.secciones.length === 1} class={BTN_SECONDARY} onClick={() => { cambiar({ secciones: guia.secciones.filter((_, j) => j !== i) }); setImagenesPasos((v) => v.filter((_, j) => j !== i)); setVideos((v) => v.filter((_, j) => j !== i)); setArchivosVideo((v) => v.filter((_, j) => j !== i)) }}>Quitar sección</button>}>
       <div class="space-y-4">
-        <p class="text-sm text-slate-500">Cada paso puede incluir una imagen y un enlace de YouTube. Al quitar o reemplazar una imagen, el archivo anterior permanece en Drive.</p>
+        <p class="text-sm text-slate-500">Cada paso puede incluir una imagen, un enlace de YouTube y un video propio MP4 o WebM. Al quitar o reemplazar un archivo, el anterior permanece en Drive.</p>
         <Lbl label="Título de la sección"><input required maxLength={160} class={FIELD} value={s.titulo} onInput={(e) => seccion(i, { titulo: e.currentTarget.value })} /></Lbl>
         {s.pasos.map((paso, j) => <div key={j} class="space-y-1">
           <Lbl label={`Paso ${j + 1}`}><textarea required maxLength={4000} rows={3} class={FIELD} value={paso} onInput={(e) => seccion(i, { pasos: s.pasos.map((p, k) => k === j ? e.currentTarget.value : p) })} /></Lbl>
           <Lbl label={`Video de YouTube del paso ${j + 1} (opcional)`}><input type="url" class={FIELD} value={videos[i][j]} placeholder="https://www.youtube.com/watch?v=..." onInput={(e) => { const valor = e.currentTarget.value; setVideos((v) => v.map((a, k) => k === i ? a.map((x, n) => n === j ? valor : x) : a)); onSucio(true) }} /></Lbl>
+          <Lbl label={`Subir video del paso ${j + 1} (MP4 o WebM, opcional)`}><input type="file" accept="video/mp4,video/webm,.mp4,.webm" class={`${FIELD} py-2`} onChange={(e) => { const f = e.currentTarget.files?.[0] ?? null; setArchivosVideo((v) => v.map((a, k) => k === i ? a.map((x, n) => n === j ? f : x) : a)); onSucio(true); e.currentTarget.value = '' }} /></Lbl>
+          {archivosVideo[i][j] && <div class="flex flex-wrap items-center gap-2 text-sm"><span>{archivosVideo[i][j]?.name}</span><button type="button" class={BTN_SECONDARY} onClick={() => { setArchivosVideo((v) => v.map((a, k) => k === i ? a.map((x, n) => n === j ? null : x) : a)); onSucio(true) }}>Quitar video seleccionado</button></div>}
+          {s.medios?.[j]?.video_drive && <div class="flex flex-wrap items-center gap-2 text-sm"><span>Video agregado a este paso.</span><button type="button" class={BTN_SECONDARY} onClick={() => seccion(i, { medios: s.pasos.map((_, k) => k === j ? { ...s.medios?.[k], video_drive: null } : s.medios?.[k] ?? null) })}>Quitar video de la guía</button></div>}
           {guia.id && s.medios?.[j]?.imagen_drive && <Captura key={`${guia.id}-${guia.version}-${s.medios[j]!.imagen_drive}`} id={guia.id} titulo={`${guia.titulo}, paso ${j + 1}`} imagen={s.medios[j]!.imagen_drive!} />}
           <Lbl label={`Imagen del paso ${j + 1} (PNG o JPEG, hasta 2 MB)`}><input type="file" accept="image/png,image/jpeg" class={`${FIELD} py-2`} onChange={(e) => { cambiarImagen(i, j, e.currentTarget.files?.[0] ?? null); e.currentTarget.value = '' }} /></Lbl>
           {imagenesPasos[i][j] && <div class="flex flex-wrap items-center gap-2 text-sm"><span>{imagenesPasos[i][j]?.name}</span><button type="button" class={BTN_SECONDARY} onClick={() => cambiarImagen(i, j, null)}>Quitar archivo seleccionado</button></div>}
@@ -152,16 +167,18 @@ function Editor({ inicial, onSucio, onGuardada, onEliminada, onCancelar }: {
             seccion(i, { pasos: s.pasos.filter((_, k) => k !== j), medios: s.medios?.filter((_, k) => k !== j) })
             setImagenesPasos((v) => v.map((a, k) => k === i ? a.filter((_, n) => n !== j) : a))
             setVideos((v) => v.map((a, k) => k === i ? a.filter((_, n) => n !== j) : a))
+            setArchivosVideo((v) => v.map((a, k) => k === i ? a.filter((_, n) => n !== j) : a))
           }}>Quitar paso</button>
         </div>)}
         <button type="button" class={BTN_SECONDARY} disabled={ocupado || s.pasos.length >= 50} onClick={() => {
           seccion(i, { pasos: [...s.pasos, ''], medios: [...s.pasos.map((_, j) => s.medios?.[j] ?? null), null] })
           setImagenesPasos((v) => v.map((a, k) => k === i ? [...a, null] : a))
           setVideos((v) => v.map((a, k) => k === i ? [...a, ''] : a))
+          setArchivosVideo((v) => v.map((a, k) => k === i ? [...a, null] : a))
         }}>Agregar paso</button>
       </div>
     </Card>)}
-    <button type="button" class={BTN_SECONDARY} disabled={ocupado || guia.secciones.length >= 30} onClick={() => { cambiar({ secciones: [...guia.secciones, { titulo: '', pasos: [''] }] }); setImagenesPasos((v) => [...v, [null]]); setVideos((v) => [...v, ['']]) }}>Agregar sección</button>
+    <button type="button" class={BTN_SECONDARY} disabled={ocupado || guia.secciones.length >= 30} onClick={() => { cambiar({ secciones: [...guia.secciones, { titulo: '', pasos: [''] }] }); setImagenesPasos((v) => [...v, [null]]); setVideos((v) => [...v, ['']]); setArchivosVideo((v) => [...v, [null]]) }}>Agregar sección</button>
     {guia.id && guia.captura_drive && !quitar && <Captura key={`${guia.id}-${guia.version}`} id={guia.id} titulo={guia.titulo || 'la guía'} />}
     <Card title="Captura de pantalla">
       <div class="space-y-3">
@@ -177,6 +194,7 @@ function Editor({ inicial, onSucio, onGuardada, onEliminada, onCancelar }: {
       <button type="button" class={BTN_SECONDARY} disabled={ocupado} onClick={onCancelar}>Cancelar</button>
       {guia.id && <button type="button" class={BTN_DANGER} disabled={ocupado} onClick={() => void eliminar()}>Eliminar guía</button>}
     </div>
+    {progresoVideo && <p role="status" class="text-sm text-slate-600">{progresoVideo}</p>}
     </fieldset>
   </form>
 }

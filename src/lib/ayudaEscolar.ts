@@ -1,6 +1,7 @@
 export interface MedioPaso {
   imagen_drive?: string | null
   youtube?: string | null
+  video_drive?: string | null
 }
 
 export interface GuiaEscolar {
