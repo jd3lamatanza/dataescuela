@@ -13,6 +13,7 @@ import { agruparMenuDistrital, ordenarModulosSidebar, type CategoriaDistrital } 
 import { ESTILOS_CATEGORIAS, ESTILO_TEMA, estiloModulo } from './sidebarMenu'
 import { Modal, toast } from './kit'
 import { NotificacionesPush } from './NotificacionesPush'
+import { ReportarError } from './ReportarError'
 import type { AppModule } from '../modules'
 
 export const Logo = ({ class: cls = 'size-10' }: { class?: string }) => (
@@ -126,6 +127,7 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
         <a href={href('/')} class="flex items-center gap-2 font-semibold text-slate-900"><Logo class="size-8" /><span class="hidden sm:inline">{BRAND.name}</span></a>
         <div class="ml-auto flex items-center gap-2">
           <Bandeja />
+          <ReportarError user={user} path={path} />
           <UserMenu user={user} initials={initials} onLogout={onLogout} onAcerca={() => setAcerca(true)} />
         </div>
       </header>

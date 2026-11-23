@@ -66,7 +66,7 @@ test('los íconos mantienen contraste sobre el menú y la opción activa', () =>
 test('Sistema requiere permiso avanzado y Mensajes permanece accesible fuera de categorías', () => {
   const normal = { role: 'distrital', permiso_avanzado: false }
   const avanzado = { role: 'distrital', permiso_avanzado: true }
-  for (const id of ['usuarios-distrito', 'simulado', 'configuracion']) {
+  for (const id of ['usuarios-distrito', 'simulado', 'configuracion', 'reportes-error']) {
     const m = modulesFor('distrital').find((m) => m.id === id)
     assert.equal(canAccessUser(m, normal), false)
     assert.equal(canAccessUser(m, avanzado), true)

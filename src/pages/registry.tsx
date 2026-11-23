@@ -35,6 +35,7 @@ import { CircuitosElectorales, Nudos } from './Nudos'
 import { Disposiciones } from './Disposiciones'
 import { AyudaEscolar } from './AyudaEscolar'
 import { AyudaDistrital } from './AyudaDistrital'
+import { ReportesError } from './ReportesError'
 
 const Pendiente = (titulo: string) => () => (
   <>
@@ -59,6 +60,7 @@ export const PAGES: Record<string, ComponentType> = {
   disposiciones: Disposiciones,
   'ayuda-escolar': AyudaEscolar,
   'ayuda-distrital': AyudaDistrital,
+  'reportes-error': ReportesError,
   perfil: Perfil,
   'agenda-areal': Agenda,
   'agenda-distrito': Agenda,

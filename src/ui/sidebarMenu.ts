@@ -46,6 +46,7 @@ export const ESTILOS_MODULOS: Record<string, Apariencia> = {
   eav: verano, 'eav-escolar': verano,
   'ayuda-escolar': estilo('help', '#075985', '#bae6fd'),
   'ayuda-distrital': estilo('help', '#075985', '#bae6fd'),
+  'reportes-error': estilo('bug', '#8b2332', '#fda4b2'),
 }
 
 export const ESTILOS_CATEGORIAS: Record<string, Apariencia> = {

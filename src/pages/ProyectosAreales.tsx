@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { esPdf, MAX_PROYECTO } from '../../supabase/functions/_shared/proyectos'
 import { useAuth } from '../lib/auth'
 import { useAsync, useDebounced } from '../lib/hooks'
-import { llamarProyectosDrive } from '../lib/proyectosDrive'
+import { llamarDrive } from '../lib/drive'
 import { supabase } from '../lib/supabase'
 import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, Spinner, TabBar, confirmar, toast } from '../ui/kit'
 
@@ -11,7 +11,7 @@ type Proyecto = { id: string; tipo: string; nombre: string; bytes: number; creat
 type Inspector = { id: string; nombre: string; nivel_o_modalidad: string | null; cantidad: number }
 const TAMANO = 15
 const mensaje = (e: unknown) => e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e)
-const llamar = (body: FormData | Record<string, unknown>) => llamarProyectosDrive('proyectos-areales-drive', body)
+const llamar = (body: FormData | Record<string, unknown>) => llamarDrive('proyectos-areales-drive', body)
 
 async function leerTipos(): Promise<Tipo[]> {
   const r = await supabase.from('proyectos_areales_tipos').select('id,nombre').order('nombre')

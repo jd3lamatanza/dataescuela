@@ -42,6 +42,7 @@ const CATEGORIA_POR_MODULO: Record<string, CategoriaDistrital> = {
   'usuarios-distrito': 'sistema',
   configuracion: 'sistema',
   'ayuda-distrital': 'sistema',
+  'reportes-error': 'sistema',
 }
 
 export function agruparMenuDistrital(modulos: readonly AppModule[]) {

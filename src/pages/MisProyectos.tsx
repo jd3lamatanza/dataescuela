@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { esPdf, MAX_PROYECTO, TIPOS_PROYECTO } from '../../supabase/functions/_shared/proyectos'
 import { useAuth } from '../lib/auth'
 import { useAsync, useDebounced } from '../lib/hooks'
-import { llamarProyectosDrive } from '../lib/proyectosDrive'
+import { llamarDrive } from '../lib/drive'
 import { supabase } from '../lib/supabase'
 import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, Spinner, TabBar, confirmar, toast } from '../ui/kit'
 
@@ -12,7 +12,7 @@ type ProyectoListado = Proyecto & Partial<ProyectoSupervision>
 const TAMANO = 15
 const fecha = (s: string) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'short' }).format(new Date(s))
 
-const llamar = (body: FormData | Record<string, unknown>) => llamarProyectosDrive('proyectos-drive', body)
+const llamar = (body: FormData | Record<string, unknown>) => llamarDrive('proyectos-drive', body)
 
 export function MisProyectos() {
   const { user } = useAuth()

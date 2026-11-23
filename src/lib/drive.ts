@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 
-export async function llamarProyectosDrive(servicio: 'proyectos-drive' | 'proyectos-areales-drive', body: FormData | Record<string, unknown>): Promise<Response> {
+export async function llamarDrive(servicio: 'proyectos-drive' | 'proyectos-areales-drive' | 'reportes-error', body: FormData | Record<string, unknown>): Promise<Response> {
   const { data, error } = await supabase.auth.getSession()
   if (error) throw new Error(error.message)
   if (!data.session?.access_token) throw new Error('Tu sesión venció. Volvé a ingresar.')

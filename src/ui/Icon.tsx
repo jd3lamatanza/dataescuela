@@ -1,6 +1,6 @@
 import type { IconName } from '../modules'
 
-const PATHS: Record<IconName | 'moon' | 'menu' | 'logout' | 'x' | 'grid' | 'mail' | 'sidebar' | 'plus' | 'dots' | 'edit' | 'trash' | 'list' | 'note' | 'external' | 'eye' | 'key' | 'lock' | 'unlock' | 'copy' | 'power' | 'download' | 'move' | 'drag' | 'ban' | 'flag' | 'chevl' | 'chevr' | 'arrow-up' | 'arrow-down' | 'equals' | 'inbox' | 'send' | 'star' | 'archive' | 'attachment' | 'reply' | 'info' | 'network' | 'id-card' | 'books' | 'folder-star' | 'document-seal' | 'calendar-clock' | 'clipboard-check' | 'chart-bars' | 'user-settings' | 'sliders' | 'help' | 'theme', string> = {
+const PATHS: Record<IconName | 'moon' | 'menu' | 'logout' | 'x' | 'grid' | 'mail' | 'sidebar' | 'plus' | 'dots' | 'edit' | 'trash' | 'list' | 'note' | 'external' | 'eye' | 'key' | 'lock' | 'unlock' | 'copy' | 'power' | 'download' | 'move' | 'drag' | 'ban' | 'flag' | 'chevl' | 'chevr' | 'arrow-up' | 'arrow-down' | 'equals' | 'inbox' | 'send' | 'star' | 'archive' | 'attachment' | 'reply' | 'info' | 'network' | 'id-card' | 'books' | 'folder-star' | 'document-seal' | 'calendar-clock' | 'clipboard-check' | 'chart-bars' | 'user-settings' | 'sliders' | 'help' | 'theme' | 'bug', string> = {
   org: 'M9 3h6v5H9V3ZM3 16h6v5H3v-5Zm12 0h6v5h-6v-5ZM12 8v4M6 16v-4h12v4',
   home: 'm2.25 12 8.955-8.955a1.5 1.5 0 0 1 2.09 0L22.25 12M4.5 9.75V21h5v-6h5v6h5V9.75',
   users: 'M15 19.13a9.4 9.4 0 0 0 4.12-.9 4 4 0 0 0-7.1-2.6M15 19.13V19.13a8 8 0 0 1-.01.4A12 12 0 0 1 8.5 21c-2.4 0-4.65-.7-6.5-1.87v-.1a6.4 6.4 0 0 1 11.96-3.2M12 7a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Zm8.5 2a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z',
@@ -18,6 +18,7 @@ const PATHS: Record<IconName | 'moon' | 'menu' | 'logout' | 'x' | 'grid' | 'mail
   search: 'm21 21-5.2-5.2M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z',
   check: 'm5 12.5 4.5 4.5L19 7.5',
   alert: 'M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z',
+  bug: 'M8 7 6 4m10 3 2-3M8 9h8a2 2 0 0 1 2 2v3a6 6 0 0 1-12 0v-3a2 2 0 0 1 2-2Zm1 0V8a3 3 0 0 1 6 0v1M12 9v11M3 11h3m12 0h3M3 16h3m12 0h3',
   info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 10v6m0-9h.01',
   grid: 'M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 0h6v6h-6v-6Z',
   mail: 'M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm-2 2 9 6 9-6',
