@@ -5,9 +5,11 @@ import { PREINSCRIPCION_EAV_URL } from '../lib/preinscripcionEavUrl'
 import { go, setParams, useRoute } from '../lib/router'
 import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Modal, PAGE_SIZE, PageHeader, Pager, RowMenu, Spinner, TabBar, Toggle, confirmar, toast, type TabItem } from '../ui/kit'
 import { cargarCuposEav, CuposEav } from '../ui/CuposEav'
+import { InscripcionesEavDistrital } from './InscripcionesEavDistrital'
 
 const TABS = [
   { id: 'escuelas', label: 'Escuelas', icon: 'school', color: 'amber' },
+  { id: 'inscripciones', label: 'Preinscripciones', icon: 'clipboard', color: 'emerald' },
   { id: 'config', label: 'Configuración', icon: 'settings', color: 'indigo' },
 ] as const satisfies readonly TabItem[]
 
@@ -31,8 +33,8 @@ export function EscuelaVerano() {
   return (
     <>
       <PageHeader title="Escuela de Verano" subtitle="EAV" />
-      <TabBar label="Escuela de Verano" class="" items={[...TABS]} active={tab} onChange={(id) => setParams({ t: id === 'escuelas' ? null : id, page: null, q: null, c: null, col: null })} />
-      <div class="mt-4">{tab === 'escuelas' && <Escuelas />}{tab === 'config' && <Configuracion />}</div>
+      <TabBar label="Escuela de Verano" class="" items={[...TABS]} active={tab} onChange={(id) => setParams({ t: id === 'escuelas' ? null : id, page: null, q: null, c: null, col: null, escuela: null })} />
+      <div class="mt-4">{tab === 'escuelas' && <Escuelas />}{tab === 'inscripciones' && <InscripcionesEavDistrital />}{tab === 'config' && <Configuracion />}</div>
     </>
   )
 }
@@ -87,7 +89,7 @@ function Escuelas() {
                     { label: 'Ficha de Escuela', onClick: () => go(`/escuelas?e=${e.id}&from=eav`) },
                     { label: 'Asignar cupos', onClick: () => setEditarCupos(e) },
                     { label: 'Cargos', onClick: () => toast.info('La lista de cargos todavía no está implementada.') },
-                    { label: 'Inscriptos', onClick: () => toast.info('La lista de inscriptos todavía no está implementada.') },
+                    { label: 'Inscriptos', onClick: () => setParams({ t: 'inscripciones', escuela: e.id, q: null, page: null }) },
                   ]} />
                 </div>
               </li>
