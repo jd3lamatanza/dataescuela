@@ -14,6 +14,7 @@ import { ESTILOS_CATEGORIAS, ESTILO_TEMA, estiloModulo } from './sidebarMenu'
 import { Modal, toast } from './kit'
 import { NotificacionesPush } from './NotificacionesPush'
 import { ReportarError } from './ReportarError'
+import { ChatDistrital } from './ChatDistrital'
 import type { AppModule } from '../modules'
 
 export const Logo = ({ class: cls = 'size-10' }: { class?: string }) => (
@@ -150,6 +151,7 @@ export function AppShell({ user, path, onLogout, children }: { user: Profile; pa
         {user.role === 'distrital' && <div class="hidden h-14 lg:block" />}
       </main>
       {user.role === 'distrital' && <BarraServidor collapsed={collapsed} />}
+      {user.role === 'distrital' && !user.simulador && <ChatDistrital key={user.id} userId={user.id} />}
       {acerca && <AcercaDe onClose={() => setAcerca(false)} />}
     </div>
   )

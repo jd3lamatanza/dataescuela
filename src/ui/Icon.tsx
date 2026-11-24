@@ -1,6 +1,6 @@
 import type { IconName } from '../modules'
 
-const PATHS: Record<IconName | 'moon' | 'menu' | 'logout' | 'x' | 'grid' | 'mail' | 'sidebar' | 'plus' | 'dots' | 'edit' | 'trash' | 'list' | 'note' | 'external' | 'eye' | 'key' | 'lock' | 'unlock' | 'copy' | 'power' | 'download' | 'move' | 'drag' | 'ban' | 'flag' | 'chevl' | 'chevr' | 'arrow-up' | 'arrow-down' | 'equals' | 'inbox' | 'send' | 'star' | 'archive' | 'attachment' | 'reply' | 'info' | 'network' | 'id-card' | 'books' | 'folder-star' | 'document-seal' | 'calendar-clock' | 'clipboard-check' | 'chart-bars' | 'user-settings' | 'sliders' | 'help' | 'theme' | 'bug', string> = {
+const PATHS: Record<IconName | 'moon' | 'menu' | 'logout' | 'x' | 'grid' | 'mail' | 'chat' | 'sidebar' | 'plus' | 'dots' | 'edit' | 'trash' | 'list' | 'note' | 'external' | 'eye' | 'key' | 'lock' | 'unlock' | 'copy' | 'power' | 'download' | 'move' | 'drag' | 'ban' | 'flag' | 'chevl' | 'chevr' | 'arrow-up' | 'arrow-down' | 'equals' | 'inbox' | 'send' | 'star' | 'archive' | 'attachment' | 'reply' | 'info' | 'network' | 'id-card' | 'books' | 'folder-star' | 'document-seal' | 'calendar-clock' | 'clipboard-check' | 'chart-bars' | 'user-settings' | 'sliders' | 'help' | 'theme' | 'bug', string> = {
   org: 'M9 3h6v5H9V3ZM3 16h6v5H3v-5Zm12 0h6v5h-6v-5ZM12 8v4M6 16v-4h12v4',
   home: 'm2.25 12 8.955-8.955a1.5 1.5 0 0 1 2.09 0L22.25 12M4.5 9.75V21h5v-6h5v6h5V9.75',
   users: 'M15 19.13a9.4 9.4 0 0 0 4.12-.9 4 4 0 0 0-7.1-2.6M15 19.13V19.13a8 8 0 0 1-.01.4A12 12 0 0 1 8.5 21c-2.4 0-4.65-.7-6.5-1.87v-.1a6.4 6.4 0 0 1 11.96-3.2M12 7a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Zm8.5 2a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z',
@@ -22,6 +22,7 @@ const PATHS: Record<IconName | 'moon' | 'menu' | 'logout' | 'x' | 'grid' | 'mail
   info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 10v6m0-9h.01',
   grid: 'M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 0h6v6h-6v-6Z',
   mail: 'M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm-2 2 9 6 9-6',
+  chat: 'M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 3V6a2 2 0 0 1 1-2Zm3 5h8M8 13h5',
   inbox: 'M4 4h16l2 10v5H2v-5L4 4Zm-2 10h6l2 3h4l2-3h6',
   send: 'M22 2 11 13m11-11-7 20-4-9-9-4L22 2Z',
   star: 'm12 3 2.8 5.7 6.3.9-4.5 4.4 1.1 6.2-5.7-3-5.7 3 1.1-6.2-4.5-4.4 6.3-.9L12 3Z',
