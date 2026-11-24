@@ -2,12 +2,13 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useAsync, useDebounced } from '../lib/hooks'
 import { go, setParams, useRoute } from '../lib/router'
-import { Alert, Card, EmptyState, FIELD, PageHeader, Pager, PAGE_SIZE, RowMenu, Spinner, BTN_SECONDARY, confirmar, toast } from '../ui/kit'
+import { Alert, Card, EmptyState, FIELD, PageHeader, Pager, PAGE_SIZE, RowMenu, Spinner, TabBar, BTN_SECONDARY, confirmar, toast, type TabItem } from '../ui/kit'
 import { Equipo, TIPOS, type TipoEquipo } from '../ui/Equipo'
 import { FichaEscuela, nombreEscuela } from '../ui/FichaEscuela'
 import { useState } from 'preact/hooks'
 import { periodoActual } from './matricula/Escolar'
-import { buildEscuelasXlsx, direccionEscuela, tablaEscuelas, type EscuelaListado } from '../lib/escuelasListado'
+import { buildEscuelasXlsx, buildListadoXlsx, direccionEscuela, tablaEscuelas, type EscuelaListado } from '../lib/escuelasListado'
+import { cargoEquipo, escuelaEquipo, fechaEquipo, filtrarEquipos, leerEquipos, otraEscuelaEquipo, tablaEquipos } from '../lib/equiposListado'
 import { buildPdf } from '../lib/export'
 import { descargar, XLSX_MIME } from '../lib/download'
 import { BRAND } from '../modules'
@@ -19,11 +20,91 @@ const ORDEN: Record<string, [string, string[]]> = {
   nivel: ['Nivel', ['nivel', 'numero']], modalidad: ['Modalidad', ['modalidad', 'numero']], localidad: ['Localidad', ['localidad', 'numero']],
 }
 const VISTAS = [{ id: 'ficha', label: 'Ficha de Escuela' }, ...(Object.keys(TIPOS) as TipoEquipo[]).map((k) => ({ id: k, label: TIPOS[k].titulo }))]
+const TABS: TabItem[] = [
+  { id: 'escuelas', label: 'Escuelas', icon: 'school', color: 'sky' },
+  { id: 'directivo', label: 'Equipos directivos', icon: 'users', color: 'cyan' },
+  { id: 'orientacion', label: 'Equipos de orientación', icon: 'users', color: 'violet' },
+  { id: 'esi', label: 'Referentes ESI', icon: 'users', color: 'rose' },
+]
 
 export function Escuelas() {
+  const { user } = useAuth()
   const { params } = useRoute()
   const eid = Number(params.get('e')) || 0
-  return eid ? <Detalle id={eid} vista={params.get('v') ?? 'ficha'} from={params.get('from')} /> : <Listado />
+  if (eid) return <Detalle id={eid} vista={params.get('v') ?? 'ficha'} from={params.get('from')} />
+  const tab = user?.role === 'distrital' && TABS.some((t) => t.id === params.get('tab')) ? params.get('tab')! : 'escuelas'
+  return <>
+    {user?.role === 'distrital' && <TabBar items={TABS} active={tab} label="Listados de escuelas y equipos"
+      onChange={(id) => setParams({ tab: id === 'escuelas' ? null : id })} />}
+    {tab === 'escuelas' ? <Listado /> : <ListadoEquipos key={tab} tipo={tab as TipoEquipo} />}
+  </>
+}
+
+function ListadoEquipos({ tipo }: { tipo: TipoEquipo }) {
+  const { user } = useAuth()
+  const [q, setQ] = useState('')
+  const [nivel, setNivel] = useState('')
+  const [localidad, setLocalidad] = useState('')
+  const [page, setPage] = useState(1)
+  const [exportando, setExportando] = useState(false)
+  const dq = useDebounced(q)
+  const { data, loading, error } = useAsync(() => leerEquipos(supabase, tipo), [tipo, user?.id, user?.role])
+  const filtros = { busqueda: dq, nivel, localidad }
+  const filas = filtrarEquipos(data ?? [], filtros)
+  const niveles = [...new Set((data ?? []).map((r) => r.escuela.nivel).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, 'es-AR'))
+  const localidades = [...new Set((data ?? []).map((r) => r.escuela.localidad).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, 'es-AR'))
+  const pagina = Math.min(page, Math.max(1, Math.ceil(filas.length / PAGE_SIZE)))
+  const titulo = TABS.find((t) => t.id === tipo)!.label
+  const listo = !loading && !error && dq === q && !!data
+  const exportar = async (formato: 'xlsx' | 'pdf') => {
+    setExportando(true)
+    try {
+      const tabla = tablaEquipos(filas, tipo, filtros, BRAND.org)
+      const nombre = tipo === 'directivo' ? 'equipos-directivos' : tipo === 'orientacion' ? 'equipos-orientacion' : 'referentes-esi'
+      if (formato === 'xlsx') descargar(await buildListadoXlsx(tabla, BRAND.name, 'Listado'), `${nombre}.xlsx`, XLSX_MIME)
+      else {
+        const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png?v=2`)
+        if (!respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
+        descargar(await buildPdf(tabla, { brand: { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) }, maxCellLines: 12 }), `${nombre}.pdf`, 'application/pdf')
+      }
+    } catch (e) {
+      const mensaje = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e)
+      toast.error(`No se pudo exportar el listado: ${mensaje}`)
+    } finally { setExportando(false) }
+  }
+  return <>
+    <PageHeader title={titulo} subtitle={`${filas.length} registro(s) en el listado`} />
+    <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto]">
+      <input type="search" class={FIELD} value={q} maxLength={80} aria-label="Buscar" placeholder="Nombre, DNI, CUIL, cargo o escuela"
+        onInput={(e) => { setQ(e.currentTarget.value); setPage(1) }} />
+      <select class={FIELD} aria-label="Nivel" value={nivel} onChange={(e) => { setNivel(e.currentTarget.value); setPage(1) }}><option value="">Todos los niveles</option>{niveles.map((n) => <option key={n}>{n}</option>)}</select>
+      <select class={FIELD} aria-label="Localidad" value={localidad} onChange={(e) => { setLocalidad(e.currentTarget.value); setPage(1) }}><option value="">Todas las localidades</option>{localidades.map((l) => <option key={l}>{l}</option>)}</select>
+      <button class={BTN_SECONDARY} onClick={() => { setQ(''); setNivel(''); setLocalidad(''); setPage(1) }}>Limpiar</button>
+    </div>
+    <div class="mt-3 flex flex-wrap items-center gap-2">
+      <button type="button" class={BTN_SECONDARY} disabled={!listo || exportando || !filas.length} onClick={() => void exportar('xlsx')}><Icon name="download" class="size-4" />Excel</button>
+      <button type="button" class={BTN_SECONDARY} disabled={!listo || exportando || !filas.length} onClick={() => void exportar('pdf')}><Icon name="download" class="size-4" />PDF</button>
+      <span class="text-xs text-slate-500">Se exportan todos los resultados filtrados.</span>
+    </div>
+    {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
+    <Card class="mt-3">
+      {loading && !data ? <Spinner /> : error ? <p class="text-sm text-slate-500">No se pudo cargar el listado.</p> : !filas.length ? <EmptyState title="Sin resultados" text="Probá con otros filtros." /> :
+        <ul class="-my-4 divide-y divide-slate-200">
+          {filas.slice((pagina - 1) * PAGE_SIZE, pagina * PAGE_SIZE).map((r) => <li key={r.id} class="flex items-start justify-between gap-3 py-3">
+            <div class="min-w-0">
+              <p class="font-semibold">{r.apellido_nombre}</p>
+              <p class="text-xs text-slate-600">{escuelaEquipo(r.escuela)} · {r.escuela.clave || 'Sin clave'} · CUE {r.escuela.cue}</p>
+              <p class="text-xs text-slate-500">{[r.escuela.nivel, r.escuela.localidad].filter(Boolean).join(' · ')}</p>
+              {tipo === 'esi'
+                ? <><p class="text-xs text-slate-600">{[r.dni && `DNI ${r.dni}`, cargoEquipo(r), r.area, r.turno].filter(Boolean).join(' · ')}</p><p class="text-xs text-slate-500">Otra escuela: {otraEscuelaEquipo(r)}</p></>
+                : <><p class="text-xs text-slate-600">{[cargoEquipo(r), r.revista?.nombre, r.toma_posesion && `Toma ${fechaEquipo(r.toma_posesion)}`, r.cuil && `CUIL ${r.cuil}`].filter(Boolean).join(' · ')}</p><p class="text-xs text-slate-500">{[r.telefono, r.email, r.cargo_base && `Cargo base: ${r.cargo_base}`].filter(Boolean).join(' · ')}</p></>}
+            </div>
+            <button type="button" class={BTN_SECONDARY} onClick={() => setParams({ e: r.escuela_id, v: tipo })}>Ver escuela</button>
+          </li>)}
+        </ul>}
+    </Card>
+    <Pager page={pagina} total={filas.length} onPage={setPage} />
+  </>
 }
 
 function Listado() {
