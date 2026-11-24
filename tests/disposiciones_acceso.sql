@@ -53,15 +53,14 @@ begin
     values ((select id from dispo_acceso_fixtures where docente_nombre = 'acceso-uno'),'prueba','application/pdf',1,'sin-permiso');
   exception when insufficient_privilege then rechazado := true; end;
   if not rechazado then raise exception 'Areal puede agregar archivos'; end if;
-  rechazado := false;
-  begin insert into public.disposiciones(inspector,email_jefatura,docente_nombre,docente_cuil,docente_email,
+  insert into public.disposiciones(inspector,email_jefatura,docente_nombre,docente_cuil,docente_email,
     escuela_cubrir_id,escuela_cubrir_clave,escuela_cubrir_nombre,cargo_cubrir,revista_cubrir,tipo,motivo,
     fecha_designacion,numero_designacion,escuela_base_id,escuela_base_clave,escuela_base_nombre,cargo_base,revista_base,fecha_desde,usuario)
   select 'Inspector','jefatura@abc.gob.ar','Docente','20123456789','docente@abc.gob.ar',
     escuela1,'','','Director','Titular','Asignación AP','Acto Público',
     '2026-01-01','123',escuela1,'','','Docente','Titular','2026-01-01','' from dispo_acceso_ids;
-  exception when insufficient_privilege or raise_exception then rechazado := true; end;
-  if not rechazado then raise exception 'Areal puede crear disposiciones'; end if;
+  if not exists (select 1 from public.disposiciones where docente_nombre='Docente' and estado='Pendiente' and creado_areal)
+    then raise exception 'Areal no puede crear disposiciones pendientes'; end if;
 end $$;
 reset role;
 update public.inspectores set escuelas_asignadas = '{}' where user_id = (select actor from dispo_acceso_ids);
@@ -81,11 +80,11 @@ set local role authenticated;
 do $$
 declare cantidad integer; rechazado boolean := false;
 begin
-  if (select count(*) from public.disposiciones where id in (select id from dispo_acceso_fixtures)) <> 1
-    or not exists (select 1 from public.disposiciones where docente_nombre = 'acceso-uno')
-    or exists (select 1 from public.disposiciones where docente_nombre = 'acceso-dos')
-    or (select count(*) from public.disposicion_archivos where disposicion_id in (select id from dispo_acceso_fixtures)) <> 1 then
-    raise exception 'Escolar no está restringido a la escuela a cubrir';
+  if exists (select 1 from public.disposiciones where id in (select id from dispo_acceso_fixtures))
+    or exists (select 1 from public.disposicion_archivos where disposicion_id in (select id from dispo_acceso_fixtures))
+    or (select count(*) from public.disposicion_escuelas_listar() where id in (select id from dispo_acceso_fixtures)) <> 1
+    or exists (select 1 from public.disposicion_escuelas_listar() where id = (select id from dispo_acceso_fixtures where docente_nombre = 'acceso-dos')) then
+    raise exception 'Escolar no está restringido al resumen de la escuela a cubrir';
   end if;
   update public.disposiciones set observaciones = 'cambio no autorizado' where docente_nombre = 'acceso-uno';
   get diagnostics cantidad = row_count;
@@ -98,7 +97,7 @@ reset role;
 update public.profiles set cue = null where id = (select actor from dispo_acceso_ids);
 set local role authenticated;
 do $$ begin
-  if exists (select 1 from public.disposiciones where id in (select id from dispo_acceso_fixtures)) then
+  if exists (select 1 from public.disposicion_escuelas_listar() where id in (select id from dispo_acceso_fixtures)) then
     raise exception 'Escolar sin CUE tiene acceso';
   end if;
 end $$;

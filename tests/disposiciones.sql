@@ -24,8 +24,8 @@ begin
   if not exists (select 1 from public.disposiciones where id = nuevo and estado = 'En proceso' and escuela_cubrir_clave = nombre_clave and escuela_base_clave = nombre_clave) then
     raise exception 'No se vinculó la disposición a las escuelas';
   end if;
-  update public.disposiciones set estado = 'Finalizada' where id = nuevo;
-  if not exists (select 1 from public.disposiciones where id = nuevo and estado = 'Finalizada') then raise exception 'No se actualizó el estado'; end if;
+  perform public.disposicion_cambiar_estado(nuevo, 'Devuelta para Corrección', null);
+  if not exists (select 1 from public.disposiciones where id = nuevo and estado = 'Devuelta para Corrección') then raise exception 'No se actualizó el estado'; end if;
   rechazado := false;
   begin update public.disposiciones set escuela_base_id = null where id = nuevo;
   exception when raise_exception then if sqlerrm <> 'Seleccioná una escuela base' then raise; end if; rechazado := true; end;
@@ -82,7 +82,7 @@ begin
   select nuevo,'prueba','application/pdf',1,'prueba-' || n from generate_series(1,3) n;
   begin insert into public.disposicion_archivos(disposicion_id,nombre,mime,bytes,drive_file_id)
     values (nuevo,'prueba','application/pdf',1,'prueba-4');
-  exception when raise_exception then if sqlerrm <> 'Solo se permiten hasta 3 archivos de probanza' then raise; end if; rechazado := true; end;
+  exception when raise_exception then if sqlerrm <> 'Solo se permiten hasta 3 archivos de probanza inicial' then raise; end if; rechazado := true; end;
   if not rechazado then raise exception 'Se aceptó un cuarto archivo'; end if;
   update public.disposiciones set escuela_base_id = null, escuela_base_clave = 'prueba', escuela_base_nombre = 'histórica' where id = nuevo;
 end $$;
