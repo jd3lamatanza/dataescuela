@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 
 export interface ArchivoDisposicion { id: number; disposicion_id: number; nombre: string; mime: string; bytes: number; drive_file_id: string; tipo: 'inicial' | 'seguimiento' }
+export type AdjuntoEscolar = Pick<ArchivoDisposicion, 'id' | 'disposicion_id' | 'nombre' | 'mime'>
 export interface Disposicion {
   id: number; estado: string; fecha_registro: string; inspector: string; email_jefatura: string
   docente_nombre: string; docente_cuil: string; docente_email: string
@@ -81,7 +82,7 @@ export async function quitarArchivo(id: number) {
   await llamar({ action: 'remove', archivo_id: id })
 }
 
-export async function abrirArchivo(archivo: ArchivoDisposicion) {
+export async function abrirArchivo(archivo: Pick<ArchivoDisposicion, 'id' | 'nombre' | 'mime'>) {
   const respuesta = await llamar({ action: 'download', archivo_id: archivo.id })
   const blob = new Blob([await respuesta.arrayBuffer()], { type: archivo.mime })
   const url = URL.createObjectURL(blob)

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAsync } from '../lib/hooks'
 import { useAuth } from '../lib/auth'
-import { abrirArchivo, abrirPdfFinal, CARGOS, ESTADOS, finalizarTramite, MAX_ARCHIVOS, MAX_BYTES, quitarArchivo, REVISTAS, subirArchivo, TIPOS_ARCHIVO, type Disposicion, type DisposicionEscolar, type MensajeDisposicion, type MotivoDisposicion } from '../lib/disposiciones'
+import { abrirArchivo, abrirPdfFinal, CARGOS, ESTADOS, finalizarTramite, MAX_ARCHIVOS, MAX_BYTES, quitarArchivo, REVISTAS, subirArchivo, TIPOS_ARCHIVO, type AdjuntoEscolar, type Disposicion, type DisposicionEscolar, type MensajeDisposicion, type MotivoDisposicion } from '../lib/disposiciones'
 import { SelectorEscuela, type Escuela } from './PreinscripcionEav'
 import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, Spinner, confirmar, toast, Toggle } from '../ui/kit'
 import { Icon } from '../ui/Icon'
@@ -54,10 +54,18 @@ function ListadoEscolar() {
       const r = await supabase.rpc('disposicion_escuelas_listar').range(offset, offset + 499)
       if (r.error) throw r.error
       filas.push(...r.data as DisposicionEscolar[])
-      if (r.data.length < 500) return filas
+      if (r.data.length < 500) break
     }
+    const adjuntos: AdjuntoEscolar[] = []
+    for (let offset = 0; ; offset += 500) {
+      const r = await supabase.from('disposicion_archivos').select('id,disposicion_id,nombre,mime').order('id').range(offset, offset + 499)
+      if (r.error) throw r.error
+      adjuntos.push(...r.data)
+      if (r.data.length < 500) break
+    }
+    return { filas, adjuntos }
   })
-  const filas = (data ?? []).filter((r) => normalizar(`${r.id} ${r.estado} ${r.escuela_cubrir_nombre}`).includes(normalizar(buscar)))
+  const filas = (data?.filas ?? []).filter((r) => normalizar(`${r.id} ${r.estado} ${r.escuela_cubrir_nombre}`).includes(normalizar(buscar)))
   const actual = Math.min(pagina, Math.max(1, Math.ceil(filas.length / 20)))
   return <>
     <PageHeader title="Disposiciones" subtitle="Consultá el estado de los trámites y descargá las disposiciones finalizadas." />
@@ -67,8 +75,11 @@ function ListadoEscolar() {
       {!filas.length ? <EmptyState title="Sin disposiciones" /> : <ul class="-my-4 divide-y divide-slate-200">
         {filas.slice((actual - 1) * 20, actual * 20).map((r) => <li key={r.id} class="flex flex-wrap items-center justify-between gap-2 py-3">
           <div><p class="font-semibold">Disposición #{r.id} <Badge tone={tono(r.estado)}>{r.estado}</Badge></p><p class="text-xs text-slate-500">{fecha(r.fecha_registro)} · {r.escuela_cubrir_nombre}</p></div>
-          {r.pdf_disponible ? <button class={BTN_SECONDARY} onClick={() => abrirPdfFinal(r.id).catch((e) => toast.error(e instanceof Error ? e.message : String(e)))}><Icon name="download" />Descargar PDF</button>
-            : <span class="text-xs text-slate-500">{r.estado === 'Finalizada' ? 'PDF final aún no disponible' : 'Disponible al finalizar'}</span>}
+          <div class="flex flex-wrap gap-2">
+            {r.pdf_disponible && <button class={BTN_SECONDARY} onClick={() => abrirPdfFinal(r.id).catch((e) => toast.error(e instanceof Error ? e.message : String(e)))}><Icon name="download" />Descargar PDF</button>}
+            {data.adjuntos.filter((a) => a.disposicion_id === r.id).map((a) => <button key={a.id} class={BTN_SECONDARY} onClick={() => abrirArchivo(a).catch((e) => toast.error(e instanceof Error ? e.message : String(e)))}><Icon name="download" />{a.nombre}</button>)}
+            {!r.pdf_disponible && !data.adjuntos.some((a) => a.disposicion_id === r.id) && <span class="text-xs text-slate-500">{r.estado === 'Finalizada' ? 'PDF final aún no disponible' : 'Disponible al finalizar'}</span>}
+          </div>
         </li>)}
       </ul>}
     </Card>}
