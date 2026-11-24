@@ -36,6 +36,7 @@ test('paginación y exportación consultan todos los resultados con los mismos f
   const filtros = { busqueda: 'Museo', estado: '2' }
   const pagina = await consultaSalidas(cliente, filtros).range(20, 39)
   assert.ifError(pagina.error)
+  assert.match(pedidos[0].get('select'), /(?:^|,)visado_at(?:,|$)/)
   assert.equal(pagina.count, 1102)
   assert.deepEqual(pagina.data.map((s) => s.id), rows.slice(20, 40).map((s) => s.id))
   const exportadas = await leerSalidasFiltradas(cliente, filtros)

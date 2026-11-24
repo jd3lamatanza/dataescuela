@@ -4,6 +4,7 @@ import type { Table } from './export'
 export interface SalidaListado {
   id: number; user_id: string; cue: string; clave: string | null; escuela: string; titulo: string; fecha: string; destino: string
   observaciones: string | null; estado_id: number; enviar_mail: boolean; mail_enviado_at: string | null; created_at: string
+  visado_at: string | null
 }
 
 export interface FiltrosSalidas { busqueda: string; estado: string }
@@ -11,7 +12,7 @@ export interface FiltrosSalidas { busqueda: string; estado: string }
 export const limpiarBusquedaSalidas = (texto: string) => texto.trim().slice(0, 80).replace(/[,()%*\\"]/g, ' ').trim()
 
 export function consultaSalidas(cliente: SupabaseClient, filtros: FiltrosSalidas) {
-  let consulta = cliente.from('salidas').select('id,user_id,cue,clave,escuela,titulo,fecha,destino,observaciones,estado_id,enviar_mail,mail_enviado_at,created_at', { count: 'exact' })
+  let consulta = cliente.from('salidas').select('id,user_id,cue,clave,escuela,titulo,fecha,destino,observaciones,estado_id,enviar_mail,mail_enviado_at,created_at,visado_at', { count: 'exact' })
   if (filtros.estado) consulta = consulta.eq('estado_id', Number(filtros.estado))
   const texto = limpiarBusquedaSalidas(filtros.busqueda)
   if (texto) consulta = consulta.or(['titulo', 'destino', 'escuela', 'clave', 'cue'].map((campo) => `${campo}.ilike.%${texto}%`).join(','))

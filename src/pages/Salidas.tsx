@@ -2,13 +2,13 @@ import { useEffect, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useAsync, useDebounced } from '../lib/hooks'
-import { descargarArchivo, enviarCorreo, primerNoPdf, subirArchivo, urlVistaPrevia } from '../lib/salidas'
+import { descargarArchivo, primerNoPdf, subirArchivo, urlVistaPrevia } from '../lib/salidas'
 import { consultaSalidas, leerSalidasFiltradas, limpiarBusquedaSalidas, tablaSalidas, type SalidaListado } from '../lib/salidasListado'
 import { buildListadoXlsx } from '../lib/escuelasListado'
 import { buildPdf } from '../lib/export'
 import { descargar, XLSX_MIME } from '../lib/download'
 import { BRAND, ROLE_LABELS, type Role } from '../modules'
-import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, Spinner, Toggle, toast } from '../ui/kit'
+import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, Spinner, confirmar, toast } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 import { col } from '../ui/Calendario'
 
@@ -16,6 +16,7 @@ interface Estado { id: number; nombre: string; color: string; orden: number; act
 type Salida = SalidaListado
 interface Archivo { id: number; nombre: string; mime: string | null; bytes: number | null }
 interface Mensaje { id: number; rol: Role; autor: string; texto: string; estado_id: number | null; created_at: string }
+interface Escuela { id: number; clave: string | null; cue: string; tipo: string | null; numero: number | null; nombre: string | null; localidad: string | null }
 
 const fecha = (d: string) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(d + 'T00:00:00Z'))
 const fechaHora = (d: string) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(d))
@@ -34,6 +35,7 @@ function SalidasDistrital() {
   const [pagina, setPagina] = useState(1)
   const [tamano, setTamano] = useState(20)
   const [abierta, setAbierta] = useState<number | null>(null)
+  const [nueva, setNueva] = useState(false)
   const [exportando, setExportando] = useState(false)
   const busqueda = limpiarBusquedaSalidas(q)
   const dq = useDebounced(busqueda)
@@ -75,7 +77,8 @@ function SalidasDistrital() {
 
   const listo = !loading && !error && dq === busqueda && data?.busqueda === dq && data.estado === estado && data.pagina === pagina && data.tamano === tamano
   return <>
-    <PageHeader title="Salida Educativa" subtitle="Solicitudes de las escuelas: revisá la documentación, dejá observaciones y actualizá el estado." />
+    <PageHeader title="Salida Educativa" subtitle="Solicitudes de las escuelas: revisá la documentación, dejá observaciones y actualizá el estado."
+      actions={<button class={BTN_PRIMARY} onClick={() => setNueva(true)}>Nueva salida</button>} />
     <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       <input type="search" class={FIELD} placeholder="Título, destino, escuela, clave o CUE" value={q} onInput={(e) => { setQ(e.currentTarget.value); setPagina(1) }} aria-label="Buscar salidas" />
       <select class={FIELD} value={estado} onChange={(e) => { setEstado(e.currentTarget.value); setPagina(1) }} aria-label="Estado">
@@ -99,12 +102,14 @@ function SalidasDistrital() {
           <span class="min-w-0 flex-1">
             <span class="block truncate font-medium text-slate-900">{s.titulo}</span>
             <span class="block truncate text-xs text-slate-500">{fecha(s.fecha)} · {s.destino} · {s.escuela}{s.clave ? ` (${s.clave})` : ''}</span>
+            {s.visado_at && <span class="mt-1 block text-xs font-medium text-emerald-700">✓ Visada el {fechaHora(s.visado_at)}</span>}
           </span>
           <EstadoChip e={data.estados.find((e) => e.id === s.estado_id)} />
         </button>
       ))}
     </div>
     {listo && data && <>{data.total <= tamano && <p class="mt-3 text-sm text-slate-500">{data.total} salida(s)</p>}<Pager page={pagina} total={data.total} size={tamano} onPage={setPagina} /></>}
+    {nueva && <Formulario distrital onClose={() => setNueva(false)} onDone={(id) => { setNueva(false); reload(); setAbierta(id) }} />}
     {abierta != null && <Detalle id={abierta} estados={data?.estados ?? []} onClose={() => setAbierta(null)} onChange={reload} />}
   </>
 }
@@ -165,10 +170,21 @@ function SalidasGeneral() {
   )
 }
 
-function Formulario({ onClose, onDone }: { onClose(): void; onDone(id: number): void }) {
+function Formulario({ onClose, onDone, distrital = false }: { onClose(): void; onDone(id: number): void; distrital?: boolean }) {
   const [f, setF] = useState({ titulo: '', fecha: '', destino: '', obs: '' })
   const [files, setFiles] = useState<File[]>([])
-  const [mail, setMail] = useState(true)
+  const [busqueda, setBusqueda] = useState('')
+  const [escuela, setEscuela] = useState<Escuela | null>(null)
+  const dbusqueda = useDebounced(busqueda)
+  const escuelas = useAsync(async () => {
+    const texto = limpiarBusquedaSalidas(dbusqueda)
+    if (!distrital || texto.length < 2) return [] as Escuela[]
+    const criterios = ['clave', 'cue', 'codigo', 'nombre', 'localidad'].map((campo) => `${campo}.ilike.%${texto}%`)
+    if (/^\d+$/.test(texto)) criterios.push(`numero.eq.${texto}`)
+    const r = await supabase.from('escuelas').select('id,clave,cue,tipo,numero,nombre,localidad').or(criterios.join(',')).order('clave').limit(20)
+    if (r.error) throw r.error
+    return r.data as Escuela[]
+  }, [dbusqueda, distrital])
   const [err, setErr] = useState<string | null>(null)
   const [paso, setPaso] = useState<string | null>(null)
   const set = (k: keyof typeof f) => (e: Event) => setF({ ...f, [k]: (e.currentTarget as HTMLInputElement).value })
@@ -182,20 +198,20 @@ function Formulario({ onClose, onDone }: { onClose(): void; onDone(id: number): 
   const submit = async (e: Event) => {
     e.preventDefault()
     setErr(null)
+    if (distrital && !escuela) return setErr('Elegí una escuela')
     const malo = await primerNoPdf(files)
     if (malo) return setErr(`Solo se admiten archivos PDF: “${malo}” no lo es`)
     let id: number | undefined
     try {
       setPaso('Guardando salida…')
-      const { data, error } = await supabase.rpc('salida_crear', { p_titulo: f.titulo, p_fecha: f.fecha, p_destino: f.destino, p_obs: f.obs, p_mail: mail })
+      const datos = { p_titulo: f.titulo, p_fecha: f.fecha, p_destino: f.destino, p_obs: f.obs }
+      const { data, error } = distrital
+        ? await supabase.rpc('salida_crear_distrital', { ...datos, p_escuela: escuela!.id })
+        : await supabase.rpc('salida_crear', { ...datos, p_mail: false })
       if (error) throw new Error(error.message)
       id = data as number
       for (const [i, file] of files.entries()) {
         await subirArchivo(id!, file, (p) => setPaso(`Subiendo ${i + 1} de ${files.length}: ${file.name} (${p}%)`))
-      }
-      if (mail) {
-        setPaso('Enviando correo de la salida…')
-        await enviarCorreo(id!)
       }
       toast.ok('Salida guardada')
       onDone(id!)
@@ -210,6 +226,21 @@ function Formulario({ onClose, onDone }: { onClose(): void; onDone(id: number): 
     <Modal title="Nueva salida educativa" onClose={() => !paso && onClose()} wide>
       <form onSubmit={submit} class="space-y-4">
         {err && <Alert tone="error">{err}</Alert>}
+        {distrital && <div>
+          <Lbl label="Escuela">
+            <input type="search" class={FIELD} value={busqueda} placeholder="Buscar por escuela, clave o CUE" maxLength={80}
+              onInput={(e) => { setBusqueda(e.currentTarget.value); setEscuela(null) }} />
+          </Lbl>
+          {escuela ? <p class="mt-2 text-sm text-emerald-700">Seleccionada: {[escuela.tipo, escuela.numero, escuela.nombre].filter(Boolean).join(' ')} · {escuela.clave || escuela.cue}</p>
+            : escuelas.error ? <div class="mt-2"><Alert tone="error">{escuelas.error}</Alert></div>
+            : busqueda.trim().length < 2 ? <p class="mt-2 text-xs text-slate-500">Escribí al menos 2 caracteres.</p>
+            : escuelas.loading || dbusqueda !== busqueda ? <Spinner />
+            : !escuelas.data?.length ? <p class="mt-2 text-sm text-slate-500">No se encontraron escuelas.</p>
+            : <ul class="mt-2 max-h-48 divide-y overflow-y-auto rounded-md border border-slate-200">
+              {escuelas.data.map((e) => <li key={e.id}><button type="button" class="w-full px-3 py-2 text-left text-sm hover:bg-sky-50"
+                onClick={() => setEscuela(e)}>{[e.tipo, e.numero, e.nombre].filter(Boolean).join(' ')} · {e.clave || e.cue} · {e.localidad}</button></li>)}
+            </ul>}
+        </div>}
         <div class="grid gap-3 sm:grid-cols-2">
           <Lbl label="Título"><input class={FIELD} value={f.titulo} onInput={set('titulo')} required minLength={3} maxLength={150} /></Lbl>
           <Lbl label="Fecha"><input class={FIELD} type="date" value={f.fecha} onInput={set('fecha')} required /></Lbl>
@@ -234,7 +265,6 @@ function Formulario({ onClose, onDone }: { onClose(): void; onDone(id: number): 
             </ul>
           )}
         </div>
-        <Toggle checked={mail} onChange={setMail} label="Enviar por email a la bandeja de salidas educativas" />
         {paso && <Alert tone="info">{paso}</Alert>}
         <div class="flex justify-end gap-2"><button type="button" class={BTN_SECONDARY} disabled={!!paso} onClick={onClose}>Cancelar</button><button class={BTN_PRIMARY} disabled={!!paso}>{paso ? 'Procesando…' : 'Guardar'}</button></div>
       </form>
@@ -245,6 +275,8 @@ function Formulario({ onClose, onDone }: { onClose(): void; onDone(id: number): 
 function Detalle({ id, estados, onClose, onChange }: { id: number; estados: Estado[]; onClose(): void; onChange(): void }) {
   const { user } = useAuth()
   const distrito = user?.role === 'distrital'
+  const areal = user?.role === 'areal'
+  const supervisor = distrito || areal
   const [texto, setTexto] = useState('')
   const [estado, setEstado] = useState('')
   const [busy, setBusy] = useState(false)
@@ -260,6 +292,10 @@ function Detalle({ id, estados, onClose, onChange }: { id: number; estados: Esta
       supabase.rpc('salida_es_dueno', { p_id: id }),
     ])
     if (s.error) throw s.error
+    if (a.error) throw a.error
+    if (m.error) throw m.error
+    if (ed.error) throw ed.error
+    if (du.error) throw du.error
     if (!s.data) throw new Error('Salida inexistente')
     return { s: s.data as Salida, archivos: (a.data ?? []) as Archivo[], mensajes: (m.data ?? []) as Mensaje[], editable: !!ed.data, dueno: !!du.data }
   }, [id])
@@ -275,9 +311,13 @@ function Detalle({ id, estados, onClose, onChange }: { id: number; estados: Esta
   }
   const comentar = (e: Event) => {
     e.preventDefault()
-    if (!texto.trim() && !(distrito && estado)) return
-    if (distrito && estado) run(supabase.rpc('salida_estado', { p_id: id, p_estado: Number(estado), p_texto: texto }), 'Estado actualizado', () => { setTexto(''); setEstado('') })
+    if (!texto.trim() && !(supervisor && estado)) return
+    if (supervisor && estado) run(supabase.rpc('salida_estado', { p_id: id, p_estado: Number(estado), p_texto: texto }), 'Estado actualizado', () => { setTexto(''); setEstado('') })
     else run(supabase.rpc('salida_mensaje', { p_id: id, p_texto: texto }), 'Mensaje enviado', () => setTexto(''))
+  }
+  const visar = async () => {
+    if (!await confirmar('Visar salida educativa', { text: 'Una vez confirmado, el visado no se puede quitar.', ok: 'Visar' })) return
+    await run(supabase.rpc('salida_visar', { p_id: id }), 'Salida visada')
   }
   const agregarArchivos = async (list: FileList | null) => {
     if (!list || !data) return
@@ -303,6 +343,11 @@ function Detalle({ id, estados, onClose, onChange }: { id: number; estados: Esta
       {loading && !data ? <Spinner /> : data && (
         <div class="space-y-5">
           <div class="flex flex-wrap items-center gap-2"><EstadoChip e={estadoDe(data.s.estado_id)} />{data.s.mail_enviado_at && <span class="text-xs text-slate-500">Correo enviado el {fechaHora(data.s.mail_enviado_at)}</span>}</div>
+          {areal ? <label class="flex items-start gap-2 text-sm font-medium text-slate-700">
+            <input type="checkbox" class="mt-0.5 size-4 accent-emerald-600" checked={!!data.s.visado_at} disabled={busy || !!data.s.visado_at}
+              onChange={(e) => { e.currentTarget.checked = false; void visar() }} />
+            <span>{data.s.visado_at ? `Visada el ${fechaHora(data.s.visado_at)}` : 'Visar esta salida (no se puede deshacer)'}</span>
+          </label> : data.s.visado_at && <p class="text-sm font-medium text-emerald-700">✓ Visada el {fechaHora(data.s.visado_at)}</p>}
           <dl class="grid gap-3 text-sm sm:grid-cols-2">
             <div><dt class="text-xs uppercase text-slate-500">Escuela</dt><dd>{data.s.escuela}{data.s.clave ? ` · ${data.s.clave}` : ''}</dd></div>
             <div><dt class="text-xs uppercase text-slate-500">Fecha</dt><dd>{fecha(data.s.fecha)}</dd></div>
@@ -343,9 +388,9 @@ function Detalle({ id, estados, onClose, onChange }: { id: number; estados: Esta
                 ))}
               </ol>
             )}
-            {(distrito || data.dueno) && (
+            {(supervisor || data.dueno) && (
               <form onSubmit={comentar} class="mt-3 space-y-2">
-                {distrito && (
+                {supervisor && (
                   <Lbl label="Estado">
                     <select class={FIELD} value={estado} onChange={(e) => setEstado(e.currentTarget.value)}>
                       <option value="">Sin cambios ({estadoDe(data.s.estado_id)?.nombre})</option>
@@ -353,8 +398,8 @@ function Detalle({ id, estados, onClose, onChange }: { id: number; estados: Esta
                     </select>
                   </Lbl>
                 )}
-                <Lbl label={distrito ? 'Observación' : 'Escribir un mensaje'}><textarea class={`${FIELD} min-h-20 py-2`} value={texto} onInput={(e) => setTexto(e.currentTarget.value)} maxLength={3000} /></Lbl>
-                <div class="flex justify-end"><button class={BTN_PRIMARY} disabled={busy || (!texto.trim() && !estado)}>{distrito && estado ? 'Actualizar estado' : 'Enviar'}</button></div>
+                <Lbl label={supervisor ? 'Observación' : 'Escribir un mensaje'}><textarea class={`${FIELD} min-h-20 py-2`} value={texto} onInput={(e) => setTexto(e.currentTarget.value)} maxLength={3000} /></Lbl>
+                <div class="flex justify-end"><button class={BTN_PRIMARY} disabled={busy || (!texto.trim() && !estado)}>{supervisor && estado ? 'Actualizar estado' : 'Enviar'}</button></div>
               </form>
             )}
           </section>

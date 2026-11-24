@@ -1,6 +1,4 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts'
-import { remitente, validarConfiguracion, type ConfiguracionEmail } from '../_shared/configuracion-email.ts'
 
 const APP_ORIGIN = (() => { try { return new URL(Deno.env.get('APP_PUBLIC_URL') ?? '').origin } catch { return '' } })()
 const CORS = {
@@ -11,9 +9,6 @@ const CORS = {
 }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } })
 class HttpError extends Error { constructor(public status: number, message: string) { super(message) } }
-
-// Gmail admite 25 MB por mensaje y el adjunto crece ~37 % al codificarse: se adjunta hasta este total
-const MAX_ATTACH_BYTES = 17 * 1024 * 1024
 
 const env = (k: string) => Deno.env.get(k) ?? ''
 const clean = (s: string) => s.replace(/[\r\n]+/g, ' ').trim()
@@ -57,20 +52,9 @@ async function ensureFolder(admin: ReturnType<typeof createClient>, token: strin
   const escuela = await findOrCreateFolder(token, safeName(s.clave ?? s.cue), env('DRIVE_FOLDER_ID'))
   const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date())
   const id = await findOrCreateFolder(token, hoy, escuela)
-  await admin.from('salidas').update({ drive_folder_id: id }).eq('id', s.id)
+  const { error } = await admin.from('salidas').update({ drive_folder_id: id }).eq('id', s.id)
+  if (error) { console.error('Drive folder registration failed:', error.message); throw new HttpError(503, 'No se pudo registrar la carpeta de la salida') }
   return id
-}
-
-async function sendMail(opts: { to: string; cc?: string; from: string; replyTo?: string; subject: string; content: string; attachments: { filename: string; content: Uint8Array; contentType: string }[] }) {
-  const user = env('SMTP_USERNAME')
-  const mailer = new SMTPClient({ connection: { hostname: 'smtp.gmail.com', port: 465, tls: true, auth: { username: user, password: env('SMTP_PASSWORD') } } })
-  try {
-    await mailer.send({
-      from: opts.from, to: opts.to, ...(opts.cc ? { cc: opts.cc } : {}), ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
-      subject: opts.subject, content: opts.content,
-      attachments: opts.attachments.map((a) => ({ filename: a.filename, content: a.content, encoding: 'binary', contentType: a.contentType })),
-    })
-  } finally { await mailer.close() }
 }
 
 Deno.serve(async (req) => {
@@ -92,16 +76,14 @@ Deno.serve(async (req) => {
     // La visibilidad la decide la RLS con el usuario real de la sesión
     const loadSalida = async (id: number) => {
       if (!Number.isInteger(id)) throw new HttpError(400, 'Salida inválida')
-      const { data } = await user.from('salidas').select('id, clave, cue, escuela, titulo, fecha, destino, observaciones, drive_folder_id, user_id, estado:salida_estados(nombre)').eq('id', id).maybeSingle()
+      const { data, error } = await user.from('salidas').select('id, clave, cue, escuela, titulo, fecha, destino, observaciones, drive_folder_id, user_id, estado:salida_estados(nombre)').eq('id', id).maybeSingle()
+      if (error) { console.error('Salida lookup failed:', error.message); throw new HttpError(503, 'No se pudo consultar la salida') }
       if (!data) throw new HttpError(404, 'Salida inexistente')
       return data as any
     }
-    const requireOwner = async (id: number) => {
-      const { data } = await user.rpc('salida_es_dueno', { p_id: id })
-      if (!data) throw new HttpError(403, 'Sin permiso')
-    }
     const requireEditable = async (id: number) => {
-      const { data } = await user.rpc('salida_editable', { p_id: id })
+      const { data, error } = await user.rpc('salida_editable', { p_id: id })
+      if (error) { console.error('Editable lookup failed:', error.message); throw new HttpError(503, 'No se pudo verificar el permiso de carga') }
       if (!data) throw new HttpError(403, 'La salida no admite más archivos en su estado actual')
     }
 
@@ -149,7 +131,8 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'download') {
-      const { data: a } = await user.from('salida_archivos').select('nombre, mime, drive_file_id').eq('id', Number(body?.archivo_id)).maybeSingle()
+      const { data: a, error } = await user.from('salida_archivos').select('nombre, mime, drive_file_id').eq('id', Number(body?.archivo_id)).maybeSingle()
+      if (error) { console.error('File lookup failed:', error.message); throw new HttpError(503, 'No se pudo consultar el archivo') }
       if (!a) throw new HttpError(404, 'Archivo inexistente')
       const token = await driveToken()
       const r = await fetch(`https://www.googleapis.com/drive/v3/files/${a.drive_file_id}?alt=media&supportsAllDrives=true`, { headers: { Authorization: `Bearer ${token}` } })
@@ -157,48 +140,7 @@ Deno.serve(async (req) => {
       return new Response(r.body, { headers: { ...CORS, 'Content-Type': a.mime || 'application/octet-stream', 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(a.nombre)}` } })
     }
 
-    if (action === 'send') {
-      await requireOwner(salidaId)
-      const s = await loadSalida(salidaId)
-      const { data: sent } = await admin.from('salidas').select('mail_enviado_at').eq('id', salidaId).maybeSingle()
-      if (sent?.mail_enviado_at) throw new HttpError(409, 'El correo de esta salida ya fue enviado')
-      const { data: files } = await user.from('salida_archivos').select('nombre, mime, bytes, drive_file_id').eq('salida_id', salidaId).order('id')
-      const { data: esc } = await admin.from('escuelas').select('email').eq('cue', s.cue).not('email', 'is', null).order('id').limit(1).maybeSingle()
-      const cc = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((esc?.email ?? '').trim()) ? (esc!.email as string).trim() : undefined
-      const token = await driveToken()
-
-      const attachments: { filename: string; content: Uint8Array; contentType: string }[] = []
-      const links: string[] = []
-      let total = 0
-      for (const f of files ?? []) {
-        const size = Number(f.bytes ?? 0)
-        if (total + size <= MAX_ATTACH_BYTES) {
-          const r = await fetch(`https://www.googleapis.com/drive/v3/files/${f.drive_file_id}?alt=media&supportsAllDrives=true`, { headers: { Authorization: `Bearer ${token}` } })
-          if (r.ok) { attachments.push({ filename: f.nombre, content: new Uint8Array(await r.arrayBuffer()), contentType: f.mime || 'application/octet-stream' }); total += size; continue }
-        }
-        links.push(`${f.nombre}: https://drive.google.com/file/d/${f.drive_file_id}/view`)
-      }
-
-      const fecha = new Intl.DateTimeFormat('es-AR', { dateStyle: 'full', timeZone: 'UTC' }).format(new Date(s.fecha + 'T00:00:00Z'))
-      const content = [
-        'Se registró una nueva salida educativa en DataEscuela.', '',
-        `Escuela: ${s.escuela}`, `Clave provincial: ${s.clave ?? '-'}`, `CUE: ${s.cue}`, '',
-        `Título: ${s.titulo}`, `Fecha: ${fecha}`, `Destino: ${s.destino}`,
-        `Observaciones: ${s.observaciones || 'Sin observaciones'}`, `Estado: ${s.estado?.nombre ?? 'Pendiente'}`, '',
-        `Documentación (${(files ?? []).length}): ${attachments.length ? `${attachments.length} adjunta(s) a este correo` : 'sin adjuntos en este correo'}`,
-        ...(links.length ? ['', 'Archivos que superan el límite de adjuntos (disponibles en Google Drive):', ...links] : []),
-      ].join('\n')
-
-      const { data: config, error: configError } = await admin.from('configuracion_email').select('salidas_destino,sistema_remitente,respuesta,nombre_remitente').eq('id', true).maybeSingle()
-      if (configError) { console.error('Email configuration lookup failed:', configError.message); throw new HttpError(503, 'No se pudo consultar la configuración de correo') }
-      const configuracion = config as ConfiguracionEmail | null
-      if (configuracion) validarConfiguracion(configuracion)
-      const destino = configuracion?.salidas_destino ?? env('JD3_EMAIL')
-      if (!/^[^\s\x00-\x1f\x7f@<>]+@[^\s\x00-\x1f\x7f@<>]+\.[^\s\x00-\x1f\x7f@<>]+$/.test(destino)) throw new HttpError(503, 'La bandeja de salidas educativas no está configurada')
-      await sendMail({ to: destino, cc, from: configuracion ? remitente(configuracion) : `DataEscuela <${env('SMTP_USERNAME')}>`, replyTo: configuracion?.respuesta, subject: `Salida Educativa ${clean(s.clave ?? s.cue)} a ${clean(s.destino)}`, content, attachments })
-      await admin.from('salidas').update({ mail_enviado_at: new Date().toISOString() }).eq('id', salidaId)
-      return json({ ok: true, adjuntos: attachments.length, enlaces: links.length })
-    }
+    if (action === 'send') throw new HttpError(410, 'Las salidas educativas ya no se envían por correo')
 
     throw new HttpError(400, 'Acción inválida')
   } catch (e) {

@@ -39,8 +39,6 @@ export async function subirArchivo(salidaId: number, file: File, onProgress: (pc
   await callJson({ action: 'register', salida_id: salidaId, file_id: fileId })
 }
 
-export const enviarCorreo = (salidaId: number) => callJson<{ adjuntos: number; enlaces: number }>({ action: 'send', salida_id: salidaId })
-
 async function bajarBlob(archivoId: number): Promise<Blob> {
   const r = await call({ action: 'download', archivo_id: archivoId })
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? 'No se pudo leer el archivo')
