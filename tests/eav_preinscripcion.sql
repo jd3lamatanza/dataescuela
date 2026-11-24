@@ -59,7 +59,9 @@ begin
   select * into t from eav_pre_test;
   perform set_config('request.jwt.claim.role', 'authenticated', true);
   perform set_config('request.jwt.claim.sub', t.escolar::text, true);
-  if exists (select 1 from public.eav_preinscripciones) then raise exception 'Preinscripciones visibles al rol escolar'; end if;
+  if exists (select 1 from public.eav_preinscripciones where escuela_eav_id is distinct from public.mi_escuela()) then
+    raise exception 'Preinscripciones de otra escuela visibles al rol escolar';
+  end if;
   begin perform public.eav_preinscribir(t.escuela, '99999993', 'Ejemplo Prueba', '2018-01-01', 'Mujer', t.otra, null, 'Domicilio prueba', 'Responsable prueba', 'Otro', '011 12345678', 'prueba@example.invalid'); exception when insufficient_privilege then bloqueado := true; end;
   if not bloqueado then raise exception 'RPC accesible al rol escolar'; end if;
 end $$;

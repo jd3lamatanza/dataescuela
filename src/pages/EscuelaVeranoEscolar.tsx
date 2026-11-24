@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
-import { useAsync } from '../lib/hooks'
+import { useAsync, useDebounced } from '../lib/hooks'
 import { descargarDocumento, previsualizable, quitarArchivo, subirDocumento, urlVistaPrevia } from '../lib/eav'
-import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, FIELD, Lbl, Modal, PageHeader, Spinner, Toggle, confirmar, toast } from '../ui/kit'
+import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PAGE_SIZE, PageHeader, Pager, Spinner, TabBar, Toggle, confirmar, toast, type TabItem } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 import { col } from '../ui/Calendario'
 
@@ -12,6 +12,15 @@ interface Directivo {
   id: number; nombre: string; cuil: string; fecha_nacimiento: string; cargo_base: string; pat: string | null; pid: string | null
   email: string; telefono: string; domicilio: string; estado_id: number; archivos: Archivo[]
 }
+interface Preinscripcion {
+  id: number; temporada: number; nombre: string; dni: string; nacimiento: string
+  responsable: string; telefono: string; inscrito_en: string | null; legajo_completo: boolean | null
+}
+
+const TABS = [
+  { id: 'directivo', label: 'Directivo', icon: 'users', color: 'sky' },
+  { id: 'preinscripciones', label: 'Preinscripciones', icon: 'clipboard', color: 'emerald' },
+] as const satisfies readonly TabItem[]
 
 const tam = (b: number | null) => (b == null ? '' : b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`)
 const fmt = (d: string) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(d + 'T00:00:00Z'))
@@ -20,8 +29,11 @@ const soloNum = (s: string) => s.replace(/\D/g, '')
 /** Escuela de Verano (rol escolar): activación de la EAV y carga del directivo con su documentación. */
 export function EscuelaVeranoEscolar() {
   const [edit, setEdit] = useState(false)
+  const [tab, setTab] = useState('directivo')
   const { data, loading, error, reload } = useAsync(async () => {
-    const id = (await supabase.rpc('mi_escuela')).data as number | null
+    const escuela = await supabase.rpc('mi_escuela')
+    if (escuela.error) throw escuela.error
+    const id = escuela.data as number | null
     if (!id) throw new Error('Tu cuenta no tiene una escuela asociada')
     const [e, est, dir] = await Promise.all([
       supabase.from('escuelas').select('id,eav').eq('id', id).single(),
@@ -29,6 +41,8 @@ export function EscuelaVeranoEscolar() {
       supabase.from('eav_directivos').select('*, archivos:eav_directivo_archivos(id,nombre,mime,bytes)').maybeSingle(),
     ])
     if (e.error) throw e.error
+    if (est.error) throw est.error
+    if (dir.error) throw dir.error
     return { id, activa: e.data.eav === 'Sí', estados: (est.data ?? []) as Estado[], dir: (dir.data ?? null) as Directivo | null }
   })
 
@@ -52,6 +66,8 @@ export function EscuelaVeranoEscolar() {
         </Card>
       ) : (
         <>
+          <TabBar label="Escuela de Verano" items={[...TABS]} active={tab} onChange={setTab} />
+          {tab === 'directivo' ? <>
           <Card title="Directivo de la Escuela de Verano" action={data.dir && estado?.nombre !== 'Aprobado' ? <button class={BTN_SECONDARY} onClick={() => setEdit(true)}>Editar</button> : undefined}>
             {!data.dir ? (
               <div class="space-y-3 text-sm text-slate-600">
@@ -61,11 +77,85 @@ export function EscuelaVeranoEscolar() {
             ) : <Ficha d={data.dir} estado={estado} />}
           </Card>
           <div class="mt-4"><Toggle checked onChange={activar} label="Mi escuela es escuela de verano" /></div>
+          </> : <Preinscripciones escuelaId={data.id} />}
         </>
       ))}
       {edit && data && <Formulario dir={data.dir} onClose={() => setEdit(false)} onDone={() => { setEdit(false); reload() }} />}
     </>
   )
+}
+
+function Preinscripciones({ escuelaId }: { escuelaId: number }) {
+  const [buscar, setBuscar] = useState('')
+  const [pagina, setPagina] = useState(1)
+  const [seleccion, setSeleccion] = useState<Preinscripcion | null>(null)
+  const consulta = useDebounced(buscar)
+  const { data, loading, error, reload } = useAsync(async () => {
+    let q = supabase.from('eav_preinscripciones')
+      .select('id,temporada,nombre,dni,nacimiento,responsable,telefono,inscrito_en,legajo_completo', { count: 'exact' })
+      .eq('escuela_eav_id', escuelaId)
+    const texto = consulta.trim().slice(0, 80).replace(/[,()%*\\"]/g, ' ')
+    if (texto) q = q.or(`nombre.ilike.%${texto}%,dni.ilike.%${texto}%`)
+    const r = await q.order('temporada', { ascending: false }).order('creado_en', { ascending: false }).order('id', { ascending: false })
+      .range((pagina - 1) * PAGE_SIZE, pagina * PAGE_SIZE - 1)
+    if (r.error) throw r.error
+    if (r.count == null) throw new Error('No se pudo obtener la cantidad de preinscripciones')
+    return { filas: r.data as Preinscripcion[], total: r.count }
+  }, [escuelaId, consulta, pagina])
+  return <>
+    <div class="mb-3">
+      <h2 class="text-lg font-semibold text-slate-900">Preinscripciones</h2>
+      <p class="mt-1 text-sm text-slate-500">Revisá los estudiantes de tu EAV y confirmá su inscripción.</p>
+    </div>
+    <input class={FIELD} type="search" aria-label="Buscar preinscripción" placeholder="Buscar por nombre o DNI" value={buscar} maxLength={80}
+      onInput={(e) => { setBuscar(e.currentTarget.value); setPagina(1) }} />
+    {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
+    {loading && !data ? <Spinner /> : data && <Card class="mt-3">
+      {!data.filas.length ? <EmptyState title="Sin preinscripciones" text={consulta ? 'Probá con otra búsqueda.' : 'Todavía no hay preinscripciones para esta escuela.'} />
+        : <ul class="-my-4 divide-y divide-slate-200">
+          {data.filas.map((p) => <li key={p.id} class="flex flex-wrap items-start justify-between gap-3 py-4">
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2"><p class="font-semibold text-slate-900">{p.nombre}</p><Badge tone={p.inscrito_en ? 'green' : 'amber'}>{p.inscrito_en ? 'Inscripto' : 'Preinscripto'}</Badge></div>
+              <p class="mt-1 text-sm text-slate-600">DNI {p.dni} · Nacimiento {fmt(p.nacimiento)} · Temporada {p.temporada}</p>
+              <p class="mt-1 text-xs text-slate-500">Responsable: {p.responsable} · {p.telefono}</p>
+              {p.inscrito_en && <p class={`mt-2 text-xs font-medium ${p.legajo_completo ? 'text-emerald-700' : 'text-amber-700'}`}>Legajo {p.legajo_completo ? 'completo' : 'incompleto'}</p>}
+            </div>
+            {!p.inscrito_en && <button type="button" class={BTN_PRIMARY} onClick={() => setSeleccion(p)}>Confirmar inscripción</button>}
+          </li>)}
+        </ul>}
+    </Card>}
+    <Pager page={pagina} total={data?.total ?? 0} onPage={setPagina} />
+    {seleccion && <ConfirmarInscripcion preinscripcion={seleccion} onClose={() => setSeleccion(null)} onDone={() => { setSeleccion(null); reload() }} />}
+  </>
+}
+
+function ConfirmarInscripcion({ preinscripcion, onClose, onDone }: { preinscripcion: Preinscripcion; onClose(): void; onDone(): void }) {
+  const [legajo, setLegajo] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const confirmarInscripcion = async () => {
+    setBusy(true); setError('')
+    try {
+      const r = await supabase.rpc('eav_confirmar_inscripcion', { p_id: preinscripcion.id, p_legajo_completo: legajo })
+      if (r.error) { setError(r.error.message); return }
+      toast.ok('Inscripción confirmada'); onDone()
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    finally { setBusy(false) }
+  }
+  return <Modal title="Confirmar inscripción" onClose={() => { if (!busy) onClose() }}>
+    <div class="space-y-4">
+      <p class="text-sm text-slate-700">Al confirmar, <strong>{preinscripcion.nombre}</strong> (DNI {preinscripcion.dni}) queda inscripto en la Escuela de Verano.</p>
+      <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <Toggle checked={legajo} onChange={setLegajo} label="La documentación del legajo está completa" disabled={busy} />
+        <p class="mt-2 text-xs text-slate-600">Se registrará el legajo como {legajo ? 'completo' : 'incompleto'}.</p>
+      </div>
+      {error && <Alert tone="error">{error}</Alert>}
+      <div class="flex flex-wrap justify-end gap-2">
+        <button type="button" class={BTN_SECONDARY} disabled={busy} onClick={onClose}>Cancelar</button>
+        <button type="button" class={BTN_PRIMARY} disabled={busy} onClick={() => void confirmarInscripcion()}>{busy ? 'Confirmando…' : 'Confirmar inscripción'}</button>
+      </div>
+    </div>
+  </Modal>
 }
 
 function Ficha({ d, estado }: { d: Directivo; estado?: Estado }) {
