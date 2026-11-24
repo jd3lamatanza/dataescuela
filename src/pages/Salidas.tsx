@@ -24,6 +24,31 @@ const tam = (n: number | null) => (n == null ? '' : n < 1024 * 1024 ? `${Math.ma
 
 const EstadoChip = ({ e }: { e?: Estado }) => <span class={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${col(e?.color).chip}`}>{e?.nombre ?? '—'}</span>
 
+function Visado({ salida, onChange, disabled = false }: { salida: Salida; onChange(): void; disabled?: boolean }) {
+  const [busy, setBusy] = useState(false)
+  const [registrado, setRegistrado] = useState(false)
+  const visada = !!salida.visado_at || registrado
+  const visar = async () => {
+    setBusy(true)
+    try {
+      if (!await confirmar('Visar salida educativa', { text: 'Una vez confirmado, el visado no se puede quitar.', ok: 'Visar' })) return
+      const { error } = await supabase.rpc('salida_visar', { p_id: salida.id })
+      if (error) throw error
+      setRegistrado(true)
+      toast.ok('Salida visada')
+      onChange()
+    } catch (e) {
+      toast.error(e && typeof e === 'object' && 'message' in e ? String(e.message) : 'No se pudo visar la salida')
+    } finally { setBusy(false) }
+  }
+  return <label class="flex items-start gap-2 text-sm font-medium text-slate-700">
+    <input type="checkbox" class="mt-0.5 size-4 shrink-0 accent-emerald-600" checked={visada} disabled={disabled || busy || visada}
+      aria-label={`${visada ? 'Visada' : 'Visar'}: ${salida.titulo}`}
+      onChange={(e) => { e.currentTarget.checked = false; void visar() }} />
+    <span>{salida.visado_at ? `Visada el ${fechaHora(salida.visado_at)}` : registrado ? 'Visada' : 'Visar esta salida (no se puede deshacer)'}</span>
+  </label>
+}
+
 export function Salidas() {
   const { user } = useAuth()
   return user?.role === 'distrital' ? <SalidasDistrital key={user.id} /> : <SalidasGeneral key={user?.id} />
@@ -118,6 +143,7 @@ function SalidasGeneral() {
   const { user } = useAuth()
   const distrito = user?.role === 'distrital'
   const escolar = user?.role === 'escolar'
+  const areal = user?.role === 'areal'
   const [q, setQ] = useState('')
   const [filtro, setFiltro] = useState('')
   const [nueva, setNueva] = useState(false)
@@ -154,14 +180,17 @@ function SalidasGeneral() {
       {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
       <div class="mt-3 space-y-2">
         {loading && !data ? <Spinner /> : rows.length === 0 ? <Card><EmptyState title="Sin salidas" text={!escolar ? 'Todavía no hay solicitudes.' : 'Cargá la primera con “Nueva salida”.'} /></Card> : rows.map((s) => (
-          <button key={s.id} type="button" onClick={() => setAbierta(s.id)} class="flex w-full items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm hover:border-sky-300 hover:bg-sky-50">
-            <span class={`flex size-10 shrink-0 items-center justify-center rounded-lg border ${col(estadoDe(s.estado_id)?.color).card}`}><Icon name="bus" /></span>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate font-medium text-slate-900">{s.titulo}</span>
-              <span class="block truncate text-xs text-slate-500">{fecha(s.fecha)} · {s.destino}{!escolar ? ` · ${s.escuela}${s.clave ? ` (${s.clave})` : ''}` : ''}</span>
-            </span>
-            <EstadoChip e={estadoDe(s.estado_id)} />
-          </button>
+          <div key={s.id} class="rounded-lg border border-slate-200 bg-white shadow-sm sm:flex sm:items-center">
+            <button type="button" onClick={() => setAbierta(s.id)} class="flex w-full min-w-0 flex-1 items-center gap-3 rounded-lg p-3 text-left hover:bg-sky-50">
+              <span class={`flex size-10 shrink-0 items-center justify-center rounded-lg border ${col(estadoDe(s.estado_id)?.color).card}`}><Icon name="bus" /></span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate font-medium text-slate-900">{s.titulo}</span>
+                <span class="block truncate text-xs text-slate-500">{fecha(s.fecha)} · {s.destino}{!escolar ? ` · ${s.escuela}${s.clave ? ` (${s.clave})` : ''}` : ''}</span>
+              </span>
+              <EstadoChip e={estadoDe(s.estado_id)} />
+            </button>
+            {areal && <div class="border-t border-slate-100 px-3 py-2 sm:max-w-52 sm:border-t-0 sm:border-l"><Visado salida={s} onChange={reload} /></div>}
+          </div>
         ))}
       </div>
       {nueva && <Formulario onClose={() => setNueva(false)} onDone={(id) => { setNueva(false); reload(); setAbierta(id) }} />}
@@ -315,10 +344,6 @@ function Detalle({ id, estados, onClose, onChange }: { id: number; estados: Esta
     if (supervisor && estado) run(supabase.rpc('salida_estado', { p_id: id, p_estado: Number(estado), p_texto: texto }), 'Estado actualizado', () => { setTexto(''); setEstado('') })
     else run(supabase.rpc('salida_mensaje', { p_id: id, p_texto: texto }), 'Mensaje enviado', () => setTexto(''))
   }
-  const visar = async () => {
-    if (!await confirmar('Visar salida educativa', { text: 'Una vez confirmado, el visado no se puede quitar.', ok: 'Visar' })) return
-    await run(supabase.rpc('salida_visar', { p_id: id }), 'Salida visada')
-  }
   const agregarArchivos = async (list: FileList | null) => {
     if (!list || !data) return
     const files = [...list]
@@ -343,11 +368,7 @@ function Detalle({ id, estados, onClose, onChange }: { id: number; estados: Esta
       {loading && !data ? <Spinner /> : data && (
         <div class="space-y-5">
           <div class="flex flex-wrap items-center gap-2"><EstadoChip e={estadoDe(data.s.estado_id)} />{data.s.mail_enviado_at && <span class="text-xs text-slate-500">Correo enviado el {fechaHora(data.s.mail_enviado_at)}</span>}</div>
-          {areal ? <label class="flex items-start gap-2 text-sm font-medium text-slate-700">
-            <input type="checkbox" class="mt-0.5 size-4 accent-emerald-600" checked={!!data.s.visado_at} disabled={busy || !!data.s.visado_at}
-              onChange={(e) => { e.currentTarget.checked = false; void visar() }} />
-            <span>{data.s.visado_at ? `Visada el ${fechaHora(data.s.visado_at)}` : 'Visar esta salida (no se puede deshacer)'}</span>
-          </label> : data.s.visado_at && <p class="text-sm font-medium text-emerald-700">✓ Visada el {fechaHora(data.s.visado_at)}</p>}
+          {areal ? <Visado salida={data.s} onChange={refresh} disabled={busy} /> : data.s.visado_at && <p class="text-sm font-medium text-emerald-700">✓ Visada el {fechaHora(data.s.visado_at)}</p>}
           <dl class="grid gap-3 text-sm sm:grid-cols-2">
             <div><dt class="text-xs uppercase text-slate-500">Escuela</dt><dd>{data.s.escuela}{data.s.clave ? ` · ${data.s.clave}` : ''}</dd></div>
             <div><dt class="text-xs uppercase text-slate-500">Fecha</dt><dd>{fecha(data.s.fecha)}</dd></div>
