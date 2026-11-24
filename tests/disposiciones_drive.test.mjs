@@ -55,7 +55,7 @@ test('sin permiso no se pueden cargar o quitar archivos', async () => {
 })
 
 function servicioFinal({ distrito = false, acceso = false, visible = false, pdf = true } = {}) {
-  let handler, finalizados = 0
+  let handler, finalizados = 0, aprobados = 0
   const user = {
     auth: { getUser: async () => ({ data: { user: { id: 'actor-ficticio' } }, error: null }) },
     rpc: async (name) => ({ data: name === 'disposiciones_permitido' ? distrito : acceso, error: null }),
@@ -63,7 +63,7 @@ function servicioFinal({ distrito = false, acceso = false, visible = false, pdf 
       data: table === 'disposicion_final' ? (visible ? { drive_file_id: 'final_ficticio' } : null) : { id: 1 }, error: null,
     }) }) }) }),
   }
-  const admin = { rpc: async (name) => { if (name === 'disposicion_finalizar_drive') finalizados++; return { error: null } } }
+  const admin = { rpc: async (name) => { if (name === 'disposicion_finalizar_drive') finalizados++; if (name === 'disposicion_aprobar') aprobados++; return { error: null } } }
   const source = readFileSync(new URL('../supabase/functions/disposiciones-drive/index.ts', import.meta.url), 'utf8')
     .replace("import { createClient } from 'npm:@supabase/supabase-js@2'", 'const createClient = globalThis.createClient')
     .replace("import { tokenDrive } from '../_shared/firmas-drive.ts'", 'const tokenDrive = globalThis.tokenDrive')
@@ -79,20 +79,24 @@ function servicioFinal({ distrito = false, acceso = false, visible = false, pdf 
   return {
     llamar: (body) => handler(new Request('https://example.test', { method: 'POST', headers: { Authorization: 'Bearer ficticio', 'Content-Type': 'application/json' }, body: JSON.stringify(body) })),
     finalizados: () => finalizados,
+    aprobados: () => aprobados,
   }
 }
 
-test('finalización requiere Jefatura y comprueba la firma real del PDF', async () => {
+test('el método antiguo de finalización exige actualizar la aplicación', async () => {
   const body = { action: 'final-register', disposicion_id: 1, file_id: 'archivo_ficticio', name: 'final.pdf' }
+  const jefatura = servicioFinal({ distrito: true })
+  assert.equal((await jefatura.llamar(body)).status, 410)
+  assert.equal(jefatura.finalizados(), 0)
+})
+
+test('solo Jefatura puede aprobar con la documentación existente', async () => {
   const inspector = servicioFinal({ acceso: true })
-  assert.equal((await inspector.llamar(body)).status, 403)
-  assert.equal(inspector.finalizados(), 0)
-  const invalido = servicioFinal({ distrito: true, pdf: false })
-  assert.equal((await invalido.llamar(body)).status, 400)
-  assert.equal(invalido.finalizados(), 0)
-  const valido = servicioFinal({ distrito: true })
-  assert.equal((await valido.llamar(body)).status, 200)
-  assert.equal(valido.finalizados(), 1)
+  assert.equal((await inspector.llamar({ action: 'approve', disposicion_id: 1 })).status, 403)
+  assert.equal(inspector.aprobados(), 0)
+  const jefatura = servicioFinal({ distrito: true })
+  assert.equal((await jefatura.llamar({ action: 'approve', disposicion_id: 1 })).status, 200)
+  assert.equal(jefatura.aprobados(), 1)
 })
 
 test('la descarga final respeta la visibilidad de la escuela', async () => {
@@ -102,7 +106,7 @@ test('la descarga final respeta la visibilidad de la escuela', async () => {
   assert.equal((await visible.llamar({ action: 'final-download', disposicion_id: 1 })).status, 200)
 })
 
-test('inspector asignado puede iniciar seguimiento aunque haya tres probanzas iniciales', async () => {
+test('inspector asignado puede iniciar un lote con Word y sin límite de probanzas', async () => {
   let handler
   let acceso = true
   const user = {
@@ -122,9 +126,9 @@ test('inspector asignado puede iniciar seguimiento aunque haya tres probanzas in
     Request, Response, URL, console, crypto: webcrypto,
   })
   const llamar = (seguimiento) => handler(new Request('https://example.test', { method: 'POST', headers: { Authorization: 'Bearer ficticio', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'init', disposicion_id: 1, name: 'respuesta.pdf', mime: 'application/pdf', size: 20, seguimiento }) }))
+    body: JSON.stringify({ action: 'init', disposicion_id: 1, lote_id: 'fa856610-8b66-419c-9951-e84b731385c8', name: 'respuesta.docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 20, seguimiento }) }))
   assert.equal((await llamar(true)).status, 200)
-  assert.equal((await llamar(false)).status, 400)
+  assert.equal((await llamar(false)).status, 200)
   acceso = false
   assert.equal((await llamar(true)).status, 403)
 })

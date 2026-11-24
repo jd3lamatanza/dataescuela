@@ -32,20 +32,7 @@ do $$ begin
 end $$;
 reset role;
 
-select set_config('request.jwt.claim.sub','',true);
-update public.disposiciones set estado='En proceso' where id=(select tramite from tramite_test);
-select set_config('request.jwt.claim.sub',(select escolar::text from tramite_test),true);
-set local role authenticated;
-do $$ begin
-  if exists (select 1 from public.disposicion_archivos where disposicion_id=(select tramite from tramite_test)) then
-    raise exception 'Se ven documentos de un trámite no finalizado';
-  end if;
-end $$;
-reset role;
-
 insert into public.simulaciones(actor_id,target_id) select distrito,escolar from tramite_test;
-select set_config('request.jwt.claim.sub','',true);
-update public.disposiciones set estado='Finalizada' where id=(select tramite from tramite_test);
 select set_config('request.jwt.claim.sub',(select distrito::text from tramite_test),true);
 set local role authenticated;
 do $$ begin

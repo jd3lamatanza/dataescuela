@@ -2,7 +2,7 @@ import { useMemo, useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAsync } from '../lib/hooks'
 import { useAuth } from '../lib/auth'
-import { abrirArchivo, abrirPdfFinal, CARGOS, ESTADOS, finalizarTramite, MAX_ARCHIVOS, MAX_BYTES, quitarArchivo, REVISTAS, subirArchivo, TIPOS_ARCHIVO, type AdjuntoEscolar, type Disposicion, type DisposicionEscolar, type MensajeDisposicion, type MotivoDisposicion } from '../lib/disposiciones'
+import { abrirArchivo, abrirPdfFinal, CARGOS, finalizarTramite, FORMATOS_ACEPTADOS, quitarArchivo, REVISTAS, subirLote, validarArchivo, type AdjuntoEscolar, type Disposicion, type DisposicionEscolar, type MensajeDisposicion, type MotivoDisposicion } from '../lib/disposiciones'
 import { SelectorEscuela, type Escuela } from './PreinscripcionEav'
 import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PageHeader, Pager, Spinner, confirmar, toast, Toggle } from '../ui/kit'
 import { Icon } from '../ui/Icon'
@@ -37,6 +37,9 @@ async function cargar(puedeEditar: boolean): Promise<Datos> {
 const normalizar = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 const fecha = (s: string) => new Date(s).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', dateStyle: 'short', timeStyle: 'short' })
 const tono = (estado: string) => estado === 'Finalizada' ? 'green' : estado === 'Rechazada' ? 'red' : estado === 'Enviada a SAD' ? 'blue' : 'amber'
+const estadoTexto = (estado: string) => estado === 'Finalizada' ? 'Aprobada' : estado
+const titulo = (r: { cargo_cubrir: string; escuela_cubrir_nombre: string; docente_nombre: string }) =>
+  [r.cargo_cubrir, r.escuela_cubrir_nombre, r.docente_nombre].filter(Boolean).join(' · ')
 
 export function Disposiciones() {
   const { user } = useAuth()
@@ -48,6 +51,7 @@ export function Disposiciones() {
 function ListadoEscolar() {
   const [buscar, setBuscar] = useState('')
   const [pagina, setPagina] = useState(1)
+  const [detalle, setDetalle] = useState<DisposicionEscolar | null>(null)
   const { data, error, loading } = useAsync(async () => {
     const filas: DisposicionEscolar[] = []
     for (let offset = 0; ; offset += 500) {
@@ -65,26 +69,47 @@ function ListadoEscolar() {
     }
     return { filas, adjuntos }
   })
-  const filas = (data?.filas ?? []).filter((r) => normalizar(`${r.id} ${r.estado} ${r.escuela_cubrir_nombre}`).includes(normalizar(buscar)))
+  const filas = (data?.filas ?? []).filter((r) => normalizar(`${r.id} ${r.estado} ${titulo(r)} ${r.inspector}`).includes(normalizar(buscar)))
   const actual = Math.min(pagina, Math.max(1, Math.ceil(filas.length / 20)))
   return <>
     <PageHeader title="Disposiciones" subtitle="Consultá el estado de los trámites y descargá las disposiciones finalizadas." />
-    <input class={FIELD} type="search" aria-label="Buscar disposición" placeholder="Número o estado" value={buscar} onInput={(e) => { setBuscar(e.currentTarget.value); setPagina(1) }} />
+    <input class={FIELD} type="search" aria-label="Buscar disposición" placeholder="Buscar por cargo, escuela, docente o estado" value={buscar} onInput={(e) => { setBuscar(e.currentTarget.value); setPagina(1) }} />
     {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
     {loading && !data ? <Spinner /> : data && <Card class="mt-3">
       {!filas.length ? <EmptyState title="Sin disposiciones" /> : <ul class="-my-4 divide-y divide-slate-200">
-        {filas.slice((actual - 1) * 20, actual * 20).map((r) => <li key={r.id} class="flex flex-wrap items-center justify-between gap-2 py-3">
-          <div><p class="font-semibold">Disposición #{r.id} <Badge tone={tono(r.estado)}>{r.estado}</Badge></p><p class="text-xs text-slate-500">{fecha(r.fecha_registro)} · {r.escuela_cubrir_nombre}</p></div>
-          <div class="flex flex-wrap gap-2">
-            {r.pdf_disponible && <button class={BTN_SECONDARY} onClick={() => abrirPdfFinal(r.id).catch((e) => toast.error(e instanceof Error ? e.message : String(e)))}><Icon name="download" />Descargar PDF</button>}
-            {data.adjuntos.filter((a) => a.disposicion_id === r.id).map((a) => <button key={a.id} class={BTN_SECONDARY} onClick={() => abrirArchivo(a).catch((e) => toast.error(e instanceof Error ? e.message : String(e)))}><Icon name="download" />{a.nombre}</button>)}
-            {!r.pdf_disponible && !data.adjuntos.some((a) => a.disposicion_id === r.id) && <span class="text-xs text-slate-500">{r.estado === 'Finalizada' ? 'PDF final aún no disponible' : 'Disponible al finalizar'}</span>}
-          </div>
+        {filas.slice((actual - 1) * 20, actual * 20).map((r) => <li key={r.id} class="flex flex-wrap items-center justify-between gap-3 py-4">
+          <div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><p class="font-semibold text-slate-900">{titulo(r)}</p><Badge tone={tono(r.estado)}>{estadoTexto(r.estado)}</Badge></div><p class="mt-1 text-sm text-slate-500">{r.inspector} · {fecha(r.fecha_registro)}</p></div>
+          {r.estado === 'Finalizada' ? <button class={BTN_SECONDARY} onClick={() => setDetalle(r)}><Icon name="eye" />Abrir disposición</button>
+            : <span class="text-xs text-slate-500">Disponible al aprobarse</span>}
         </li>)}
       </ul>}
     </Card>}
     <Pager page={actual} total={filas.length} size={20} onPage={setPagina} />
+    {detalle && data && <DetalleEscolar registro={detalle} archivos={data.adjuntos.filter((a) => a.disposicion_id === detalle.id)} onClose={() => setDetalle(null)} />}
   </>
+}
+
+function DetalleEscolar({ registro, archivos, onClose }: { registro: DisposicionEscolar; archivos: AdjuntoEscolar[]; onClose(): void }) {
+  const { data, error, loading } = useAsync(async () => {
+    const r = await supabase.rpc('disposicion_escuela_detalle', { p_id: registro.id }).maybeSingle()
+    if (r.error) throw r.error
+    if (!r.data) throw new Error('La disposición ya no está disponible.')
+    return r.data as Disposicion
+  }, [registro.id])
+  return <Modal title="Disposición aprobada" onClose={onClose} wide>
+    {error && <Alert tone="error">{error}</Alert>}
+    {loading && !data ? <Spinner /> : data && <>
+      <div class="rounded-xl bg-sky-50 p-4"><p class="font-semibold text-slate-900">{titulo(data)}</p><p class="mt-1 text-sm text-slate-600">{data.inspector} · {fecha(data.fecha_registro)}</p></div>
+      <section class="mt-5"><h3 class="font-semibold text-slate-900">Documentación disponible</h3>
+        <div class="mt-3 flex flex-wrap gap-2">
+          {registro.pdf_disponible && <button class={BTN_SECONDARY} onClick={() => abrirPdfFinal(registro.id).catch((e) => toast.error(e instanceof Error ? e.message : String(e)))}><Icon name="download" />Descargar PDF final</button>}
+          {archivos.map((a) => <button key={a.id} class={`${BTN_SECONDARY} max-w-full`} onClick={() => abrirArchivo(a).catch((e) => toast.error(e instanceof Error ? e.message : String(e)))}><Icon name="download" /><span class="break-all">{a.nombre}</span></button>)}
+          {!registro.pdf_disponible && !archivos.length && <p class="text-sm text-slate-500">Todavía no hay documentación disponible. Consultá a Jefatura.</p>}
+        </div>
+      </section>
+      <div class="mt-5 border-t border-slate-200 pt-4"><h3 class="font-semibold text-slate-900">Datos de la disposición</h3><DatosDetalle registro={data} /></div>
+    </>}
+  </Modal>
 }
 
 function Listado({ distrito }: { distrito: boolean }) {
@@ -115,7 +140,8 @@ function Listado({ distrito }: { distrito: boolean }) {
     {loading && !data ? <Spinner /> : data && <>
       <div class="mb-4 flex flex-wrap gap-2">
         <Badge tone="blue">{data.registros.length} disposiciones</Badge>
-        <Badge tone="amber">{data.registros.filter((r) => r.estado === 'En proceso').length} en proceso</Badge>
+        <Badge tone="amber">{data.registros.filter((r) => r.estado === 'Pendiente' || r.estado === 'En proceso').length} pendientes</Badge>
+        <Badge tone="green">{data.registros.filter((r) => r.estado === 'Finalizada').length} aprobadas</Badge>
       </div>
       <div class="mb-3 grid gap-2 sm:grid-cols-[1fr_auto]">
         <input class={FIELD} type="search" aria-label="Buscar disposición" placeholder="Buscar por escuela, docente, inspector, tipo o estado" value={buscar} onInput={(e) => { setBuscar(e.currentTarget.value); setPagina(1) }} />
@@ -128,9 +154,8 @@ function Listado({ distrito }: { distrito: boolean }) {
           {registros.slice((actual - 1) * tamano, actual * tamano).map((r) => <li key={r.id} class="flex flex-wrap items-start gap-3 py-3">
             {distrito && <span class={r.creado_areal && !r.leida_at ? 'text-sky-600' : 'text-slate-400'} title={r.creado_areal && !r.leida_at ? 'Sin abrir' : 'Abierta'} aria-label={r.creado_areal && !r.leida_at ? 'Sin abrir' : 'Abierta'}><Icon name={r.creado_areal && !r.leida_at ? 'mail' : 'mail-open'} /></span>}
             <div class="min-w-0 flex-1">
-              <p class="font-semibold text-slate-900">#{r.id} · {r.docente_nombre} <Badge tone={tono(r.estado)}>{r.estado}</Badge></p>
-              <p class="text-sm text-slate-600">{r.escuela_cubrir_clave} · {r.escuela_cubrir_nombre}</p>
-              <p class="text-xs text-slate-500">{fecha(r.fecha_registro)} · {r.inspector} · {r.tipo} · {r.motivo}</p>
+              <div class="flex flex-wrap items-center gap-2"><p class="font-semibold text-slate-900">{titulo(r)}</p><Badge tone={tono(r.estado)}>{estadoTexto(r.estado)}</Badge></div>
+              <p class="mt-1 text-sm text-slate-500">{r.inspector} · {fecha(r.fecha_registro)}</p>
               {r.archivos.length > 0 && <p class="mt-1 text-xs text-slate-500">{r.archivos.length} {r.archivos.length === 1 ? 'probanza' : 'probanzas'}</p>}
             </div>
             <button type="button" class={BTN_SECONDARY} aria-label={`Abrir disposición ${r.id}`} onClick={() => void abrir(r)}><Icon name={distrito ? 'edit' : 'eye'} />{distrito ? 'Ver y editar' : 'Ver detalle'}</button>
@@ -145,11 +170,11 @@ function Listado({ distrito }: { distrito: boolean }) {
   </>
 }
 
-function Detalle({ registro: r, onClose }: { registro: Disposicion; onClose(): void }) {
+function DatosDetalle({ registro: r }: { registro: Disposicion }) {
   const fechaDia = (s: string) => s.split('-').reverse().join('/')
   const escuela = (clave: string, nombre: string) => [clave, nombre].filter(Boolean).join(' · ')
   const campos = [
-    ['Estado', r.estado], ['Fecha de registro', fecha(r.fecha_registro)],
+    ['Estado', estadoTexto(r.estado)], ['Fecha de registro', fecha(r.fecha_registro)],
     ['Inspector solicitante', r.inspector], ['Correo de jefatura', r.email_jefatura],
     ['Nombre completo del docente', r.docente_nombre], ['CUIL del docente', r.docente_cuil], ['Correo del docente', r.docente_email],
     ['Escuela a cubrir', escuela(r.escuela_cubrir_clave, r.escuela_cubrir_nombre)],
@@ -159,17 +184,22 @@ function Detalle({ registro: r, onClose }: { registro: Disposicion; onClose(): v
     ['Cargo base', r.cargo_base], ['Revista base', r.revista_base], ['Fecha desde', fechaDia(r.fecha_desde)],
     ['Observaciones', r.observaciones || '—'], ['Usuario', r.usuario], ['Última actualización', fecha(r.actualizada)],
   ]
+  return <dl class="mt-4 grid grid-cols-2 gap-2 sm:gap-3">
+      {campos.map(([label, valor]) => <div key={label} class="min-w-0 rounded-lg bg-slate-50 p-3"><dt class="text-xs font-semibold text-slate-500">{label}</dt><dd class="mt-1 break-words text-sm text-slate-900">{valor}</dd></div>)}
+    </dl>
+}
+
+function Detalle({ registro: r, onClose }: { registro: Disposicion; onClose(): void }) {
   return <Modal title={`Disposición #${r.id}`} onClose={onClose} wide>
     <p class="mb-3 text-sm text-slate-500">El estado lo actualiza Jefatura.</p>
-    <dl class="grid gap-3 sm:grid-cols-2">
-      {campos.map(([label, valor]) => <div key={label} class="min-w-0"><dt class="text-xs font-semibold text-slate-500">{label}</dt><dd class="break-words text-sm text-slate-900">{valor}</dd></div>)}
-    </dl>
-    <Seguimiento id={r.id} puedeAdjuntar />
+    <DatosDetalle registro={r} />
+    {r.estado !== 'Finalizada' && <CargasPendientes id={r.id} />}
+    <Seguimiento id={r.id} mostrarDocumentos puedeAdjuntar={r.estado !== 'Finalizada'} />
     <div class="mt-4 flex justify-end"><button type="button" class={BTN_SECONDARY} onClick={onClose}>Cerrar</button></div>
   </Modal>
 }
 
-function Seguimiento({ id, puedeAdjuntar = false }: { id: number; puedeAdjuntar?: boolean }) {
+function Seguimiento({ id, puedeAdjuntar = false, mostrarDocumentos = false }: { id: number; puedeAdjuntar?: boolean; mostrarDocumentos?: boolean }) {
   const [texto, setTexto] = useState('')
   const [busy, setBusy] = useState(false)
   const { data, error, loading, reload } = useAsync(async () => {
@@ -197,7 +227,7 @@ function Seguimiento({ id, puedeAdjuntar = false }: { id: number; puedeAdjuntar?
     const nuevos = Array.from(lista)
     setBusy(true)
     try {
-      for (const archivo of nuevos) await subirArchivo(id, archivo, true)
+      await subirLote(id, nuevos, true)
       toast.ok('Documentación agregada')
     } catch (e) { toast.error(e instanceof Error ? e.message : String(e)) }
     finally { setBusy(false); reload() }
@@ -207,13 +237,13 @@ function Seguimiento({ id, puedeAdjuntar = false }: { id: number; puedeAdjuntar?
     {error && <Alert tone="error">{error}</Alert>}
     {loading && !data ? <Spinner /> : data && <>
       {data.final && <button type="button" class={BTN_SECONDARY} onClick={() => abrirPdfFinal(id).catch((e) => toast.error(e instanceof Error ? e.message : String(e)))}><Icon name="download" />PDF final: {data.final.nombre}</button>}
-      {puedeAdjuntar && <>
-        <p class="text-sm text-slate-600">Documentación: {data.archivos.length} archivos. PDF, JPG o PNG de hasta 10 MB cada uno.</p>
+      {mostrarDocumentos && <>
+        <p class="text-sm text-slate-600">Documentación: {data.archivos.length} archivos. PDF, imágenes, Word o Excel de hasta 10 MB cada uno.</p>
         <ul class="space-y-1">{data.archivos.map((a) => <li key={a.id}><button type="button" class="text-sm text-sky-700 underline" onClick={() => abrirArchivo(a).catch((e) => toast.error(e instanceof Error ? e.message : String(e)))}>{a.nombre}</button></li>)}</ul>
-        <label class={`${BTN_SECONDARY} cursor-pointer`}>Agregar documentación
-          <input type="file" class="sr-only" multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" disabled={busy}
+        {puedeAdjuntar && <label class={`${BTN_SECONDARY} cursor-pointer`}>Agregar documentación
+          <input type="file" class="sr-only" multiple accept={FORMATOS_ACEPTADOS} disabled={busy}
             onChange={(e) => { void agregar(e.currentTarget.files); e.currentTarget.value = '' }} />
-        </label>
+        </label>}
       </>}
       {data.mensajes.length ? <ol class="space-y-2">{data.mensajes.map((m) => <li key={m.id} class="rounded-lg border border-slate-200 p-3 text-sm">
         <p class="text-xs text-slate-500">{m.autor} · {m.rol === 'areal' ? 'Inspector' : 'Jefatura'} · {fecha(m.created_at)}</p><p class="whitespace-pre-line">{m.texto}</p>
@@ -222,6 +252,29 @@ function Seguimiento({ id, puedeAdjuntar = false }: { id: number; puedeAdjuntar?
         <button type="button" class={BTN_PRIMARY} disabled={busy || !texto.trim()} onClick={() => void enviar()}>Enviar respuesta</button></>}
     </>}
   </section>
+}
+
+function CargasPendientes({ id }: { id: number }) {
+  const [busy, setBusy] = useState(false)
+  const { data, error, reload } = useAsync(async () => {
+    const r = await supabase.rpc('disposicion_lotes_pendientes', { p_id: id })
+    if (r.error) throw r.error
+    return r.data as { id: string; creado_at: string; cantidad: number; cargados: number }[]
+  }, [id])
+  if (error) return <Alert tone="error">No se pudieron consultar las cargas pendientes: {error}</Alert>
+  if (!data?.length) return null
+  return <div class="mt-3 space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+    <p class="text-sm text-amber-900">Hay cargas interrumpidas. Cancelalas antes de aprobar; los archivos incompletos podrían permanecer en Drive.</p>
+    {data.map((l) => <div key={l.id} class="flex flex-wrap items-center justify-between gap-2 text-sm"><span>{fecha(l.creado_at)} · {l.cargados} de {l.cantidad} archivos</span>
+      <button type="button" class={BTN_SECONDARY} disabled={busy} onClick={async () => {
+        if (!await confirmar('Cancelar carga', { text: 'Los archivos que ya llegaron a Drive podrían permanecer allí.', ok: 'Cancelar carga' })) return
+        setBusy(true)
+        const r = await supabase.rpc('disposicion_lote_cerrar', { p_lote: l.id, p_completar: false })
+        if (r.error) toast.error(r.error.message); else { toast.ok('Carga cancelada'); reload() }
+        setBusy(false)
+      }}>Cancelar carga</button>
+    </div>)}
+  </div>
 }
 
 function Formulario({ registro, data, distrito, onClose, onDone }: { registro: Disposicion | null; data: Datos; distrito: boolean; onClose(): void; onDone(): void }) {
@@ -241,14 +294,8 @@ function Formulario({ registro, data, distrito, onClose, onDone }: { registro: D
   const [cambiarBase, setCambiarBase] = useState(!registro || !!registro.escuela_base_id)
   const [error, setError] = useState('')
   const [mensajeEstado, setMensajeEstado] = useState('')
-  const [pdfFinal, setPdfFinal] = useState<File | null>(null)
+  const [archivosFinales, setArchivosFinales] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
-  const final = useAsync(async () => {
-    if (!registro) return null
-    const r = await supabase.from('disposicion_final').select('nombre').eq('disposicion_id', registro.id).maybeSingle()
-    if (r.error) throw r.error
-    return r.data
-  }, [registro?.id])
   const escuelas = data.escuelas.map((e) => ({ ...e, nombre: [e.clave, e.nombre].filter(Boolean).join(' · ') }))
   const tipos = [...new Set(data.motivos.map((m) => m.tipo))]
   const inspectores = f.inspector && !data.inspectores.includes(f.inspector) ? [f.inspector, ...data.inspectores] : data.inspectores
@@ -256,15 +303,19 @@ function Formulario({ registro, data, distrito, onClose, onDone }: { registro: D
   const agregar = (files: FileList | null) => {
     if (!files) return
     const lista = Array.from(files)
-    if (actuales.filter((a) => a.tipo === 'inicial').length + nuevos.length + lista.length > MAX_ARCHIVOS) { setError('Solo se permiten hasta 3 archivos de probanza inicial.'); return }
-    if (lista.some((file) => !TIPOS_ARCHIVO.includes(file.type) || file.size < 1 || file.size > MAX_BYTES)) { setError('Elegí archivos PDF, JPG o PNG de hasta 10 MB.'); return }
+    try { lista.forEach(validarArchivo) } catch (e) { setError(e instanceof Error ? e.message : String(e)); return }
     setError(''); setNuevos((prev) => [...prev, ...lista])
   }
   const guardar = async (e: Event) => {
-    e.preventDefault(); setError(''); setBusy(true)
+    e.preventDefault(); setError('')
+    if (!registro && !distrito && !nuevos.length) {
+      setError('Agregá al menos una probanza para iniciar el trámite.')
+      return
+    }
+    setBusy(true)
     let guardado = false
     try {
-      const { estado, ...resto } = f
+      const { estado: _estado, ...resto } = f
       const datos = {
         ...resto, docente_cuil: f.docente_cuil.replace(/\D/g, ''), escuela_cubrir_id: Number(f.escuela_cubrir_id),
         escuela_base_id: !fueraDistrital && f.escuela_base_id ? Number(f.escuela_base_id) : null,
@@ -276,13 +327,7 @@ function Formulario({ registro, data, distrito, onClose, onDone }: { registro: D
       if (r.error) throw r.error
       guardado = true
       for (const anterior of registro?.archivos ?? []) if (!actuales.some((a) => a.id === anterior.id)) await quitarArchivo(anterior.id)
-      for (const archivo of nuevos) await subirArchivo(r.data.id, archivo)
-      if (registro && (estado !== registro.estado || mensajeEstado.trim())) {
-        const resultado = estado !== registro.estado
-          ? await supabase.rpc('disposicion_cambiar_estado', { p_id: registro.id, p_estado: estado, p_texto: mensajeEstado })
-          : await supabase.rpc('disposicion_comentar', { p_id: registro.id, p_texto: mensajeEstado })
-        if (resultado.error) throw resultado.error
-      }
+      await subirLote(r.data.id, nuevos)
       toast.ok(registro ? 'Disposición actualizada' : 'Disposición registrada')
       onDone()
     } catch (e) {
@@ -294,10 +339,42 @@ function Formulario({ registro, data, distrito, onClose, onDone }: { registro: D
   const campo = (label: string, key: keyof typeof f, type = 'text') => <Lbl label={label}><input class={FIELD} type={type} required value={f[key]} onInput={(e) => actualizar(key, e.currentTarget.value)} /></Lbl>
   const select = (label: string, key: keyof typeof f, options: string[]) => <Lbl label={label}><select class={FIELD} required value={f[key]} onChange={(e) => actualizar(key, e.currentTarget.value)}><option value="">Seleccioná…</option>{options.map((v) => <option key={v} value={v}>{v}</option>)}</select></Lbl>
   return <Modal title={registro ? `Disposición #${registro.id}` : 'Nueva disposición'} onClose={() => { if (!busy) onClose() }} wide>
+    {registro && <section class="mb-5 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
+      <h3 class="font-semibold text-emerald-900">Finalizar trámite</h3>
+      {registro.estado === 'Finalizada' ? <p class="mt-1 text-sm text-emerald-700">El trámite está aprobado.</p> : <>
+      <p class="mt-1 text-sm text-slate-600">Revisá los datos y archivos. Podés aprobar con la última carga o elegir nueva documentación para la escuela.</p>
+      <CargasPendientes id={registro.id} />
+      <input class="mt-3 block w-full text-sm" type="file" multiple accept={FORMATOS_ACEPTADOS} disabled={busy} aria-label="Nueva documentación para aprobar (opcional)" onChange={(e) => setArchivosFinales(Array.from(e.currentTarget.files ?? []))} />
+      <button type="button" class={`${BTN_PRIMARY} mt-3`} disabled={busy} onClick={async () => {
+        setBusy(true)
+        try {
+          archivosFinales.forEach(validarArchivo)
+          if (!await confirmar('Aprobar disposición', { text: 'La escuela verá los datos y la última carga completa. Los cambios del formulario que no hayas guardado se perderán.', ok: 'Aprobar' })) return
+          await subirLote(registro.id, archivosFinales, true)
+          await finalizarTramite(registro.id); toast.ok('Trámite aprobado'); onDone()
+        }
+        catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+        finally { setBusy(false) }
+      }}>Finalizar trámite</button>
+      </>}
+    </section>}
+    {registro && registro.estado !== 'Finalizada' && <section class="mb-5 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+      <h3 class="font-semibold text-amber-900">Devolver para corrección</h3>
+      <p class="mt-1 text-sm text-slate-600">Indicá qué debe revisar o adjuntar el inspector.</p>
+      <div class="mt-3"><Lbl label="Observación para el inspector"><textarea class={FIELD} rows={3} maxLength={3000} value={mensajeEstado} onInput={(e) => setMensajeEstado(e.currentTarget.value)} /></Lbl></div>
+      <button type="button" class={`${BTN_SECONDARY} mt-3`} disabled={busy || !mensajeEstado.trim()} onClick={async () => {
+        setBusy(true)
+        try {
+          const resultado = await supabase.rpc('disposicion_cambiar_estado', { p_id: registro.id, p_estado: 'Devuelta para Corrección', p_texto: mensajeEstado })
+          if (resultado.error) throw resultado.error
+          toast.ok('Disposición devuelta para corrección'); onDone()
+        } catch (e) { toast.error(e instanceof Error ? e.message : String(e)) }
+        finally { setBusy(false) }
+      }}>Devolver para corrección</button>
+    </section>}
     <form class="space-y-4" onSubmit={guardar}>
       {error && <Alert tone="error">{error}</Alert>}
       <div class="grid gap-3 sm:grid-cols-2">
-        {registro && registro.estado !== 'Finalizada' && select('Estado', 'estado', ESTADOS)}
         {distrito ? select('Inspector solicitante', 'inspector', inspectores) : <p class="text-sm text-slate-600">Inspector solicitante: se asignará automáticamente a tu cuenta.</p>}
         {campo('Correo de jefatura (@abc.gob.ar)', 'email_jefatura', 'email')}
         {campo('Nombre completo del docente', 'docente_nombre')}
@@ -329,36 +406,17 @@ function Formulario({ registro, data, distrito, onClose, onDone }: { registro: D
         {campo('Fecha desde', 'fecha_desde', 'date')}
       </div>
       <Lbl label="Observaciones"><textarea class={FIELD} rows={3} value={f.observaciones} onInput={(e) => actualizar('observaciones', e.currentTarget.value)} /></Lbl>
-      {registro && <Lbl label="Mensaje para el inspector (opcional)"><textarea class={FIELD} rows={3} maxLength={3000} value={mensajeEstado} onInput={(e) => setMensajeEstado(e.currentTarget.value)} /></Lbl>}
       <section>
         <h3 class="font-semibold text-slate-900">Probanzas</h3>
-        <p class="text-xs text-slate-500">Hasta 3 archivos PDF, JPG o PNG de 10 MB cada uno.</p>
+        <p class="text-xs text-slate-500">PDF, imágenes, Word o Excel. Sin límite de cantidad; hasta 10 MB por archivo.</p>
         <ul class="mt-2 space-y-2">
-          {actuales.map((a) => <li key={a.id} class="flex items-center justify-between gap-2 text-sm"><button type="button" class="text-sky-700 underline" onClick={() => abrirArchivo(a).catch((e) => toast.error(e instanceof Error ? e.message : String(e)))}>{a.nombre}</button><button type="button" class={BTN_SECONDARY} aria-label={`Quitar ${a.nombre}`} onClick={() => setActuales((prev) => prev.filter((x) => x.id !== a.id))}><Icon name="x" /></button></li>)}
+          {actuales.map((a) => <li key={a.id} class="flex items-center justify-between gap-2 text-sm"><button type="button" class="text-sky-700 underline" onClick={() => abrirArchivo(a).catch((e) => toast.error(e instanceof Error ? e.message : String(e)))}>{a.nombre}</button>{registro?.estado !== 'Finalizada' && <button type="button" class={BTN_SECONDARY} aria-label={`Quitar ${a.nombre}`} onClick={() => setActuales((prev) => prev.filter((x) => x.id !== a.id))}><Icon name="x" /></button>}</li>)}
           {nuevos.map((a, i) => <li key={`${a.name}-${i}`} class="flex items-center justify-between gap-2 text-sm"><span>{a.name}</span><button type="button" class={BTN_SECONDARY} aria-label={`Quitar ${a.name}`} onClick={() => setNuevos((prev) => prev.filter((_, n) => n !== i))}><Icon name="x" /></button></li>)}
         </ul>
-        <input class="mt-2 block w-full text-sm" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" multiple disabled={busy || actuales.filter((a) => a.tipo === 'inicial').length + nuevos.length >= MAX_ARCHIVOS} onChange={(e) => { agregar(e.currentTarget.files); e.currentTarget.value = '' }} aria-label="Agregar probanzas" />
+        <input class="mt-2 block w-full text-sm" type="file" accept={FORMATOS_ACEPTADOS} multiple disabled={busy || registro?.estado === 'Finalizada'} onChange={(e) => { agregar(e.currentTarget.files); e.currentTarget.value = '' }} aria-label="Agregar probanzas" />
       </section>
       {registro && <Seguimiento id={registro.id} />}
       <div class="flex justify-end gap-2"><button type="button" class={BTN_SECONDARY} disabled={busy} onClick={onClose}>Cancelar</button><button class={BTN_PRIMARY} disabled={busy}>{busy ? 'Guardando…' : 'Guardar'}</button></div>
     </form>
-    {registro && <section class="mt-5 border-t border-slate-200 pt-4">
-      <h3 class="font-semibold">Finalizar trámite</h3>
-      {final.error && <Alert tone="error">No se pudo consultar el PDF final: {final.error}</Alert>}
-      {final.data ? <p class="text-sm text-emerald-700">Trámite finalizado: {final.data.nombre}</p> : <>
-      <p class="text-xs text-slate-500">Adjuntá el PDF definitivo para habilitar su descarga a la escuela. Hasta 10 MB.</p>
-      <input class="mt-2 block w-full text-sm" type="file" accept="application/pdf,.pdf" disabled={busy} aria-label="PDF de la disposición final" onChange={(e) => setPdfFinal(e.currentTarget.files?.[0] ?? null)} />
-      <button type="button" class={`${BTN_PRIMARY} mt-2`} disabled={busy || final.loading || !!final.error || !pdfFinal} onClick={async () => {
-        if (!pdfFinal) return
-        setBusy(true)
-        try {
-          if (!await confirmar('Finalizar trámite', { text: 'La escuela podrá descargar el PDF. Los cambios del formulario que no hayas guardado se perderán.', ok: 'Finalizar' })) return
-          await finalizarTramite(registro.id, pdfFinal); toast.ok('Trámite finalizado'); onDone()
-        }
-        catch (e) { setError(e instanceof Error ? e.message : String(e)) }
-        finally { setBusy(false) }
-      }}>Finalizar trámite</button>
-      </>}
-    </section>}
   </Modal>
 }

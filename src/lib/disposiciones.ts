@@ -13,15 +13,25 @@ export interface Disposicion {
   usuario: string; actualizada: string; archivos: ArchivoDisposicion[]
   creado_areal: boolean; leida_at: string | null
 }
-export interface DisposicionEscolar { id: number; estado: string; fecha_registro: string; escuela_cubrir_nombre: string; pdf_disponible: boolean }
+export interface DisposicionEscolar { id: number; estado: string; fecha_registro: string; escuela_cubrir_nombre: string; cargo_cubrir: string; docente_nombre: string; inspector: string; pdf_disponible: boolean }
 export interface MensajeDisposicion { id: number; autor: string; rol: string; texto: string; created_at: string }
 export interface MotivoDisposicion { tipo: string; motivo: string; orden: number }
 export const ESTADOS = ['Pendiente', 'En proceso', 'Enviada a SAD', 'Rechazada', 'Devuelta para Corrección']
 export const CARGOS = ['Director', 'Vicedirector', 'Secretario', 'Prosecretario']
 export const REVISTAS = ['Titular', 'Provisional', 'Suplente']
-export const MAX_ARCHIVOS = 3
 export const MAX_BYTES = 10 * 1024 * 1024
-export const TIPOS_ARCHIVO = ['application/pdf', 'image/jpeg', 'image/png']
+const FORMATOS: Record<string, string> = {
+  pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+  doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+}
+export const FORMATOS_ACEPTADOS = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx'
+export function validarArchivo(archivo: File) {
+  const mime = FORMATOS[archivo.name.split('.').pop()?.toLowerCase() ?? '']
+  if (!mime || archivo.size < 1 || archivo.size > MAX_BYTES || (archivo.type && archivo.type !== mime && archivo.type !== 'application/octet-stream'))
+    throw new Error('Elegí archivos PDF, JPG, PNG, Word o Excel de hasta 10 MB cada uno.')
+  return mime
+}
 
 async function llamar(body: Record<string, unknown>) {
   const { data, error } = await supabase.auth.getSession()
@@ -38,35 +48,42 @@ async function llamar(body: Record<string, unknown>) {
   return r
 }
 
-export async function subirArchivo(disposicionId: number, archivo: File, seguimiento = false) {
-  if (!TIPOS_ARCHIVO.includes(archivo.type) || archivo.size < 1 || archivo.size > MAX_BYTES) throw new Error('Elegí un PDF, JPG o PNG de hasta 10 MB.')
-  const inicio = await llamar({ action: 'init', disposicion_id: disposicionId, name: archivo.name, mime: archivo.type, size: archivo.size, seguimiento })
+async function subirArchivo(disposicionId: number, archivo: File, lote: string, seguimiento: boolean) {
+  const mime = validarArchivo(archivo)
+  const inicio = await llamar({ action: 'init', disposicion_id: disposicionId, lote_id: lote, name: archivo.name, mime, size: archivo.size, seguimiento })
   const { upload_url } = await inicio.json()
   if (typeof upload_url !== 'string') throw new Error('No se pudo iniciar la carga en Drive.')
-  const subida = await fetch(upload_url, { method: 'PUT', headers: { 'Content-Type': archivo.type }, body: archivo })
+  const subida = await fetch(upload_url, { method: 'PUT', headers: { 'Content-Type': mime }, body: archivo })
   if (!subida.ok) throw new Error(`No se pudo subir ${archivo.name}.`)
   const result = await subida.json()
   if (typeof result.id !== 'string') throw new Error(`No se pudo identificar ${archivo.name} en Drive.`)
   try {
-    await llamar({ action: 'register', disposicion_id: disposicionId, file_id: result.id, name: archivo.name, seguimiento })
+    await llamar({ action: 'register', disposicion_id: disposicionId, lote_id: lote, file_id: result.id, name: archivo.name, seguimiento })
   } catch (error) {
     const detalle = error instanceof Error ? error.message : String(error)
     throw new Error(`No se pudo confirmar la vinculación de ${archivo.name}. El archivo podría haber quedado en Drive; revisá la disposición y la carpeta antes de reintentar. ${detalle}`)
   }
 }
 
-export async function finalizarTramite(disposicionId: number, archivo: File) {
-  if (!/\.pdf$/i.test(archivo.name) || archivo.size < 1 || archivo.size > MAX_BYTES
-    || new TextDecoder().decode(await archivo.slice(0, 5).arrayBuffer()) !== '%PDF-') throw new Error('Elegí un PDF válido de hasta 10 MB.')
-  const inicio = await llamar({ action: 'final-init', disposicion_id: disposicionId, name: archivo.name, size: archivo.size })
-  const { upload_url } = await inicio.json()
-  if (typeof upload_url !== 'string') throw new Error('No se pudo iniciar la carga del PDF.')
-  const subida = await fetch(upload_url, { method: 'PUT', headers: { 'Content-Type': 'application/pdf' }, body: archivo })
-  if (!subida.ok) throw new Error('No se pudo subir el PDF.')
-  const result = await subida.json()
-  if (typeof result.id !== 'string') throw new Error('No se pudo identificar el PDF en Drive.')
-  try { await llamar({ action: 'final-register', disposicion_id: disposicionId, file_id: result.id, name: archivo.name }) }
-  catch (error) { throw new Error(`El PDF podría haber quedado en Drive, pero no se confirmó la finalización: ${error instanceof Error ? error.message : String(error)}`) }
+export async function subirLote(disposicionId: number, archivos: File[], seguimiento = false) {
+  if (!archivos.length) return
+  archivos.forEach(validarArchivo)
+  const inicio = await supabase.rpc('disposicion_lote_iniciar', { p_id: disposicionId, p_cantidad: archivos.length })
+  if (inicio.error) throw inicio.error
+  const lote = inicio.data as string
+  try {
+    for (const archivo of archivos) await subirArchivo(disposicionId, archivo, lote, seguimiento)
+    const resultado = await supabase.rpc('disposicion_lote_cerrar', { p_lote: lote, p_completar: true })
+    if (resultado.error) throw resultado.error
+  } catch (error) {
+    const cancelar = await supabase.rpc('disposicion_lote_cerrar', { p_lote: lote, p_completar: false })
+    const detalle = error instanceof Error ? error.message : typeof error === 'object' && error && 'message' in error ? String(error.message) : String(error)
+    throw new Error(`${detalle}. La carga no se completó; algunos archivos podrían haber quedado en Drive.${cancelar.error ? ` No se pudo cancelar la carga: ${cancelar.error.message}` : ''}`)
+  }
+}
+
+export async function finalizarTramite(disposicionId: number) {
+  await llamar({ action: 'approve', disposicion_id: disposicionId })
 }
 
 export async function abrirPdfFinal(id: number) {

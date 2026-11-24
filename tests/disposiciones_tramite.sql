@@ -37,9 +37,10 @@ do $$ declare t record; n int; rechazado boolean := false; begin
   select * into t from tramite_test;
   if not exists (select 1 from public.disposiciones where id=t.tramite and estado='Pendiente' and creado_areal and creado_por=t.areal and inspector='Inspector ficticio')
     then raise exception 'Alta areal incorrecta'; end if;
-  update public.disposiciones set estado='En proceso' where id=t.tramite;
+  begin update public.disposiciones set estado='En proceso' where id=t.tramite;
   get diagnostics n = row_count;
   if n <> 0 then raise exception 'Areal cambió el estado directamente'; end if;
+  exception when insufficient_privilege then null; end;
   begin perform public.disposicion_cambiar_estado(t.tramite,'En proceso',''); exception when raise_exception then rechazado:=true; end;
   if not rechazado then raise exception 'Areal cambió el estado por RPC'; end if;
   perform public.disposicion_comentar(t.tramite,'Respuesta del inspector');
@@ -79,7 +80,7 @@ do $$ declare t record; rechazado boolean:=false; begin
   if not exists (select 1 from public.disposiciones where id=t.tramite and leida_at is null) then raise exception 'No aparece sin abrir'; end if;
   perform public.disposicion_marcar_leida(t.tramite);
   if not exists (select 1 from public.disposiciones where id=t.tramite and leida_at is not null) then raise exception 'No se marcó como abierta'; end if;
-  begin update public.disposiciones set estado='Finalizada' where id=t.tramite; exception when raise_exception then rechazado:=true; end;
+  begin update public.disposiciones set estado='Finalizada' where id=t.tramite; exception when raise_exception or insufficient_privilege then rechazado:=true; end;
   if not rechazado then raise exception 'Se finalizó sin PDF'; end if;
   rechazado:=false;
   begin perform public.disposicion_finalizar_drive(t.tramite,t.distrito,'pdf_final_ficticio','final.pdf',100);
@@ -106,9 +107,10 @@ set local role authenticated;
 do $$ declare t record; n int; begin
   select * into t from tramite_test;
   if not public.disposicion_acceso(t.tramite) then raise exception 'Simulación areal perdió acceso asignado'; end if;
-  update public.disposiciones set estado='En proceso' where id=t.tramite;
+  begin update public.disposiciones set estado='En proceso' where id=t.tramite;
   get diagnostics n = row_count;
   if n <> 0 then raise exception 'Simulación areal puede cambiar el estado'; end if;
+  exception when insufficient_privilege then null; end;
 end $$;
 reset role;
 select set_config('request.jwt.claim.sub','',true);
