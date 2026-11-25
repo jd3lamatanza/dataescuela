@@ -24,7 +24,7 @@ export function InicioEav() {
       {error && <Alert tone="error">{error}</Alert>}
       {loading && !data ? <Spinner /> : data ? <>
         <TabBar label="Escuela de Verano" items={[...TABS]} active={tab} onChange={setTab} />
-        {tab === 'inscripciones' && <Preinscripciones escuelaId={data.id} cargaManual />}
+        {tab === 'inscripciones' && <Preinscripciones escuelaId={data.id} cuenta={{ nombre: data.nombre ?? data.cue }} />}
       </> : !error && <Alert tone="warning">No se encontró la escuela asociada a esta cuenta.</Alert>}
     </>
   )

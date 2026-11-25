@@ -6,6 +6,11 @@ import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl,
 import { Icon } from '../ui/Icon'
 import { col } from '../ui/Calendario'
 import { CargarPreinscripcion } from './EavCargaManual'
+import { leerEtiquetasEscuelas, leerPreinscripcionesCuenta, tablaPreinscripcionesCuenta, type VersionListado } from '../lib/eavInscripcionesCuenta'
+import { buildListadoXlsx } from '../lib/escuelasListado'
+import { buildPdf } from '../lib/export'
+import { descargar, XLSX_MIME } from '../lib/download'
+import { BRAND } from '../modules'
 
 interface Estado { id: number; nombre: string; color: string }
 interface Archivo { id: number; nombre: string; mime: string | null; bytes: number | null }
@@ -86,8 +91,11 @@ export function EscuelaVeranoEscolar() {
   )
 }
 
-export function Preinscripciones({ escuelaId, cargaManual = false }: { escuelaId: number; cargaManual?: boolean }) {
+/** Con `cuenta` (rol eav) habilita la carga manual y la exportación del listado. */
+export function Preinscripciones({ escuelaId, cuenta }: { escuelaId: number; cuenta?: { nombre: string } }) {
   const [cargando, setCargando] = useState(false)
+  const [version, setVersion] = useState<VersionListado>('resumida')
+  const [exportando, setExportando] = useState(false)
   const [buscar, setBuscar] = useState('')
   const [pagina, setPagina] = useState(1)
   const [seleccion, setSeleccion] = useState<Preinscripcion | null>(null)
@@ -104,16 +112,44 @@ export function Preinscripciones({ escuelaId, cargaManual = false }: { escuelaId
     if (r.count == null) throw new Error('No se pudo obtener la cantidad de preinscripciones')
     return { filas: r.data as Preinscripcion[], total: r.count }
   }, [escuelaId, consulta, pagina])
+  const exportar = async (tipo: 'xlsx' | 'pdf') => {
+    setExportando(true)
+    try {
+      const [filas, escuelasActuales] = await Promise.all([
+        leerPreinscripcionesCuenta(supabase, escuelaId, consulta),
+        version === 'completa' ? leerEtiquetasEscuelas(supabase) : Promise.resolve(new Map<number, string>()),
+      ])
+      if (!filas.length) { toast.info('No hay preinscripciones para exportar.'); return }
+      const tabla = tablaPreinscripcionesCuenta(filas, version, { escuela: cuenta?.nombre ?? '', busqueda: consulta, organizacion: BRAND.org, escuelasActuales })
+      const nombre = `inscripciones-eav-${version}`
+      if (tipo === 'xlsx') descargar(await buildListadoXlsx(tabla, BRAND.name, 'Inscripciones'), `${nombre}.xlsx`, XLSX_MIME)
+      else {
+        const respuesta = await fetch(`${import.meta.env.BASE_URL}icon-192.png?v=2`)
+        if (!respuesta.ok) throw new Error('No se pudo cargar el logo de la aplicación.')
+        descargar(await buildPdf(tabla, { brand: { name: BRAND.name, logo: new Uint8Array(await respuesta.arrayBuffer()) }, maxCellLines: 30 }), `${nombre}.pdf`, 'application/pdf')
+      }
+    } catch (e) {
+      toast.error(`No se pudo exportar el listado: ${e instanceof Error ? e.message : String(e)}`)
+    } finally { setExportando(false) }
+  }
   return <>
     <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
       <div>
         <h2 class="text-lg font-semibold text-slate-900">Preinscripciones</h2>
         <p class="mt-1 text-sm text-slate-500">Revisá los estudiantes de tu EAV y confirmá su inscripción.</p>
       </div>
-      {cargaManual && <button type="button" class={BTN_PRIMARY} onClick={() => setCargando(true)}>Cargar preinscripción</button>}
+      {cuenta && <button type="button" class={BTN_PRIMARY} onClick={() => setCargando(true)}>Cargar preinscripción</button>}
     </div>
     <input class={FIELD} type="search" aria-label="Buscar preinscripción" placeholder="Buscar por nombre o DNI" value={buscar} maxLength={80}
       onInput={(e) => { setBuscar(e.currentTarget.value); setPagina(1) }} />
+    {cuenta && <div class="mt-3 flex flex-wrap items-center gap-2">
+      <select class={`${FIELD} !w-auto`} aria-label="Versión del listado a exportar" value={version} onChange={(e) => setVersion(e.currentTarget.value as VersionListado)}>
+        <option value="resumida">Versión resumida</option><option value="completa">Versión completa</option>
+      </select>
+      <button type="button" class={BTN_SECONDARY} disabled={exportando || !data?.total} onClick={() => void exportar('xlsx')} aria-label="Exportar inscripciones a Excel"><Icon name="download" />Excel</button>
+      <button type="button" class={BTN_SECONDARY} disabled={exportando || !data?.total} onClick={() => void exportar('pdf')} aria-label="Exportar inscripciones a PDF"><Icon name="download" />PDF</button>
+      <span class="text-xs text-slate-500">{exportando ? 'Preparando exportación…' : 'Se exportan todos los resultados de la búsqueda.'}</span>
+    </div>}
     {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
     {loading && !data ? <Spinner /> : data && <Card class="mt-3">
       {!data.filas.length ? <EmptyState title="Sin preinscripciones" text={consulta ? 'Probá con otra búsqueda.' : 'Todavía no hay preinscripciones para esta escuela.'} />
