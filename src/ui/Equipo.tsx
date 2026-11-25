@@ -26,7 +26,7 @@ const EMAIL = /^[^\s@]+@abc\.gob\.ar$/
 type Row = Record<string, any>
 
 /** Listado y ABM de un equipo (directivo, orientación o referentes ESI) de una escuela. */
-export function Equipo({ escuelaId, tipo }: { escuelaId: number; tipo: TipoEquipo }) {
+export function Equipo({ escuelaId, tipo, soloLectura = false }: { escuelaId: number; tipo: TipoEquipo; soloLectura?: boolean }) {
   const t = TIPOS[tipo]
   const esi = tipo === 'esi'
   const [edit, setEdit] = useState<Row | null>(null)
@@ -48,7 +48,7 @@ export function Equipo({ escuelaId, tipo }: { escuelaId: number; tipo: TipoEquip
     if (error) return toast.error(error.message)
     toast.ok('Registro eliminado'); reload()
   }
-  const Menu = ({ r }: { r: Row }) => <RowMenu items={[{ label: 'Editar', onClick: () => setEdit(r) }, { label: 'Eliminar', danger: true, onClick: () => del(r) }]} />
+  const Menu = ({ r }: { r: Row }) => soloLectura ? null : <RowMenu items={[{ label: 'Editar', onClick: () => setEdit(r) }, { label: 'Eliminar', danger: true, onClick: () => del(r) }]} />
   const Cuil = ({ r }: { r: Row }) => <span class="font-mono text-xs">{r.cuil || '—'}{r.cuil && !cuilOk(r.cuil) && <span title="CUIL inválido" class="ml-1 rounded bg-amber-50 px-1 text-amber-700 ring-1 ring-amber-200">revisar</span>}</span>
   const otra = (r: Row) => (r.otra_escuela ? 'Sí' + (r.otra_escuela_detalle ? ' · ' + r.otra_escuela_detalle : '') : 'No')
 
@@ -57,11 +57,11 @@ export function Equipo({ escuelaId, tipo }: { escuelaId: number; tipo: TipoEquip
     <>
       <div class="flex flex-wrap items-center justify-between gap-3">
         <p class="text-sm text-slate-500">{data?.rows.length ?? 0} registros</p>
-        <button class={BTN_PRIMARY} onClick={() => setEdit({})}>Agregar</button>
+        {!soloLectura && <button class={BTN_PRIMARY} onClick={() => setEdit({})}>Agregar</button>}
       </div>
       {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
       <Card class="mt-3">
-        {loading && !data ? <Spinner /> : !data?.rows.length ? <EmptyState title="Sin registros" text="Agregá el primero con el botón “Agregar”." /> : (
+        {loading && !data ? <Spinner /> : !data?.rows.length ? <EmptyState title="Sin registros" text={soloLectura ? 'La escuela todavía no cargó esta ficha.' : 'Agregá el primero con el botón “Agregar”.'} /> : (
           <>
             <div class="-m-4 hidden overflow-x-auto md:block">
               <table class="w-full text-left text-sm">

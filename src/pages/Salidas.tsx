@@ -144,6 +144,8 @@ function SalidasGeneral() {
   const { user } = useAuth()
   const distrito = user?.role === 'distrital'
   const escolar = user?.role === 'escolar'
+  const lectura = user?.role === 'eoe'
+  const propia = escolar || lectura
   const areal = user?.role === 'areal'
   const [q, setQ] = useState('')
   const [filtro, setFiltro] = useState('')
@@ -169,10 +171,10 @@ function SalidasGeneral() {
 
   return (
     <>
-      <PageHeader title="Salida Educativa" subtitle={distrito ? 'Solicitudes de las escuelas: revisá la documentación, dejá observaciones y actualizá el estado.' : escolar ? 'Cargá la salida con su documentación y seguí el estado de la solicitud.' : 'Salidas educativas de las escuelas que tenés asignadas.'}
+      <PageHeader title="Salida Educativa" subtitle={distrito ? 'Solicitudes de las escuelas: revisá la documentación, dejá observaciones y actualizá el estado.' : lectura ? 'Salidas educativas de tu escuela. Vista de solo lectura.' : escolar ? 'Cargá la salida con su documentación y seguí el estado de la solicitud.' : 'Salidas educativas de las escuelas que tenés asignadas.'}
         actions={escolar && <button class={BTN_PRIMARY} onClick={() => setNueva(true)}>Nueva salida</button>} />
       <div class="grid gap-2 sm:grid-cols-2">
-        <input type="search" class={FIELD} placeholder={!escolar ? 'Título, destino, escuela o clave' : 'Título o destino'} value={q} onInput={(e) => setQ(e.currentTarget.value)} aria-label="Buscar" />
+        <input type="search" class={FIELD} placeholder={!propia ? 'Título, destino, escuela o clave' : 'Título o destino'} value={q} onInput={(e) => setQ(e.currentTarget.value)} aria-label="Buscar" />
         <select class={FIELD} value={filtro} onChange={(e) => setFiltro(e.currentTarget.value)} aria-label="Estado">
           <option value="">Estado: todos</option>
           {estados.map((x) => <option value={x.id}>{x.nombre}</option>)}
@@ -180,13 +182,13 @@ function SalidasGeneral() {
       </div>
       {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
       <div class="mt-3 space-y-2">
-        {loading && !data ? <Spinner /> : rows.length === 0 ? <Card><EmptyState title="Sin salidas" text={!escolar ? 'Todavía no hay solicitudes.' : 'Cargá la primera con “Nueva salida”.'} /></Card> : rows.map((s) => (
+        {loading && !data ? <Spinner /> : rows.length === 0 ? <Card><EmptyState title="Sin salidas" text={lectura || !escolar ? 'Todavía no hay solicitudes.' : 'Cargá la primera con “Nueva salida”.'} /></Card> : rows.map((s) => (
           <div key={s.id} class="rounded-lg border border-slate-200 bg-white shadow-sm sm:flex sm:items-center">
             <button type="button" onClick={() => setAbierta(s.id)} class="flex w-full min-w-0 flex-1 items-center gap-3 rounded-lg p-3 text-left hover:bg-sky-50">
               <span class={`flex size-10 shrink-0 items-center justify-center rounded-lg border ${col(estadoDe(s.estado_id)?.color).card}`}><Icon name="bus" /></span>
               <span class="min-w-0 flex-1">
                 <span class="block truncate font-medium text-slate-900">{s.titulo}</span>
-                <span class="block truncate text-xs text-slate-500">{fecha(s.fecha)} · {s.destino}{!escolar ? ` · ${s.escuela}${s.clave ? ` (${s.clave})` : ''}` : ''}</span>
+                <span class="block truncate text-xs text-slate-500">{fecha(s.fecha)} · {s.destino}{!propia ? ` · ${s.escuela}${s.clave ? ` (${s.clave})` : ''}` : ''}</span>
               </span>
               <EstadoChip e={estadoDe(s.estado_id)} />
             </button>

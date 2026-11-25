@@ -54,16 +54,16 @@ async function cargar(escuelaId: number): Promise<Datos> {
 }
 
 /** Planta de una escuela: editor o vista bloqueada, según corresponda */
-export function PlantaPanel({ escuelaId, volver }: { escuelaId: number; volver?: () => void }) {
+export function PlantaPanel({ escuelaId, volver, soloLectura = false }: { escuelaId: number; volver?: () => void; soloLectura?: boolean }) {
   const { data, error, loading, reload } = useAsync(() => cargar(escuelaId), [escuelaId])
   if (loading && !data) return <Spinner />
   if (error || !data) return <Alert tone="error">{error ?? 'No se pudo cargar'}</Alert>
-  const bloqueada = !!data.planta && !data.planta.editable && !data.global
+  const bloqueada = !!data.planta && (soloLectura || (!data.planta.editable && !data.global))
   return (
     <>
       {volver && <button class="mb-1 inline-flex min-h-11 items-center text-sm font-medium text-blue-700 hover:underline" onClick={volver}>← Plantas</button>}
       <PageHeader title={volver ? `Planta de ${data.esc.clave}` : 'Mi Planta'} subtitle={`${data.esc.clave} · ${[data.esc.nivel, data.esc.modalidad].filter(Boolean).join(' · ')}`} />
-      {bloqueada ? <Bloqueada d={data} propia={!volver} /> : <Editor key={String(data.planta?.confirmada_at)} d={data} onSaved={reload} />}
+      {soloLectura && !data.planta ? <EmptyState title="Sin planta" text="La escuela todavía no confirmó su planta." /> : bloqueada ? <Bloqueada d={data} propia={!volver} soloLectura={soloLectura} /> : <Editor key={String(data.planta?.confirmada_at)} d={data} onSaved={reload} />}
     </>
   )
 }
@@ -85,7 +85,7 @@ function Resumen({ turnos, filas }: { turnos: { id: number; nombre: string }[]; 
   )
 }
 
-function Bloqueada({ d, propia }: { d: Datos; propia: boolean }) {
+function Bloqueada({ d, propia, soloLectura = false }: { d: Datos; propia: boolean; soloLectura?: boolean }) {
   const n = (c: number, t: number) => d.cells.find((x) => x.curso_id === c && x.turno_id === t)?.secciones ?? 0
   const planes = d.planes.filter((p) => d.cells.some((c) => c.plan_id === p.id))
   const turnos = d.turnos.filter((t) => d.sel.includes(t.id))
@@ -93,7 +93,7 @@ function Bloqueada({ d, propia }: { d: Datos; propia: boolean }) {
     <>
       <div class="flex items-start gap-2 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
         <Icon name="shield" class="mt-0.5 size-5 shrink-0" />
-        <p>Planta confirmada el {fmtDia(d.planta!.confirmada_at)} · <strong>{d.planta!.total_secciones}</strong> secciones. {propia ? 'Para modificarla, el Inspector o la Jefatura debe habilitar la edición.' : 'Podés habilitar la edición desde el listado de Plantas.'}</p>
+        <p>Planta confirmada el {fmtDia(d.planta!.confirmada_at)} · <strong>{d.planta!.total_secciones}</strong> secciones. {soloLectura ? 'Vista de solo lectura.' : propia ? 'Para modificarla, el Inspector o la Jefatura debe habilitar la edición.' : 'Podés habilitar la edición desde el listado de Plantas.'}</p>
       </div>
       <div class="mt-4 space-y-4">
         {planes.map((p) => (

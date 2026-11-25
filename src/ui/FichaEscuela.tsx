@@ -12,7 +12,7 @@ const EMAIL = /^[^\s@]+@abc\.gob\.ar$/
 export const nombreEscuela = (e: { tipo?: string | null; numero?: number | null; nombre?: string | null }) => [e.tipo, e.numero, e.nombre].filter(Boolean).join(' ')
 
 /** Ficha de una escuela: datos del padrón (solo lectura) y datos editables. */
-export function FichaEscuela({ id, onCancel }: { id: number; onCancel?: () => void }) {
+export function FichaEscuela({ id, onCancel, soloLectura = false }: { id: number; onCancel?: () => void; soloLectura?: boolean }) {
   const { data, loading, error } = useAsync(async () => {
     const [e, loc, cir, nud] = await Promise.all([
       supabase.from('escuelas').select('*').eq('id', id).maybeSingle(),
@@ -31,10 +31,10 @@ export function FichaEscuela({ id, onCancel }: { id: number; onCancel?: () => vo
 
   if (loading && !data) return <Spinner />
   if (error || !data) return <Alert tone="error">{error ?? 'No se pudo cargar la ficha'}</Alert>
-  return <Form key={id} {...data} id={id} onCancel={onCancel} />
+  return <Form key={id} {...data} id={id} onCancel={onCancel} soloLectura={soloLectura} />
 }
 
-function Form({ e, locs, cir, nud, id, onCancel }: { e: Record<string, any>; locs: string[]; cir: any[]; nud: any[]; id: number; onCancel?(): void }) {
+function Form({ e, locs, cir, nud, id, onCancel, soloLectura }: { e: Record<string, any>; locs: string[]; cir: any[]; nud: any[]; id: number; onCancel?(): void; soloLectura: boolean }) {
   const [f, setF] = useState({
     nombre: e.nombre ?? '', localidad: e.localidad ?? '', calle: e.calle ?? '', nu_calle: e.nu_calle ?? '', cp: e.cp ?? '',
     entre_calle: e.entre_calle ?? '', entre_calle_2: e.entre_calle_2 ?? '', te: e.te ?? '', email: e.email ?? '',
@@ -76,8 +76,9 @@ function Form({ e, locs, cir, nud, id, onCancel }: { e: Record<string, any>; loc
       </Card>
       <form onSubmit={submit} class="mt-3" autocomplete="off">
         <Card>
-          <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Datos editables</h2>
+          <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">{soloLectura ? 'Datos de la escuela' : 'Datos editables'}</h2>
           {err && <div class="mb-3"><Alert tone="error">{err}</Alert></div>}
+          <fieldset disabled={soloLectura} class="min-w-0">
           <div class="grid gap-4 sm:grid-cols-2">
             <div class="sm:col-span-2"><Lbl label="Nombre"><input class={FIELD} required maxLength={200} value={f.nombre} onInput={set('nombre')} /></Lbl></div>
             <Lbl label="Localidad"><select class={FIELD} value={f.localidad} onChange={set('localidad')}><option value="">Seleccionar…</option>{locs.map((l) => <option key={l} value={l}>{l}</option>)}</select></Lbl>
@@ -97,10 +98,11 @@ function Form({ e, locs, cir, nud, id, onCancel }: { e: Record<string, any>; loc
               <Toggle checked={f.sede_evacuacion} onChange={(v) => setF({ ...f, sede_evacuacion: v })} label="¿Sede de Evacuación?" />
             </div>
           </div>
-          <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          </fieldset>
+          {!soloLectura && <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             {onCancel && <button type="button" class={BTN_SECONDARY} onClick={onCancel}>Volver</button>}
             <button class={BTN_PRIMARY} disabled={busy}>Guardar cambios</button>
-          </div>
+          </div>}
         </Card>
       </form>
     </>

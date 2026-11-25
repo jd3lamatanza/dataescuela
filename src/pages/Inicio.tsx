@@ -4,14 +4,14 @@ import { Card, PageHeader } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 import { href } from '../lib/router'
 import { Calendario } from '../ui/Calendario'
-import { InicioCuentaEscuela } from './InicioCuentaEscuela'
+import { InicioEoe } from './InicioEoe'
 import { InicioEav } from './InicioEav'
 
 export function Inicio() {
   const { user } = useAuth()
   if (!user) return null
   if (user.role === 'eav') return <InicioEav />
-  if (user.role === 'eoe') return <InicioCuentaEscuela />
+  if (user.role === 'eoe') return <InicioEoe />
   const mods = modulesForUser(user).filter((m) => m.id !== 'inicio')
   return (
     <>
