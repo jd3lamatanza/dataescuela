@@ -39,3 +39,6 @@ verify_jwt = false
 
 [functions.ayuda-video]
 verify_jwt = false
+
+[functions.eoe-legajo-drive]
+verify_jwt = false

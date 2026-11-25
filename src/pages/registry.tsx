@@ -36,6 +36,8 @@ import { Disposiciones } from './Disposiciones'
 import { AyudaEscolar } from './AyudaEscolar'
 import { AyudaDistrital } from './AyudaDistrital'
 import { ReportesError } from './ReportesError'
+import { PinValidacion } from './PinValidacion'
+import { LegajoDigital } from './LegajoDigital'
 
 const Pendiente = (titulo: string) => () => (
   <>
@@ -52,6 +54,8 @@ const MisProyectosPropios = () => {
 /** id de módulo (src/modules.ts) → página. Los módulos sin página muestran "en construcción". */
 export const PAGES: Record<string, ComponentType> = {
   inicio: Inicio,
+  'pin-validacion': PinValidacion,
+  'legajo-digital': LegajoDigital,
   usuarios: Usuarios,
   'usuarios-distrito': Usuarios,
   simulado: Simulado,

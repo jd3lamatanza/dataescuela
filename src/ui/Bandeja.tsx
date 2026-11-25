@@ -21,7 +21,7 @@ export function Bandeja() {
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [compose, setCompose] = useState(false)
   const [correoNoLeido, setCorreoNoLeido] = useState(0)
-  const correoNuevo = user?.role === 'distrital' || user?.role === 'areal' || user?.role === 'escolar'
+  const correoNuevo = user?.role === 'distrital' || user?.role === 'areal' || user?.role === 'escolar' || user?.role === 'eoe'
 
   const loadNotificaciones = async () => {
     const { data, error } = await supabase.from('notifications').select('*').order('id', { ascending: false }).limit(30)

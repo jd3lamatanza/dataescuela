@@ -30,6 +30,7 @@ const CATEGORIA_POR_MODULO: Record<string, CategoriaDistrital> = {
   'eventos-escolares': 'escuelas',
   'proyectos-escolares': 'escuelas',
   eav: 'escuelas',
+  'pin-validacion': 'escuelas',
   inspectores: 'inspectores',
   'proyectos-areales': 'inspectores',
   disposiciones: 'inspectores',
