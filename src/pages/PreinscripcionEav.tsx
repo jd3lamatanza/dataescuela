@@ -103,6 +103,7 @@ export function SelectorEscuela({ id, label, escuelas, value, onChange, otra = f
 
 export function PreinscripcionEav() {
   const [escuelas, setEscuelas] = useState<Escuela[] | null>(null)
+  const [cerrado, setCerrado] = useState(false)
   const [form, setForm] = useState(vacio)
   const [error, setError] = useState('')
   const [errorFecha, setErrorFecha] = useState('')
@@ -117,7 +118,12 @@ export function PreinscripcionEav() {
   }
   useEffect(() => {
     let vivo = true
-    solicitar({ action: 'escuelas' }).then((r) => { if (vivo) setEscuelas(r.escuelas) }).catch((e) => { if (vivo) setError(e.message) })
+    solicitar({ action: 'escuelas' }).then((r) => {
+      if (!vivo) return
+      if (r.activo === false) setCerrado(true)
+      else if (Array.isArray(r.escuelas)) setEscuelas(r.escuelas)
+      else throw new Error('No se pudo obtener la información del formulario.')
+    }).catch((e) => { if (vivo) setError(e.message) })
     return () => { vivo = false }
   }, [])
   const set = (k: keyof typeof form) => (e: Event) => setForm((v) => ({ ...v, [k]: (e.currentTarget as HTMLInputElement).value }))
@@ -173,7 +179,8 @@ export function PreinscripcionEav() {
         </div>
       </header>
       {completo ? <div class="eav-card eav-success" role="status"><span class="eav-success-icon"><Icon name="check" class="size-7" /></span><h2>¡Preinscripción realizada!</h2><p>Recibimos los datos correctamente. La inscripción se hace efectiva al entregar la documentación requerida en la escuela.</p><button class="eav-submit" onClick={() => setCompleto(false)}>Realizar otra preinscripción</button></div> : <>
-        {!escuelas ? <>{error ? <Alert tone="error">{error}</Alert> : <Spinner />}</> : <form ref={formRef} class="eav-card eav-form" onSubmit={enviar}>
+        {cerrado ? <div class="eav-card"><Alert tone="info">La preinscripción a Escuelas de Verano está cerrada en este momento.</Alert></div>
+          : !escuelas ? <>{error ? <Alert tone="error">{error}</Alert> : <Spinner />}</> : <form ref={formRef} class="eav-card eav-form" onSubmit={enviar}>
           <div class="eav-intro"><span class="eav-intro-icon"><Icon name="sun" class="size-5" /></span><div><h2>{['¡Comencemos!', '¡Vamos muy bien!', '¡Ya falta poco!', '¡Último paso!'][paso - 1]}</h2><p>{['Vamos a completar la preinscripción juntos. Todos los campos son obligatorios.', 'Contanos un poco sobre el estudiante.', 'Ahora necesitamos los datos de contacto.', 'Revisá los datos antes de enviar la preinscripción.'][paso - 1]}</p></div></div>
           <div class="eav-progress" aria-label={`Paso ${paso} de 4`}>
             <div class="eav-progress-label"><span>Paso {paso} de 4</span><span>{['Escuela', 'Estudiante', 'Adulto de referencia', 'Confirmación'][paso - 1]}</span></div>

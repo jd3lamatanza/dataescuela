@@ -25,6 +25,12 @@ Deno.serve(async (req) => {
     const body = JSON.parse(text)
     const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
     if (body.action === 'escuelas') {
+      const { data: activo, error: estadoError } = await db.rpc('eav_formulario_estado')
+      if (estadoError) throw estadoError
+      if (activo !== true) {
+        if (activo !== false) throw new Error('Estado del formulario inválido')
+        return json({ activo: false })
+      }
       const escuelas: { id: number; nombre: string | null; tipo: string | null; numero: number | null; codigo: string | null; localidad: string | null; eav: string | null }[] = []
       for (let offset = 0; ; offset += 500) {
         const { data, error } = await db.from('escuelas').select('id,nombre,tipo,numero,codigo,localidad,eav').order('id').range(offset, offset + 499)
@@ -32,7 +38,7 @@ Deno.serve(async (req) => {
         escuelas.push(...data)
         if (data.length < 500) break
       }
-      return json({ escuelas })
+      return json({ activo: true, escuelas })
     }
     if (body.action !== 'enviar') return json({ error: 'Solicitud inválida.' }, 400)
     const ip = req.headers.get('cf-connecting-ip') ?? req.headers.get('x-real-ip') ?? req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown'
@@ -53,6 +59,7 @@ Deno.serve(async (req) => {
       return json({ error: 'No se pudo procesar la preinscripción. Revisá los datos e intentá nuevamente.' }, 400)
     }
     if (data === 'duplicado') return json({ error: 'El DNI ya tiene una preinscripción para esta temporada.' }, 409)
+    if (data === 'cerrado') return json({ error: 'La preinscripción a Escuelas de Verano está cerrada en este momento.' }, 409)
     if (data === 'sin_cupo' || data === 'escuela') return json({ error: 'La escuela seleccionada no tiene cupos disponibles para preinscripción.' }, 409)
     if (data !== 'ok') return json({ error: 'Revisá los datos del formulario.' }, 400)
     return json({ ok: true }, 201)

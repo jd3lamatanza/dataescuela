@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAsync, useDebounced } from '../lib/hooks'
 import { PREINSCRIPCION_EAV_URL } from '../lib/preinscripcionEavUrl'
 import { go, setParams, useRoute } from '../lib/router'
-import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Modal, PAGE_SIZE, PageHeader, Pager, RowMenu, Spinner, TabBar, Toggle, confirmar, toast, type TabItem } from '../ui/kit'
+import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Modal, PAGE_SIZE, PageHeader, Pager, RowMenu, Spinner, TabBar, Toggle, confirmar, toast, type TabItem } from '../ui/kit'
 import { cargarCuposEav, CuposEav } from '../ui/CuposEav'
 import { InscripcionesEavDistrital } from './InscripcionesEavDistrital'
 
@@ -45,7 +45,6 @@ function Escuelas() {
   const dq = useDebounced(q)
   const page = Math.max(1, Number(params.get('page')) || 1)
   const [agregar, setAgregar] = useState(false)
-  const [mostrarQr, setMostrarQr] = useState(false)
   const [editarCupos, setEditarCupos] = useState<Esc | null>(null)
   const { data, loading, error, reload } = useAsync(async () => {
     let s = supabase.from('escuelas').select(COLS, { count: 'exact' }).eq('eav', 'Sí')
@@ -64,11 +63,11 @@ function Escuelas() {
 
   return (
     <>
-      <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto]">
+      <FormularioAcceso />
+      <div class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto]">
         <input type="search" class={FIELD} placeholder="Clave, CUE, código, número, nivel o localidad" value={q} maxLength={80} aria-label="Buscar"
           onInput={(e) => { setQ(e.currentTarget.value); setParams({ q: e.currentTarget.value, page: null }) }} />
         <button class={BTN_SECONDARY} onClick={() => { setQ(''); setParams({ q: null, page: null }) }}>Limpiar</button>
-        <button class={BTN_SECONDARY} onClick={() => setMostrarQr(true)}>Compartir preinscripción</button>
         <button class={BTN_PRIMARY} onClick={() => setAgregar(true)}>Agregar escuela</button>
       </div>
       {error && <div class="mt-3"><Alert tone="error">{error}</Alert></div>}
@@ -99,30 +98,84 @@ function Escuelas() {
       </Card>
       <Pager page={page} total={data?.total ?? 0} onPage={(p) => setParams({ page: p > 1 ? p : null })} />
       {agregar && <Agregar onClose={() => { setAgregar(false); reload() }} />}
-      {mostrarQr && <QrPreinscripcion onClose={() => setMostrarQr(false)} />}
       {editarCupos && <CuposEav escuela={{ id: editarCupos.id, nombre: nombre(editarCupos) }} cupos={data?.cupos[editarCupos.id] ?? null} onClose={() => setEditarCupos(null)} onDone={() => { setEditarCupos(null); reload() }} />}
     </>
   )
 }
 
-function QrPreinscripcion({ onClose }: { onClose(): void }) {
+function FormularioAcceso() {
   const [qr, setQr] = useState('')
-  const [error, setError] = useState('')
+  const [errorQr, setErrorQr] = useState('')
+  const [busy, setBusy] = useState(false)
   const link = PREINSCRIPCION_EAV_URL
+  const { data: activo, loading, error, reload } = useAsync(async () => {
+    const r = await supabase.rpc('eav_formulario_estado')
+    if (r.error) throw r.error
+    if (typeof r.data !== 'boolean') throw new Error('No se pudo obtener el estado del formulario')
+    return r.data
+  })
   useEffect(() => {
     let vivo = true
-    import('qrcode').then(({ default: qr }) => qr.toDataURL(link, { width: 512, margin: 2 })).then((v) => { if (vivo) setQr(v) }).catch((e) => { if (vivo) setError(e instanceof Error ? e.message : String(e)) })
+    import('qrcode').then(({ default: qr }) => qr.toDataURL(link, { width: 512, margin: 2 })).then((v) => { if (vivo) setQr(v) }).catch((e) => { if (vivo) setErrorQr(e instanceof Error ? e.message : String(e)) })
     return () => { vivo = false }
   }, [link])
-  return <Modal title="Compartir preinscripción" onClose={onClose}>
-    <div class="space-y-4 text-center">
-      <p class="text-sm text-slate-600">Compartí este código o enlace con la comunidad.</p>
-      {error && <Alert tone="error">No se pudo generar el QR: {error}</Alert>}
-      {qr ? <img src={qr} alt="Código QR de preinscripción" class="mx-auto w-64 max-w-full" /> : !error && <Spinner />}
-      <a class="block break-all text-sm text-sky-700 underline" href={link}>{link}</a>
-      {qr && <a class={BTN_PRIMARY} href={qr} download="qr-preinscripcion-eav.png">Descargar QR</a>}
+  const cambiar = async (v: boolean) => {
+    if (!(await confirmar(v ? 'Activar preinscripción' : 'Desactivar preinscripción', {
+      text: v ? 'El formulario volverá a recibir nuevas preinscripciones.' : 'El formulario público dejará de recibir nuevas preinscripciones. Las existentes se conservarán.',
+      ok: v ? 'Activar' : 'Desactivar',
+    }))) return
+    setBusy(true)
+    try {
+      const r = await supabase.rpc('eav_formulario_cambiar_estado', { p_activo: v })
+      if (r.error) throw r.error
+      if (r.data !== v) throw new Error('No se pudo confirmar el cambio de estado')
+      toast.ok(v ? 'Formulario activado' : 'Formulario desactivado')
+      reload()
+    } catch (e) {
+      toast.error(e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e))
+    } finally { setBusy(false) }
+  }
+  const copiar = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('La copia no está disponible en este navegador; seleccioná el enlace manualmente.')
+      await navigator.clipboard.writeText(link)
+      toast.ok('Enlace copiado')
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'No se pudo copiar el enlace') }
+  }
+  const compartir = async () => {
+    if (!navigator.share) return copiar()
+    try {
+      const datos: ShareData = { title: 'Preinscripción a Escuelas de Verano', url: link }
+      if (qr) {
+        const archivo = new File([await (await fetch(qr)).blob()], 'qr-preinscripcion-eav.png', { type: 'image/png' })
+        if (navigator.canShare?.({ files: [archivo] })) datos.files = [archivo]
+      }
+      await navigator.share(datos)
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') return
+      toast.error(e instanceof Error ? e.message : 'No se pudo compartir')
+    }
+  }
+  return <Card title="Formulario de preinscripción">
+    <div class="flex flex-wrap items-start gap-4">
+      {qr ? <img src={qr} alt="Código QR de preinscripción" class="mx-auto w-36 max-w-full rounded border border-slate-200 sm:mx-0" /> : !errorQr && <Spinner />}
+      <div class="min-w-0 flex-1 basis-64 space-y-3">
+        <div class="flex flex-wrap items-center gap-3">
+          {activo !== null && !error && <Badge tone={activo ? 'green' : 'slate'}>{activo ? 'Formulario activo' : 'Formulario desactivado'}</Badge>}
+          {activo !== null && !error && <Toggle checked={activo} onChange={(v) => void cambiar(v)} disabled={busy || loading} label="Permitir preinscripciones" />}
+        </div>
+        <p class="text-sm text-slate-600">Compartí el QR o el enlace con la comunidad. Al desactivar el formulario se conservan las preinscripciones recibidas.</p>
+        {error && <Alert tone="error">No se pudo cargar el estado: {error} <button type="button" class="underline" onClick={reload}>Reintentar</button></Alert>}
+        {errorQr && <Alert tone="error">No se pudo generar el QR: {errorQr}</Alert>}
+        <a class="block break-all text-sm text-sky-700 underline" href={link} target="_blank" rel="noopener noreferrer">{link}</a>
+        <div class="flex flex-wrap gap-2">
+          {qr && <a class={BTN_PRIMARY} href={qr} download="qr-preinscripcion-eav.png">Descargar QR</a>}
+          <button type="button" class={BTN_SECONDARY} onClick={() => void compartir()}>Compartir</button>
+          <button type="button" class={BTN_SECONDARY} onClick={() => void copiar()}>Copiar enlace</button>
+        </div>
+      </div>
     </div>
-  </Modal>
+  </Card>
 }
 
 /** Buscador de todas las escuelas; el toggle de cada una la marca o desmarca como EAV. */
