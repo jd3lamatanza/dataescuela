@@ -112,7 +112,7 @@ export function Usuarios() {
       </Card>
       <Pager page={page} total={Number(total)} onPage={setPage} />
       {edit && <EditarUsuario u={edit} propio={edit.id === user?.id} onClose={() => setEdit(null)} onDone={() => { setEdit(null); reload() }} />}
-      {nuevo && <NuevoUsuario roles={roles} onClose={() => setNuevo(false)} onDone={() => { setNuevo(false); reload() }} />}
+      {nuevo && <NuevoUsuario roles={roles.filter((r) => r !== 'eav' && r !== 'eoe')} onClose={() => setNuevo(false)} onDone={() => { setNuevo(false); reload() }} />}
     </>
   )
 }
