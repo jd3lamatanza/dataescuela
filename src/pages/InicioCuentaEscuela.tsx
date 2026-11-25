@@ -7,15 +7,11 @@ import type { IconName } from '../modules'
 
 interface MiEscuela { id: number; cue: string; nombre: string | null; nivel: string | null; modalidad: string | null; localidad: string | null; eav: boolean; integrantes: number }
 
-const CONFIG = {
-  eav: { titulo: 'Escuela de Verano', icono: 'sun' as IconName, texto: 'Desde acá vas a gestionar la Escuela de Verano de tu escuela.' },
-  eoe: { titulo: 'Equipo de Orientación', icono: 'users' as IconName, texto: 'Desde acá vas a gestionar el Equipo de Orientación de tu escuela.' },
-}
+const c = { titulo: 'Equipo de Orientación', icono: 'users' as IconName, texto: 'Desde acá vas a gestionar el Equipo de Orientación de tu escuela.' }
 
-/** Home de ejemplo de las cuentas eav y eoe: solo datos de su propia escuela. */
-export function InicioCuentaEscuela({ rol }: { rol: 'eav' | 'eoe' }) {
+/** Home de ejemplo de la cuenta eoe: solo datos de su propia escuela. */
+export function InicioCuentaEscuela() {
   const { user } = useAuth()
-  const c = CONFIG[rol]
   const { data, error, loading } = useAsync(async () => {
     const { data, error } = await supabase.rpc('mi_escuela_cuenta')
     if (error) throw error
@@ -43,9 +39,7 @@ export function InicioCuentaEscuela({ rol }: { rol: 'eav' | 'eoe' }) {
             </dl>
           </Card>
           <Card title="Estado">
-            {rol === 'eav'
-              ? <div class="flex items-center justify-between gap-2"><span class="text-sm text-slate-700">Escuela de Verano</span><Badge tone={data.eav ? 'green' : 'slate'}>{data.eav ? 'Activa' : 'Inactiva'}</Badge></div>
-              : <div class="flex items-center justify-between gap-2"><span class="text-sm text-slate-700">Integrantes del equipo</span><Badge tone="blue">{data.integrantes}</Badge></div>}
+            <div class="flex items-center justify-between gap-2"><span class="text-sm text-slate-700">Integrantes del equipo</span><Badge tone="blue">{data.integrantes}</Badge></div>
           </Card>
         </div>
       )}

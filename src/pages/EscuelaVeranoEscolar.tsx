@@ -5,6 +5,7 @@ import { descargarDocumento, previsualizable, quitarArchivo, subirDocumento, url
 import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, PAGE_SIZE, PageHeader, Pager, Spinner, TabBar, Toggle, confirmar, toast, type TabItem } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 import { col } from '../ui/Calendario'
+import { CargarPreinscripcion } from './EavCargaManual'
 
 interface Estado { id: number; nombre: string; color: string }
 interface Archivo { id: number; nombre: string; mime: string | null; bytes: number | null }
@@ -85,7 +86,8 @@ export function EscuelaVeranoEscolar() {
   )
 }
 
-function Preinscripciones({ escuelaId }: { escuelaId: number }) {
+export function Preinscripciones({ escuelaId, cargaManual = false }: { escuelaId: number; cargaManual?: boolean }) {
+  const [cargando, setCargando] = useState(false)
   const [buscar, setBuscar] = useState('')
   const [pagina, setPagina] = useState(1)
   const [seleccion, setSeleccion] = useState<Preinscripcion | null>(null)
@@ -103,9 +105,12 @@ function Preinscripciones({ escuelaId }: { escuelaId: number }) {
     return { filas: r.data as Preinscripcion[], total: r.count }
   }, [escuelaId, consulta, pagina])
   return <>
-    <div class="mb-3">
-      <h2 class="text-lg font-semibold text-slate-900">Preinscripciones</h2>
-      <p class="mt-1 text-sm text-slate-500">Revisá los estudiantes de tu EAV y confirmá su inscripción.</p>
+    <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-900">Preinscripciones</h2>
+        <p class="mt-1 text-sm text-slate-500">Revisá los estudiantes de tu EAV y confirmá su inscripción.</p>
+      </div>
+      {cargaManual && <button type="button" class={BTN_PRIMARY} onClick={() => setCargando(true)}>Cargar preinscripción</button>}
     </div>
     <input class={FIELD} type="search" aria-label="Buscar preinscripción" placeholder="Buscar por nombre o DNI" value={buscar} maxLength={80}
       onInput={(e) => { setBuscar(e.currentTarget.value); setPagina(1) }} />
@@ -125,6 +130,7 @@ function Preinscripciones({ escuelaId }: { escuelaId: number }) {
         </ul>}
     </Card>}
     <Pager page={pagina} total={data?.total ?? 0} onPage={setPagina} />
+    {cargando && <CargarPreinscripcion onClose={() => setCargando(false)} onDone={() => { setCargando(false); setPagina(1); reload() }} />}
     {seleccion && <ConfirmarInscripcion preinscripcion={seleccion} onClose={() => setSeleccion(null)} onDone={() => { setSeleccion(null); reload() }} />}
   </>
 }
