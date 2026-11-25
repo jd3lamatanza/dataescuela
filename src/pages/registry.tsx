@@ -1,5 +1,5 @@
 import type { ComponentType } from 'preact'
-import { EmptyState, PageHeader } from '../ui/kit'
+import { Alert, EmptyState, PageHeader } from '../ui/kit'
 import { Inicio } from './Inicio'
 import { Usuarios } from './Usuarios'
 import { Simulado } from './Simulado'
@@ -51,11 +51,20 @@ const MisProyectosPropios = () => {
   return user?.role === 'areal' ? <ProyectosAreales /> : <MisProyectos />
 }
 
+const AccesoEoeProtegido = ({ title, Page }: { title: string; Page: ComponentType }) => {
+  const { user } = useAuth()
+  if (user?.role === 'eoe' && user.simulador) return <>
+    <PageHeader title={title} />
+    <Alert tone="warning">Por confidencialidad, este módulo solo está disponible al ingresar directamente con la cuenta EOE.</Alert>
+  </>
+  return <Page />
+}
+
 /** id de módulo (src/modules.ts) → página. Los módulos sin página muestran "en construcción". */
 export const PAGES: Record<string, ComponentType> = {
   inicio: Inicio,
-  'pin-validacion': PinValidacion,
-  'legajo-digital': LegajoDigital,
+  'pin-validacion': () => <AccesoEoeProtegido title="PIN de Validación" Page={PinValidacion} />,
+  'legajo-digital': () => <AccesoEoeProtegido title="Legajo Digital" Page={LegajoDigital} />,
   usuarios: Usuarios,
   'usuarios-distrito': Usuarios,
   simulado: Simulado,
