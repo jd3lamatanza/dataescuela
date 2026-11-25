@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useAsync, useDebounced } from '../lib/hooks'
 import { go, setParams, useRoute } from '../lib/router'
-import { Alert, Card, EmptyState, FIELD, PageHeader, Pager, PAGE_SIZE, RowMenu, Spinner, TabBar, BTN_SECONDARY, confirmar, toast, type TabItem } from '../ui/kit'
+import { Alert, Badge, Card, EmptyState, FIELD, PageHeader, Pager, PAGE_SIZE, RowMenu, Spinner, TabBar, BTN_SECONDARY, confirmar, toast, type TabItem } from '../ui/kit'
 import { Equipo, TIPOS, type TipoEquipo } from '../ui/Equipo'
 import { FichaEscuela, nombreEscuela } from '../ui/FichaEscuela'
 import { useState } from 'preact/hooks'
@@ -14,6 +14,7 @@ import { descargar, XLSX_MIME } from '../lib/download'
 import { BRAND } from '../modules'
 import { Icon } from '../ui/Icon'
 import { cargarCuposEav, CuposEav } from '../ui/CuposEav'
+import { blanquearPin, estadosPin } from '../lib/eoePinDistrital'
 
 const ORDEN: Record<string, [string, string[]]> = {
   clave: ['Clave', ['clave', 'numero']], cue: ['CUE', ['cue']], codigo: ['Código', ['codigo', 'numero']], numero: ['Número', ['numero', 'clave']],
@@ -48,7 +49,12 @@ function ListadoEquipos({ tipo }: { tipo: TipoEquipo }) {
   const [page, setPage] = useState(1)
   const [exportando, setExportando] = useState(false)
   const dq = useDebounced(q)
-  const { data, loading, error } = useAsync(() => leerEquipos(supabase, tipo), [tipo, user?.id, user?.role])
+  const { data, loading, error, reload } = useAsync(async () => {
+    const filas = await leerEquipos(supabase, tipo)
+    if (tipo !== 'orientacion' || user?.role !== 'distrital') return filas
+    const pines = await estadosPin(filas.map((r) => r.id))
+    return filas.map((r) => ({ ...r, tiene_pin: pines[r.id] }))
+  }, [tipo, user?.id, user?.role])
   const filtros = { busqueda: dq, nivel, localidad }
   const filas = filtrarEquipos(data ?? [], filtros)
   const niveles = [...new Set((data ?? []).map((r) => r.escuela.nivel).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, 'es-AR'))
@@ -98,8 +104,12 @@ function ListadoEquipos({ tipo }: { tipo: TipoEquipo }) {
               {tipo === 'esi'
                 ? <><p class="text-xs text-slate-600">{[r.dni && `DNI ${r.dni}`, cargoEquipo(r), r.area, r.turno].filter(Boolean).join(' · ')}</p><p class="text-xs text-slate-500">Otra escuela: {otraEscuelaEquipo(r)}</p></>
                 : <><p class="text-xs text-slate-600">{[cargoEquipo(r), r.revista?.nombre, r.toma_posesion && `Toma ${fechaEquipo(r.toma_posesion)}`, r.cuil && `CUIL ${r.cuil}`].filter(Boolean).join(' · ')}</p><p class="text-xs text-slate-500">{[r.telefono, r.email, r.cargo_base && `Cargo base: ${r.cargo_base}`].filter(Boolean).join(' · ')}</p></>}
+              {tipo === 'orientacion' && user?.role === 'distrital' && <div class="mt-1"><Badge tone={r.tiene_pin ? 'green' : 'amber'}>{r.tiene_pin === undefined ? 'PIN no disponible' : r.tiene_pin ? 'PIN configurado' : 'Sin PIN'}</Badge></div>}
             </div>
-            <button type="button" class={BTN_SECONDARY} onClick={() => setParams({ e: r.escuela_id, v: tipo })}>Ver escuela</button>
+            {tipo === 'orientacion' && user?.role === 'distrital' ? <RowMenu flotante items={[
+              { label: 'Ver escuela', icon: 'eye', onClick: () => setParams({ e: r.escuela_id, v: tipo }) },
+              { label: 'Blanquear PIN', icon: 'unlock', danger: true, hidden: !r.tiene_pin, onClick: async () => { if (await blanquearPin(r.escuela_id, r.id, r.apellido_nombre)) reload() } },
+            ]} /> : <button type="button" class={BTN_SECONDARY} onClick={() => setParams({ e: r.escuela_id, v: tipo })}>Ver escuela</button>}
           </li>)}
         </ul>}
     </Card>
@@ -181,11 +191,12 @@ function Listado() {
 
   const jefatura = user?.role === 'distrital'
   const ver = (id: number, v = 'ficha') => setParams({ e: id, v: v === 'ficha' ? null : v })
-  const reset = async (e: { id: number; clave: string }) => {
-    if (!(await confirmar('Restablecer contraseña', { text: `Se restablece la contraseña de ${e.clave} a la clave inicial y deberá cambiarla al ingresar.`, ok: 'Restablecer', danger: true }))) return
-    const { error } = await supabase.rpc('escuela_reset', { p_escuela: e.id })
+  const reset = async (e: { id: number; clave: string | null; cue: string }, rol: 'escolar' | 'eav' | 'eoe') => {
+    const cuenta = { escolar: 'Escuela', eav: 'EAV', eoe: 'EOE' }[rol]
+    if (!(await confirmar(`Restablecer contraseña ${cuenta}`, { text: `Se restablecerá la contraseña ${cuenta} de ${e.clave || e.cue} a 12345678, se cerrarán sus sesiones y deberá cambiarla al ingresar. El estado de la cuenta no cambiará.`, ok: 'Restablecer', danger: true }))) return
+    const { error } = await supabase.rpc('escuela_reset_cuenta', { p_escuela: e.id, p_rol: rol })
     if (error) return toast.error(error.message)
-    toast.ok('Contraseña restablecida')
+    toast.ok(`Contraseña ${cuenta} restablecida`)
   }
   const habilitarMatricula = async (e: { id: number; clave: string }) => {
     const per = await periodoActual()
@@ -201,7 +212,9 @@ function Listado() {
       { label: 'Referentes ESI', onClick: () => ver(e.id, 'esi') },
       { label: 'Asignar cupos EAV', hidden: !jefatura, onClick: () => setEditarCupos({ id: e.id, nombre: [e.codigo, e.numero, e.clave].filter(Boolean).join(' · ') || e.cue, cupos: data?.cupos[e.id] ?? null }) },
       { label: 'Habilitar/Deshabilitar carga de matrícula', icon: 'unlock', sep: true, hidden: !jefatura, onClick: () => habilitarMatricula(e) },
-      { label: 'Restablecer contraseña', danger: true, hidden: !jefatura, onClick: () => reset(e) },
+      { label: 'Restablecer contraseña Escuela', danger: true, hidden: !jefatura, onClick: () => reset(e, 'escolar') },
+      { label: 'Restablecer contraseña EAV', danger: true, hidden: !jefatura, onClick: () => reset(e, 'eav') },
+      { label: 'Restablecer contraseña EOE', danger: true, hidden: !jefatura, onClick: () => reset(e, 'eoe') },
     ]} />
   )
 

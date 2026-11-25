@@ -19,6 +19,7 @@ export interface EquipoListado {
   turno?: string | null
   otra_escuela?: boolean
   otra_escuela_detalle?: string | null
+  tiene_pin?: boolean
 }
 
 export interface FiltrosEquipos { busqueda: string; nivel: string; localidad: string }

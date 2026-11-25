@@ -1,7 +1,9 @@
 import { useState } from 'preact/hooks'
 import { supabase } from '../lib/supabase'
 import { useAsync } from '../lib/hooks'
-import { Alert, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, RowMenu, Spinner, Toggle, confirmar, toast } from './kit'
+import { useAuth } from '../lib/auth'
+import { blanquearPin, estadosPin } from '../lib/eoePinDistrital'
+import { Alert, Badge, BTN_PRIMARY, BTN_SECONDARY, Card, EmptyState, FIELD, Lbl, Modal, RowMenu, Spinner, Toggle, confirmar, toast } from './kit'
 
 export const TIPOS = {
   directivo: { tabla: 'equipo_directivo', titulo: 'Equipo Directivo', col: 'cargo_directivo', base: true },
@@ -29,6 +31,8 @@ type Row = Record<string, any>
 export function Equipo({ escuelaId, tipo, soloLectura = false }: { escuelaId: number; tipo: TipoEquipo; soloLectura?: boolean }) {
   const t = TIPOS[tipo]
   const esi = tipo === 'esi'
+  const { user } = useAuth()
+  const verPin = tipo === 'orientacion' && user?.role === 'distrital'
   const [edit, setEdit] = useState<Row | null>(null)
   const { data, loading, error, reload } = useAsync(async () => {
     const cat = async (col: string) => (await supabase.from('catalogos').select('id,nombre,activo').eq('coleccion', col).order('orden')).data ?? []
@@ -38,9 +42,10 @@ export function Equipo({ escuelaId, tipo, soloLectura = false }: { escuelaId: nu
     const [r, cargos, revistas] = await Promise.all([q, esi ? [] : cat(t.col), esi ? [] : cat('situacion_revista')])
     if (r.error) throw r.error
     const rows = (r.data ?? []) as Row[]
+    const pines = verPin ? await estadosPin(rows.map((row) => Number(row.id))) : {}
     if (!esi) rows.sort((a, b) => (a.cargo?.orden ?? 0) - (b.cargo?.orden ?? 0) || a.apellido_nombre.localeCompare(b.apellido_nombre))
-    return { rows, cargos, revistas }
-  }, [escuelaId, tipo])
+    return { rows, cargos, revistas, pines }
+  }, [escuelaId, tipo, verPin])
 
   const del = async (r: Row) => {
     if (!(await confirmar('Eliminar registro', { text: r.apellido_nombre, ok: 'Eliminar', danger: true }))) return
@@ -48,7 +53,15 @@ export function Equipo({ escuelaId, tipo, soloLectura = false }: { escuelaId: nu
     if (error) return toast.error(error.message)
     toast.ok('Registro eliminado'); reload()
   }
-  const Menu = ({ r }: { r: Row }) => soloLectura ? null : <RowMenu items={[{ label: 'Editar', onClick: () => setEdit(r) }, { label: 'Eliminar', danger: true, onClick: () => del(r) }]} />
+  const Menu = ({ r }: { r: Row }) => soloLectura ? null : <RowMenu flotante items={[
+    { label: 'Editar', onClick: () => setEdit(r) },
+    { label: 'Blanquear PIN', icon: 'unlock', danger: true, hidden: !verPin || !data?.pines[r.id], onClick: async () => { if (await blanquearPin(escuelaId, r.id, r.apellido_nombre)) reload() } },
+    { label: 'Eliminar', danger: true, onClick: () => del(r) },
+  ]} />
+  const Pin = ({ r }: { r: Row }) => {
+    const estado = data?.pines[r.id]
+    return <Badge tone={estado ? 'green' : 'amber'}>{estado === undefined ? 'PIN no disponible' : estado ? 'PIN configurado' : 'Sin PIN'}</Badge>
+  }
   const Cuil = ({ r }: { r: Row }) => <span class="font-mono text-xs">{r.cuil || '—'}{r.cuil && !cuilOk(r.cuil) && <span title="CUIL inválido" class="ml-1 rounded bg-amber-50 px-1 text-amber-700 ring-1 ring-amber-200">revisar</span>}</span>
   const otra = (r: Row) => (r.otra_escuela ? 'Sí' + (r.otra_escuela_detalle ? ' · ' + r.otra_escuela_detalle : '') : 'No')
 
@@ -68,13 +81,13 @@ export function Equipo({ escuelaId, tipo, soloLectura = false }: { escuelaId: nu
                 <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
                   {esi
                     ? <tr><th class={TH}>Apellido y nombre</th><th class={TH}>DNI</th><th class={TH}>Cargo</th><th class={TH}>Área</th><th class={TH}>Turno</th><th class={TH}>Otra escuela</th><th class={TH}></th></tr>
-                    : <tr><th class={TH}>Apellido y nombre</th><th class={TH}>Cargo</th><th class={TH}>Revista</th><th class={TH}>Toma</th><th class={TH}>CUIL</th><th class={TH}>Contacto</th><th class={TH}></th></tr>}
+                    : <tr><th class={TH}>Apellido y nombre</th><th class={TH}>Cargo</th><th class={TH}>Revista</th><th class={TH}>Toma</th><th class={TH}>CUIL</th><th class={TH}>Contacto</th>{verPin && <th class={TH}>PIN</th>}<th class={TH}></th></tr>}
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                   {data.rows.map((r) => esi ? (
                     <tr key={r.id} class="hover:bg-slate-50"><td class="px-3 py-2.5 font-medium">{r.apellido_nombre}</td><td class="px-3 py-2.5 font-mono text-xs">{r.dni}</td><td class="px-3 py-2.5 text-xs">{r.cargo}</td><td class="px-3 py-2.5 text-xs">{r.area}</td><td class="px-3 py-2.5 text-xs">{r.turno}</td><td class="px-3 py-2.5 text-xs">{otra(r)}</td><td class="px-3 py-2.5"><Menu r={r} /></td></tr>
                   ) : (
-                    <tr key={r.id} class="hover:bg-slate-50"><td class="px-3 py-2.5 font-medium">{r.apellido_nombre}</td><td class="px-3 py-2.5 text-xs">{r.cargo?.nombre}</td><td class="px-3 py-2.5 text-xs">{r.revista?.nombre}</td><td class="whitespace-nowrap px-3 py-2.5 text-xs">{fecha(r.toma_posesion)}</td><td class="whitespace-nowrap px-3 py-2.5"><Cuil r={r} /></td><td class="px-3 py-2.5 text-xs text-slate-600">{[r.telefono, r.email].filter(Boolean).join(' · ')}</td><td class="px-3 py-2.5"><Menu r={r} /></td></tr>
+                    <tr key={r.id} class="hover:bg-slate-50"><td class="px-3 py-2.5 font-medium">{r.apellido_nombre}</td><td class="px-3 py-2.5 text-xs">{r.cargo?.nombre}</td><td class="px-3 py-2.5 text-xs">{r.revista?.nombre}</td><td class="whitespace-nowrap px-3 py-2.5 text-xs">{fecha(r.toma_posesion)}</td><td class="whitespace-nowrap px-3 py-2.5"><Cuil r={r} /></td><td class="px-3 py-2.5 text-xs text-slate-600">{[r.telefono, r.email].filter(Boolean).join(' · ')}</td>{verPin && <td class="px-3 py-2.5"><Pin r={r} /></td>}<td class="px-3 py-2.5"><Menu r={r} /></td></tr>
                   ))}
                 </tbody>
               </table>
@@ -89,6 +102,7 @@ export function Equipo({ escuelaId, tipo, soloLectura = false }: { escuelaId: nu
                   </div>
                   {esi ? <><p class="mt-1 text-xs text-slate-600">{[r.cargo, r.area, r.turno].filter(Boolean).join(' · ')}</p><p class="text-xs text-slate-500">Referente en otra escuela: {otra(r)}</p></>
                     : <><p class="mt-1"><Cuil r={r} /></p><p class="text-xs text-slate-500">{[r.telefono, r.email].filter(Boolean).join(' · ')}</p></>}
+                  {verPin && <div class="mt-1"><Pin r={r} /></div>}
                 </li>
               ))}
             </ul>
