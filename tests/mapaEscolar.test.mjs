@@ -23,12 +23,12 @@ test('reconoce coordenadas válidas sin confundir ceros con ausencia', () => {
   assert.notEqual(colorNivel('Primario'), colorNivel('Inicial'))
 })
 
-test('el módulo está disponible en todos los roles y aparece en Utilidades distritales', () => {
+test('el módulo está disponible para eoe y los roles originales, pero no para eav', () => {
   const m = MODULES.find((m) => m.id === 'mapa-escolar')
   assert.ok(m)
   for (const role of ROLES) {
-    assert.equal(canAccess(m, role), true, role)
-    assert.ok(modulesFor(role).includes(m), role)
+    assert.equal(canAccess(m, role), role !== 'eav', role)
+    assert.equal(modulesFor(role).includes(m), role !== 'eav', role)
   }
   assert.ok(agruparMenuDistrital([m]).find((c) => c.id === 'utilidades')?.modulos.includes(m))
 })

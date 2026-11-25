@@ -19,7 +19,7 @@ begin
     raise exception 'Permisos de ejecución incorrectos';
   end if;
   perform set_config('request.jwt.claim.sub', usuario::text, true);
-  foreach rol in array array['admin', 'regional', 'distrital', 'areal', 'escolar'] loop
+  foreach rol in array array['admin', 'regional', 'distrital', 'areal', 'escolar', 'eoe'] loop
     update public.profiles set role = rol, active = true where id = usuario;
     select count(*) into obtenido from public.mapa_escolar_escuelas();
     if obtenido <> esperado then raise exception 'El rol % recibió % escuelas, se esperaban %', rol, obtenido, esperado; end if;
@@ -27,6 +27,16 @@ begin
       raise exception 'El mapa incluye otra localidad';
     end if;
   end loop;
+  update public.profiles set role = 'eav' where id = usuario;
+  bloqueado := false;
+  begin
+    perform public.mapa_escolar_escuelas();
+  exception when raise_exception then
+    if sqlerrm <> 'Sin permiso' then raise; end if;
+    bloqueado := true;
+  end;
+  if not bloqueado then raise exception 'El rol eav accedió al mapa'; end if;
+  update public.profiles set role = 'eoe' where id = usuario;
   update public.profiles set active = false where id = usuario;
   bloqueado := false;
   begin
