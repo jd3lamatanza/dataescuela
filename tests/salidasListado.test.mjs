@@ -13,6 +13,7 @@ const salida = (i) => ({
   id: i, user_id: 'usuario', cue: '00012345', clave: 'ABC001', escuela: 'Escuela 1',
   titulo: `Museo ${i}`, fecha: '2026-11-21', destino: 'La Plata', estado_id: 2,
   observaciones: null, enviar_mail: false, mail_enviado_at: null, created_at: '2026-11-01T12:00:00Z',
+  visado_at: '2026-11-02T12:00:00Z', visado_nombre: 'Inspectora de prueba',
 })
 
 test('paginación y exportación consultan todos los resultados con los mismos filtros y orden', async () => {
@@ -37,6 +38,8 @@ test('paginación y exportación consultan todos los resultados con los mismos f
   const pagina = await consultaSalidas(cliente, filtros).range(20, 39)
   assert.ifError(pagina.error)
   assert.match(pedidos[0].get('select'), /(?:^|,)visado_at(?:,|$)/)
+  assert.match(pedidos[0].get('select'), /(?:^|,)visado_nombre(?:,|$)/)
+  assert.equal(pagina.data[0].visado_nombre, 'Inspectora de prueba')
   assert.equal(pagina.count, 1102)
   assert.deepEqual(pagina.data.map((s) => s.id), rows.slice(20, 40).map((s) => s.id))
   const exportadas = await leerSalidasFiltradas(cliente, filtros)

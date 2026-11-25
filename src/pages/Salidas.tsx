@@ -20,6 +20,7 @@ interface Escuela { id: number; clave: string | null; cue: string; tipo: string 
 
 const fecha = (d: string) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(d + 'T00:00:00Z'))
 const fechaHora = (d: string) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(d))
+const textoVisado = (s: Salida) => `Visada el ${fechaHora(s.visado_at!)} · ${s.visado_nombre || 'Inspector no disponible'}`
 const tam = (n: number | null) => (n == null ? '' : n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`)
 
 const EstadoChip = ({ e }: { e?: Estado }) => <span class={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${col(e?.color).chip}`}>{e?.nombre ?? '—'}</span>
@@ -45,7 +46,7 @@ function Visado({ salida, onChange, disabled = false }: { salida: Salida; onChan
     <input type="checkbox" class="mt-0.5 size-4 shrink-0 accent-emerald-600" checked={visada} disabled={disabled || busy || visada}
       aria-label={`${visada ? 'Visada' : 'Visar'}: ${salida.titulo}`}
       onChange={(e) => { e.currentTarget.checked = false; void visar() }} />
-    <span>{salida.visado_at ? `Visada el ${fechaHora(salida.visado_at)}` : registrado ? 'Visada' : 'Visar esta salida (no se puede deshacer)'}</span>
+    <span>{salida.visado_at ? textoVisado(salida) : registrado ? 'Visada' : 'Visar esta salida (no se puede deshacer)'}</span>
   </label>
 }
 
@@ -127,7 +128,7 @@ function SalidasDistrital() {
           <span class="min-w-0 flex-1">
             <span class="block truncate font-medium text-slate-900">{s.titulo}</span>
             <span class="block truncate text-xs text-slate-500">{fecha(s.fecha)} · {s.destino} · {s.escuela}{s.clave ? ` (${s.clave})` : ''}</span>
-            {s.visado_at && <span class="mt-1 block text-xs font-medium text-emerald-700">✓ Visada el {fechaHora(s.visado_at)}</span>}
+            {s.visado_at && <span class="mt-1 block text-xs font-medium text-emerald-700">✓ {textoVisado(s)}</span>}
           </span>
           <EstadoChip e={data.estados.find((e) => e.id === s.estado_id)} />
         </button>
@@ -368,7 +369,7 @@ function Detalle({ id, estados, onClose, onChange }: { id: number; estados: Esta
       {loading && !data ? <Spinner /> : data && (
         <div class="space-y-5">
           <div class="flex flex-wrap items-center gap-2"><EstadoChip e={estadoDe(data.s.estado_id)} />{data.s.mail_enviado_at && <span class="text-xs text-slate-500">Correo enviado el {fechaHora(data.s.mail_enviado_at)}</span>}</div>
-          {areal ? <Visado salida={data.s} onChange={refresh} disabled={busy} /> : data.s.visado_at && <p class="text-sm font-medium text-emerald-700">✓ Visada el {fechaHora(data.s.visado_at)}</p>}
+          {areal ? <Visado salida={data.s} onChange={refresh} disabled={busy} /> : data.s.visado_at && <p class="text-sm font-medium text-emerald-700">✓ {textoVisado(data.s)}</p>}
           <dl class="grid gap-3 text-sm sm:grid-cols-2">
             <div><dt class="text-xs uppercase text-slate-500">Escuela</dt><dd>{data.s.escuela}{data.s.clave ? ` · ${data.s.clave}` : ''}</dd></div>
             <div><dt class="text-xs uppercase text-slate-500">Fecha</dt><dd>{fecha(data.s.fecha)}</dd></div>
@@ -415,10 +416,11 @@ function Detalle({ id, estados, onClose, onChange }: { id: number; estados: Esta
                   <Lbl label="Estado">
                     <select class={FIELD} value={estado} onChange={(e) => setEstado(e.currentTarget.value)}>
                       <option value="">Sin cambios ({estadoDe(data.s.estado_id)?.nombre})</option>
-                      {estados.filter((x) => x.activo && x.id !== data.s.estado_id).map((x) => <option value={x.id}>{x.nombre}</option>)}
+                      {estados.filter((x) => x.activo && x.id !== data.s.estado_id).map((x) => <option value={x.id} disabled={x.nombre === 'Aprobada' && !data.s.visado_at}>{x.nombre}{x.nombre === 'Aprobada' && !data.s.visado_at ? ' (requiere visado)' : ''}</option>)}
                     </select>
                   </Lbl>
                 )}
+                {supervisor && !data.s.visado_at && <p class="text-xs text-amber-700">Para aprobar la salida, primero debe visar un inspector.</p>}
                 <Lbl label={supervisor ? 'Observación' : 'Escribir un mensaje'}><textarea class={`${FIELD} min-h-20 py-2`} value={texto} onInput={(e) => setTexto(e.currentTarget.value)} maxLength={3000} /></Lbl>
                 <div class="flex justify-end"><button class={BTN_PRIMARY} disabled={busy || (!texto.trim() && !estado)}>{supervisor && estado ? 'Actualizar estado' : 'Enviar'}</button></div>
               </form>

@@ -26,12 +26,29 @@ union all select ajeno, 'ajeno-' || token, 'Ajeno', array['otra-' || token] from
 select set_config('request.jwt.claim.sub', (select distrito::text from salidas_test), true);
 set local role authenticated;
 update salidas_test set salida = public.salida_crear_distrital(escuela_id, 'Salida distrital', '2027-01-15', 'Museo', null);
-do $$ declare t record; begin
+do $$ declare t record; rechazado boolean := false; begin
   select * into t from salidas_test;
   if not public.salida_editable(t.salida) or not exists (select 1 from public.salidas where id = t.salida and creada_por_distrital and not enviar_mail and user_id = t.distrito)
     then raise exception 'La salida distrital no se creó o no admite archivos'; end if;
+  begin perform public.salida_estado(t.salida, public._salida_estado_id('Aprobada'), null);
+  exception when raise_exception then
+    if sqlerrm <> 'La salida debe estar visada por un inspector antes de aprobarse' then raise; end if;
+    rechazado := true;
+  end;
+  if not rechazado or exists (select 1 from public.salidas where id=t.salida and (evento_id is not null or estado_id=public._salida_estado_id('Aprobada')))
+    then raise exception 'Distrital aprobó sin visado o creó un evento'; end if;
 end $$;
 reset role;
+
+do $$ declare t record; rechazado boolean := false; begin
+  select * into t from salidas_test;
+  begin update public.salidas set estado_id=public._salida_estado_id('Aprobada') where id=t.salida;
+  exception when raise_exception then
+    if sqlerrm <> 'La salida debe estar visada por un inspector antes de aprobarse' then raise; end if;
+    rechazado := true;
+  end;
+  if not rechazado then raise exception 'Se aprobó directamente sin visado'; end if;
+end $$;
 
 insert into public.simulaciones(actor_id, target_id) select distrito, areal from salidas_test;
 select set_config('request.jwt.claim.sub', (select distrito::text from salidas_test), true);
@@ -82,8 +99,15 @@ select set_config('request.jwt.claim.sub', (select areal::text from salidas_test
 set local role authenticated;
 do $$ declare t record; rechazado boolean := false; v_fecha timestamptz; begin
   select * into t from salidas_test;
+  begin perform public.salida_estado(t.salida, public._salida_estado_id('Aprobada'), null);
+  exception when raise_exception then
+    if sqlerrm <> 'La salida debe estar visada por un inspector antes de aprobarse' then raise; end if;
+    rechazado := true;
+  end;
+  if not rechazado then raise exception 'Inspector aprobó sin visar'; end if;
+  rechazado := false;
   perform public.salida_visar(t.salida);
-  select visado_at into v_fecha from public.salidas where id = t.salida and visado_por = t.areal;
+  select visado_at into v_fecha from public.salidas where id = t.salida and visado_por = t.areal and visado_nombre = 'Asignado';
   if v_fecha is null then raise exception 'No se guardó el visado'; end if;
   begin perform public.salida_visar(t.salida); exception when raise_exception then rechazado := true; end;
   if not rechazado or (select visado_at from public.salidas where id = t.salida) <> v_fecha then raise exception 'El visado no es permanente'; end if;
@@ -92,6 +116,20 @@ do $$ declare t record; rechazado boolean := false; v_fecha timestamptz; begin
   if not exists (select 1 from public.salida_mensajes where salida_id = t.salida and rol = 'areal' and texto = 'Comentario areal')
     or not exists (select 1 from public.salidas where id = t.salida and evento_id is not null)
     then raise exception 'No se guardó comentario o calendario'; end if;
+end $$;
+reset role;
+
+select set_config('request.jwt.claim.sub', (select distrito::text from salidas_test), true);
+set local role authenticated;
+do $$ declare t record; begin
+  select * into t from salidas_test;
+  if not exists (select 1 from public.salidas where id=t.salida and visado_nombre='Asignado') then
+    raise exception 'Distrital no ve el nombre del inspector';
+  end if;
+  perform public.salida_estado(t.salida, public._salida_estado_id('Aprobada'), 'Aprobación distrital');
+  if not exists (select 1 from public.salidas where id=t.salida and evento_id is not null and estado_id=public._salida_estado_id('Aprobada')) then
+    raise exception 'Distrital no pudo aprobar la salida visada';
+  end if;
 end $$;
 reset role;
 
