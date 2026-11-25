@@ -6,7 +6,7 @@ import ts from 'typescript'
 import { TIPOS_PROYECTO, MAX_PROYECTO, esPdf } from '../supabase/functions/_shared/proyectos.ts'
 
 const ID = '00000000-0000-4000-8000-000000000001'
-function servicio({ rol = 'escolar', visible = true, registroFalla = false, archivoEnCarpeta = true } = {}) {
+function servicio({ rol = 'escolar', visible = true, registroFalla = false, archivoEnCarpeta = true, cueProyecto = 'cue-ficticio' } = {}) {
   let handler
   const registros = []
   let eliminados = 0
@@ -18,7 +18,7 @@ function servicio({ rol = 'escolar', visible = true, registroFalla = false, arch
     rpc: async () => ({ data: { role: rol, cue: 'cue-ficticio' }, error: null }),
     from: (tabla) => ({ select: () => ({ eq: () => tabla === 'escuelas'
       ? Promise.resolve({ data: [{ clave: 'EP 999' }, { clave: 'EP 999' }], error: null })
-      : { maybeSingle: async () => ({ data: visible ? { id: ID, cue: 'cue-ficticio', drive_file_id: 'archivo_ficticio' } : null, error: null }) } }) }),
+      : { maybeSingle: async () => ({ data: visible ? { id: ID, cue: cueProyecto, drive_file_id: 'archivo_ficticio' } : null, error: null }) } }) }),
   }
   const admin = {
     rpc: async (name, args) => {
@@ -129,6 +129,20 @@ test('escuela solo puede descargar o eliminar proyectos visibles', async () => {
   assert.equal((await propio.llamar({ action: 'download', id: ID })).status, 200)
   assert.equal((await propio.llamar({ action: 'remove', id: ID })).status, 200)
   assert.equal(propio.eliminados(), 1)
+})
+
+test('EOE consulta solo proyectos de su CUE y no puede subir ni eliminar', async () => {
+  const propio = servicio({ rol: 'eoe' })
+  assert.equal((await propio.llamar(formulario())).status, 403)
+  assert.equal((await propio.llamar({ action: 'remove', id: ID })).status, 403)
+  assert.equal(propio.authTokens(), 0)
+  assert.equal((await propio.llamar({ action: 'download', id: ID })).status, 200)
+  assert.equal(propio.eliminados(), 0)
+  for (const opciones of [{ visible: false }, { cueProyecto: 'otra-escuela' }]) {
+    const ajeno = servicio({ rol: 'eoe', ...opciones })
+    assert.equal((await ajeno.llamar({ action: 'download', id: ID })).status, 404)
+    assert.equal(ajeno.authTokens(), 0)
+  }
 })
 
 test('si falla el registro se elimina el archivo recién subido', async () => {

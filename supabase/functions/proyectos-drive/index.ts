@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
     const perfil = await user.rpc('mi_perfil')
     if (perfil.error) throw new Error('No se pudo verificar el perfil.')
     const rol = perfil.data?.role
-    if (!['escolar', 'areal', 'distrital'].includes(rol)) throw new HttpError(403, 'Sin permiso para acceder a proyectos.')
+    if (!['escolar', 'areal', 'distrital', 'eoe'].includes(rol)) throw new HttpError(403, 'Sin permiso para acceder a proyectos.')
     const multipart = (req.headers.get('Content-Type') ?? '').toLowerCase().startsWith('multipart/form-data')
     let form: FormData | null = null
     let body: Record<string, unknown> = {}
@@ -141,6 +141,9 @@ Deno.serve(async (req) => {
       if (proyecto.error) throw new Error('No se pudo consultar el proyecto.')
       if (!proyecto.data || !driveId(proyecto.data.drive_file_id)) throw new HttpError(404, 'Proyecto inexistente.')
       const cue: string = proyecto.data.cue
+      if (rol === 'eoe' && (typeof perfil.data.cue !== 'string' || !perfil.data.cue.trim() || cue !== perfil.data.cue)) {
+        throw new HttpError(404, 'Proyecto inexistente.')
+      }
       if (action === 'remove' && cue !== perfil.data.cue) throw new HttpError(403, 'Solo la escuela puede eliminar sus proyectos.')
       const carpeta = await admin.from('proyecto_carpetas').select('drive_folder_id').eq('cue', cue).maybeSingle()
       if (carpeta.error || !driveId(carpeta.data?.drive_folder_id)) throw new Error('No se pudo consultar la carpeta de la escuela.')

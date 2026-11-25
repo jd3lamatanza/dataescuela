@@ -17,8 +17,9 @@ const llamar = (body: FormData | Record<string, unknown>) => llamarDrive('proyec
 export function MisProyectos() {
   const { user } = useAuth()
   const [tab, setTab] = useState('proyectos')
-  if (!user || !['escolar', 'areal', 'distrital'].includes(user.role)) return null
+  if (!user || !['escolar', 'areal', 'distrital', 'eoe'].includes(user.role)) return null
   if (user.role === 'escolar') return <Listado key={user.id} supervision={false} />
+  if (user.role === 'eoe') return <Listado key={user.id} supervision={false} soloLectura />
   return <>
     <PageHeader title="Proyectos Escolares" subtitle={user.role === 'areal' ? 'Proyectos de tus escuelas asignadas.' : 'Proyectos registrados por las escuelas.'} />
     <TabBar label="Proyectos Escolares" items={[
@@ -29,7 +30,7 @@ export function MisProyectos() {
   </>
 }
 
-function Listado({ supervision }: { supervision: boolean }) {
+function Listado({ supervision, soloLectura = false }: { supervision: boolean; soloLectura?: boolean }) {
   const [pagina, setPagina] = useState(1)
   const [subiendo, setSubiendo] = useState(false)
   const [ocupado, setOcupado] = useState<string | null>(null)
@@ -85,9 +86,9 @@ function Listado({ supervision }: { supervision: boolean }) {
   }
 
   return <>
-    {!supervision && <PageHeader title="Mis Proyectos" subtitle="Proyectos de tu escuela."
-      actions={<button type="button" class={BTN_PRIMARY} disabled={!actual} onClick={() => setSubiendo(true)}>Subir proyecto</button>} />}
-    {!supervision && <Alert>Subí solamente los proyectos que se aplican al nivel y la modalidad de tu escuela. Se aceptan archivos PDF de hasta 5 MB; podés subir más de uno por tipo.</Alert>}
+    {!supervision && <PageHeader title={soloLectura ? 'Proyectos Escolares' : 'Mis Proyectos'} subtitle="Proyectos de tu escuela."
+      actions={soloLectura ? <Badge>Solo lectura</Badge> : <button type="button" class={BTN_PRIMARY} disabled={!actual} onClick={() => setSubiendo(true)}>Subir proyecto</button>} />}
+    {!supervision && !soloLectura && <Alert>Subí solamente los proyectos que se aplican al nivel y la modalidad de tu escuela. Se aceptan archivos PDF de hasta 5 MB; podés subir más de uno por tipo.</Alert>}
     {supervision && <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <Lbl label="Buscar escuela, clave, CUE o proyecto"><input type="search" class={FIELD} value={busqueda} onInput={(e) => { setBusqueda(e.currentTarget.value); setPagina(1) }} /></Lbl>
       <Lbl label="Tipo de proyecto"><select class={FIELD} value={tipo} onChange={(e) => { setTipo(e.currentTarget.value); setPagina(1) }}>
@@ -103,7 +104,7 @@ function Listado({ supervision }: { supervision: boolean }) {
       {!actual && !error && <Spinner />}
       {actual && <>
         {supervision && <p class="mb-3 text-sm text-slate-500">{actual.total} proyecto(s)</p>}
-        {!actual.filas.length ? <Card><EmptyState title="Sin proyectos" text={supervision ? 'No hay proyectos con esos filtros.' : 'Elegí «Subir proyecto» para cargar un archivo.'} /></Card> :
+        {!actual.filas.length ? <Card><EmptyState title="Sin proyectos" text={supervision ? 'No hay proyectos con esos filtros.' : soloLectura ? 'La escuela aún no cargó proyectos.' : 'Elegí «Subir proyecto» para cargar un archivo.'} /></Card> :
           <div class="space-y-3">{actual.filas.map((p) => <Card key={p.id}>
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="min-w-0 flex-1">
@@ -115,14 +116,14 @@ function Listado({ supervision }: { supervision: boolean }) {
               <div class="flex flex-wrap gap-2">
                 <button type="button" class={BTN_SECONDARY} disabled={!!ocupado} onClick={() => void abrir(p, true)}>{ocupado === p.id ? 'Cargando…' : 'Previsualizar'}</button>
                 <button type="button" class={BTN_SECONDARY} disabled={!!ocupado} onClick={() => void abrir(p, false)}>Descargar</button>
-                {!supervision && <button type="button" class={BTN_SECONDARY} disabled={!!ocupado} onClick={() => void eliminar(p)}>Eliminar</button>}
+                {!supervision && !soloLectura && <button type="button" class={BTN_SECONDARY} disabled={!!ocupado} onClick={() => void eliminar(p)}>Eliminar</button>}
               </div>
             </div>
           </Card>)}</div>}
         <Pager page={pagina} total={actual.total} size={TAMANO} onPage={setPagina} />
       </>}
     </div>
-    {subiendo && <Formulario onClose={() => setSubiendo(false)} onDone={() => { setSubiendo(false); if (pagina !== 1) setPagina(1); else reload() }} />}
+    {subiendo && !soloLectura && <Formulario onClose={() => setSubiendo(false)} onDone={() => { setSubiendo(false); if (pagina !== 1) setPagina(1); else reload() }} />}
     {previa && <Modal title={`Vista previa: ${previa.nombre}`} onClose={() => setPrevia(null)} wide>
       <iframe src={previa.url} title={`Vista previa de ${previa.nombre}`} class="h-[65vh] w-full rounded border border-slate-200" />
       <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
