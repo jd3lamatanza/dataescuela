@@ -32,7 +32,7 @@ export interface AppModule {
 export const MODULES: readonly AppModule[] = [
   { id: 'inicio', label: 'Home', path: '/', icon: 'home', roles: ROLES, primary: true },
   { id: 'mensajes', label: 'Mensajes', path: '/mensajes', icon: 'mail', roles: ['escolar', 'areal', 'distrital'] },
-  { id: 'articulacion', label: 'Articulación', path: '/articulacion', icon: 'transfer', roles: ['escolar'], primary: true },
+  { id: 'articulacion', label: 'Articulación', path: '/articulacion', icon: 'transfer', roles: ['escolar', 'eoe'], primary: true },
   { id: 'areal', label: 'Articulación', path: '/areal', icon: 'transfer', roles: ['areal'], primary: true },
   { id: 'matricula-areal', label: 'Matrícula', path: '/matricula-areal', icon: 'chart', roles: ['areal'], primary: true },
   { id: 'estadistica', label: 'Estadística', path: '/estadistica', icon: 'chart', roles: ['escolar', 'areal', 'distrital'], primary: true },
